@@ -412,7 +412,7 @@ function wideLogPrototype(variant){
     return finalize(root,URBAN_OBSTACLE_DIMENSIONS.wideLog,'UrbanObstacle_LinkedWaterBarriers',variant,'linkedWaterBarriers');
   }
   root=new THREE.Group();
-  const frame=mesh(mergedBoxes([{w:6.12,h:.10,d:.10,y:.74},{w:.11,h:.74,d:.11,x:-3.00,y:.37},{w:.11,h:.73,d:.11,x:3.00,y:.37},{w:.62,h:.07,d:.90,x:-3.00,y:.035},{w:.62,h:.07,d:.90,x:3.00,y:.035}]),materials.darkMetal,{name:'street-closure-gate-frame'});
+  const frame=mesh(mergedBoxes([{w:6.12,h:.10,d:.10,y:.74},{w:.11,h:.74,d:.11,x:-3.00,y:.37},{w:.11,h:.74,d:.11,x:3.00,y:.37},{w:.62,h:.07,d:.90,x:-3.00,y:.035},{w:.62,h:.07,d:.90,x:3.00,y:.035}]),materials.darkMetal,{name:'street-closure-gate-frame'});
   const bars=[];for(let x=-2.65;x<=2.651;x+=.53)bars.push({w:.055,h:.52,d:.055,x,y:.40});
   const grille=mesh(mergedBoxes(bars),materials.silver,{name:'street-closure-gate-bars'});
   const stripe=mesh(mergedBoxes([{w:5.66,h:.19,d:.055,y:.57,z:.081}]),materials.white,{name:'street-closure-warning-rail'});

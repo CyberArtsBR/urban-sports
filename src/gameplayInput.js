@@ -1,5 +1,5 @@
 import {TRICK_TYPE} from './trickSystem.js';
-import {readAirborneTrickIntent,readTrickIntent} from './trickInput.js';
+import {readAirborneTrickIntent,readSkateboardTrickIntent,readTrickIntent} from './trickInput.js';
 
 const EDITABLE='input,textarea,select,[contenteditable="true"]';
 
@@ -79,12 +79,17 @@ export function createGameplayInput({windowRef=globalThis.window,documentRef=glo
     const steer=Math.abs(touchSteer)>.01
       ?touchSteer
       :(keyboardSteer||Number(pad.axis)||0);
+    const keyboardVertical=
+      Number(keys.has('ArrowDown')||keys.has('KeyS'))-
+      Number(keys.has('ArrowUp')||keys.has('KeyW'));
+    const verticalIntent=clamp(keyboardVertical||Number(pad.axisY)||0);
+    const trickModifier=keys.has('ShiftLeft')||keys.has('ShiftRight')||!!pad?.buttons?.[4]||!!pad?.buttons?.[5];
     const padJumpPressed=!!pad?.edges?.pressed?.jump;
     const jumpPressed=jumpQueued||padJumpPressed;
     const jumpHeld=touchJump||touchTricks.size>0||keys.has('Space')||!!pad.jump;
     const authoredTrick=touchTrickIntent;
-    const trickIntent=authoredTrick||(jumpPressed?readTrickIntent(keys,pad):null);
-    const airborneTrickIntent=authoredTrick||(jumpPressed?readAirborneTrickIntent(keys,pad):null);
+    const trickIntent=authoredTrick||(jumpPressed?readSkateboardTrickIntent(keys,pad,{airborne:false}):null);
+    const airborneTrickIntent=authoredTrick||(jumpPressed?readSkateboardTrickIntent(keys,pad,{airborne:true}):null);
     const specialPressed=specialQueued||!!pad?.edges?.pressed?.special;
     const cameraPressed=cameraQueued||!!pad?.edges?.pressed?.camera;
     const cameraMotionPressed=cameraMotionQueued||!!pad?.edges?.pressed?.cameraMotion;
@@ -99,6 +104,8 @@ export function createGameplayInput({windowRef=globalThis.window,documentRef=glo
 
     return {
       steer:clamp(steer),
+      verticalIntent,
+      trickModifier,
       jumpPressed,
       jumpHeld,
       trickIntent,
@@ -107,7 +114,7 @@ export function createGameplayInput({windowRef=globalThis.window,documentRef=glo
       cameraPressed,
       cameraMotionPressed,
       pausePressed,
-      keyboardActive:keyboardSteer!==0||keys.has('Space')||keys.has('KeyQ')||keys.has('KeyE')||keys.has('KeyR'),
+      keyboardActive:keyboardSteer!==0||keyboardVertical!==0||keys.has('Space')||keys.has('ShiftLeft')||keys.has('ShiftRight')||keys.has('KeyQ')||keys.has('KeyE')||keys.has('KeyR'),
       touchActive:Math.abs(touchSteer)>.01||touchJump||touchTricks.size>0,
       keys
     };

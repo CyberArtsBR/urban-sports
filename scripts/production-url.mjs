@@ -1,10 +1,10 @@
-export const DEFAULT_PRODUCTION_URL='https://chimpions-ski.onrender.com';
+export const DEFAULT_PRODUCTION_URL='https://chimpions-urban-sports.onrender.com';
 
 export function resolveProductionUrl(env=process.env,{allowBaseUrl=false}={}){
   const candidate=
     (allowBaseUrl&&env.BASE_URL)||
     env.PRODUCTION_URL||
-    env.CHIMPIONS_SKI_PRODUCTION_URL||
+    env.CHIMPIONS_URBAN_SPORTS_PRODUCTION_URL||
     DEFAULT_PRODUCTION_URL;
   let url;
   try{url=new URL(String(candidate));}

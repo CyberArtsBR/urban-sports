@@ -1,6 +1,6 @@
-# Chimpions Ski
+# Chimpions Urban Sports
 
-Chimpions Ski is a Three.js/Vite endless downhill game with SKI and SNOWBOARD ride modes, procedural hazards, ramps, tricks, controller/keyboard support, and local Chimpion GLB selection.
+Chimpions Urban Sports is currently bootstrapped from the proven Chimpions Ski Three.js/Vite codebase. The first baseline intentionally preserves Ski gameplay while the project is converted to Skateboard, Inline Skates, and BMX.
 
 ## Current product contract
 
@@ -41,7 +41,7 @@ The main GitHub Actions workflow also runs the desktop browser audit and the loc
 
 ## Production URL
 
-Production smoke/audit tooling uses the `PRODUCTION_URL` environment or GitHub repository variable. It can point to either the active Render or Vercel deployment. If it is unset, tooling falls back to `https://chimpions-ski.onrender.com`.
+Production smoke/audit tooling uses the `PRODUCTION_URL` environment or GitHub repository variable. It can point to either the active Render or Vercel deployment. If it is unset, tooling falls back to `https://chimpions-urban-sports.onrender.com`.
 
 For a local preview smoke, `BASE_URL` can override the target, for example `BASE_URL=http://127.0.0.1:4173`.
 

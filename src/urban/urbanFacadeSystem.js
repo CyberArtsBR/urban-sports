@@ -8,8 +8,7 @@ export const URBAN_BUILDING_ARCHETYPES=Object.freeze([
   'entertainment',
   'glass-crown',
   'brick-loft',
-  'hotel-stack',
-  'parking-podium'
+  'hotel-stack'
 ]);
 
 function paint(geometry,hex){
@@ -227,7 +226,7 @@ function ledKit(){
 export function createUrbanFacadeGeometrySet(){
   const archetypes=[
     mixedUse(),officeTower(),industrial(),entertainment(),
-    glassCrown(),brickLoft(),hotelStack(),parkingPodium()
+    glassCrown(),brickLoft(),hotelStack()
   ];
   const lights=windowKit();
   const leds=ledKit();

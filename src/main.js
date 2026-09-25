@@ -43,6 +43,7 @@ import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} f
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
+import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
 import {CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference} from './userPreferences.js';
 import {GAME_FLOW,createGameFlow} from './gameFlow.js';
 import {createRunSession,createRunState} from './runSession.js';
@@ -1563,6 +1564,7 @@ window.chimpionsSki=()=>{
   return {
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
+    ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
     ...environment.getQualityDiagnostics?.(),
     urbanEnvironment:urbanEnvironment.getDiagnostics?.()||null,
     ...quality.getDiagnostics(),

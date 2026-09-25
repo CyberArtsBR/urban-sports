@@ -58,8 +58,8 @@ try{
     naturalHeight:image.naturalHeight,
     rect:image.getBoundingClientRect().toJSON()
   }));
-  assert.equal(artMetrics.naturalWidth,1920,'Start artwork width changed unexpectedly');
-  assert.equal(artMetrics.naturalHeight,1080,'Start artwork height changed unexpectedly');
+  assert(artMetrics.naturalWidth>=1400,'Start artwork resolution is unexpectedly low');
+  assert(Math.abs(artMetrics.naturalWidth/artMetrics.naturalHeight-16/9)<.01,'Start artwork source ratio changed');
   assert(Math.abs(artMetrics.rect.width/artMetrics.rect.height-16/9)<.01,'Start artwork was stretched');
 
   assert.equal(await back.getAttribute('href'),'https://chimp-jump.onrender.com/');

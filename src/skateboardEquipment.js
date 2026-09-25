@@ -375,13 +375,34 @@ export function createSkateboardEquipment({
     return setWheelRotation(wheelPhase+(Number(deltaRadians)||0));
   }
 
-  function updateMotion({dt=1/60,speed=0,lean=0,steer=null,air=false,time=0}={}){
+  function updateMotion({dt=1/60,speed=0,lean=0,steer=null,air=false,time=0,trickType='',trickProgress=0}={}){
     const frameDt=THREE.MathUtils.clamp(Number(dt)||0,0,.10);
     setLean(lean);
     setTruckSteer(steer==null?lean:steer);
 
     const response=1-Math.pow(1-.22,frameDt*60);
-    motionRoot.rotation.z=THREE.MathUtils.lerp(motionRoot.rotation.z,targetLean,response);
+    const progress=THREE.MathUtils.clamp(Number(trickProgress)||0,0,1);
+    const turn=progress*Math.PI*2;
+    const halfTurn=progress*Math.PI;
+    const grabArc=Math.sin(progress*Math.PI);
+    let boardFlip=0;
+    let boardShove=0;
+    let boardPitch=0;
+
+    if(trickType==='KICKFLIP')boardFlip=turn;
+    else if(trickType==='HEELFLIP')boardFlip=-turn;
+    else if(trickType==='POP SHOVE-IT')boardShove=halfTurn;
+    else if(trickType==='FRONTSIDE SHOVE-IT')boardShove=-halfTurn;
+    else if(trickType==='VARIAL FLIP'){boardFlip=turn;boardShove=halfTurn;}
+    else if(trickType==='360 FLIP'){boardFlip=turn;boardShove=turn;}
+    else if(trickType==='INDY')boardPitch=.08*grabArc;
+    else if(trickType==='MELON')boardPitch=-.07*grabArc;
+    else if(trickType==='NOSEGRAB')boardPitch=-.12*grabArc;
+
+    const trickResponse=1-Math.pow(1-(air?.58:.24),frameDt*60);
+    motionRoot.rotation.z=THREE.MathUtils.lerp(motionRoot.rotation.z,targetLean+boardFlip,trickResponse);
+    motionRoot.rotation.y=THREE.MathUtils.lerp(motionRoot.rotation.y,boardShove,trickResponse);
+    motionRoot.rotation.x=THREE.MathUtils.lerp(motionRoot.rotation.x,boardPitch,trickResponse);
     frontTruck.pivot.rotation.y=THREE.MathUtils.lerp(frontTruck.pivot.rotation.y,targetSteer,response);
     rearTruck.pivot.rotation.y=THREE.MathUtils.lerp(rearTruck.pivot.rotation.y,-targetSteer,response);
 
@@ -396,7 +417,9 @@ export function createSkateboardEquipment({
       lean:motionRoot.rotation.z,
       frontTruckSteer:frontTruck.pivot.rotation.y,
       rearTruckSteer:rearTruck.pivot.rotation.y,
-      powerGlow:powerLevel
+      powerGlow:powerLevel,
+      trickType,
+      trickProgress:progress
     };
   }
 

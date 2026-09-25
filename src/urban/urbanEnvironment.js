@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {createUrbanMaterials} from './urbanMaterials.js';
 import {createUrbanBuildingSkyline} from './urbanBuildings.js';
 import {createUrbanStreetDressing} from './streetDressing.js';
+import {createUrbanRoadSurfaceDetails} from './urbanRoadSurfaceDetails.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
@@ -84,9 +85,9 @@ function advance(entry,dz,nearZ,farZ,onRecycle){
   entry.generation=(entry.generation||0)+wraps;
   onRecycle?.(entry);
 }
-function makeOwnedMaterials(materials,renderer){
+function makeOwnedMaterials(materials,renderer,quality='high'){
   if(materials)return {materials,owned:false};
-  return {materials:createUrbanMaterials({renderer}),owned:true};
+  return {materials:createUrbanMaterials({renderer,quality}),owned:true};
 }
 function commonOptions(options={}){
   const config={...URBAN_ENVIRONMENT_DEFAULTS,...options};
@@ -108,7 +109,7 @@ function makeController({group,meshes,geometries,materialsRef,ownedMaterials,upd
 
 export function createAsphaltRoadSurface(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();
   group.name='UrbanRoadSurface';
   const plane=new THREE.PlaneGeometry(1,1);
@@ -150,7 +151,7 @@ export function createAsphaltRoadSurface(options={}){
 
 export function createStreetMarkings(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();group.name='UrbanStreetMarkings';
   const geometry=new THREE.PlaneGeometry(1,1);
   const spacing=8;
@@ -190,7 +191,7 @@ export function createStreetMarkings(options={}){
 
 export function createStreetlights(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();group.name='UrbanStreetlights';
   const pairs=Math.ceil((config.recycleNear-config.farZ)/config.streetlightSpacing)+1;
   const capacity=pairs*2;
@@ -233,7 +234,7 @@ export function createBuildingSkyline(options={}){
 
 export function createTrafficCones(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();group.name='UrbanTrafficCones';
   const capacity=Math.max(12,Math.ceil((config.recycleNear-config.farZ)/config.coneSpacing)*2);
   const coneGeometry=new THREE.CylinderGeometry(.30,.56,1.18,10,1,false);
@@ -270,7 +271,7 @@ export function createTrafficCones(options={}){
 
 export function createBarriers(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();group.name='UrbanBarriers';
   const capacity=Math.max(10,Math.ceil((config.recycleNear-config.farZ)/config.barrierSpacing)*2);
   const boxGeometry=new THREE.BoxGeometry(1,1,1);
@@ -302,7 +303,7 @@ export function createBarriers(options={}){
 
 export function createRoadSigns(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();group.name='UrbanRoadSigns';
   const capacity=Math.max(8,Math.ceil((config.recycleNear-config.farZ)/config.signSpacing)*2);
   const postGeometry=new THREE.CylinderGeometry(.045,.055,1,7);
@@ -336,7 +337,7 @@ export function createRoadSigns(options={}){
 
 export function createUrbanRoadsideScenery(options={}){
   const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
+  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer,options.quality);
   const group=new THREE.Group();group.name='UrbanRoadsideScenery';
   const capacity=Math.max(18,Math.ceil((config.recycleNear-config.farZ)/24)*2);
   const cylinderGeometry=new THREE.CylinderGeometry(.12,.14,1,7);
@@ -381,7 +382,7 @@ export function createUrbanRoadsideScenery(options={}){
 
 export function createUrbanEnvironment(options={}){
   const config=commonOptions(options);
-  const materials=options.materials||createUrbanMaterials({renderer:options.renderer});
+  const materials=options.materials||createUrbanMaterials({renderer:options.renderer,quality:options.quality});
   const ownsMaterials=!options.materials;
   const group=new THREE.Group();
   group.name='UrbanEnvironment';
@@ -392,6 +393,7 @@ export function createUrbanEnvironment(options={}){
   const shared={...config,materials,renderer:options.renderer};
   const components={
     road:createAsphaltRoadSurface(shared),
+    roadDetails:createUrbanRoadSurfaceDetails(shared),
     markings:createStreetMarkings(shared),
     streetlights:createStreetlights(shared),
     skyline:createBuildingSkyline(shared),
@@ -407,6 +409,7 @@ export function createUrbanEnvironment(options={}){
   let quality=options.quality??'high';
   function setQualityProfile(value){
     quality=value;
+    materials.setQuality?.(value);
     for(const component of Object.values(components))component.setDensity?.(value);
     return getDiagnostics();
   }
@@ -426,6 +429,8 @@ export function createUrbanEnvironment(options={}){
       drawCalls:parts.reduce((sum,item)=>sum+(item.drawCalls||0),0),
       instances:parts.reduce((sum,item)=>sum+(item.instances||item.logical||0),0),
       realtimeStreetLights:0,
+      materialQuality:materials.getDiagnostics?.()||null,
+      roadDetailZones:components.roadDetails?.getDiagnostics?.()||null,
       streaming:true,
       components:parts
     };

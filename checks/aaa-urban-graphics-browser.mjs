@@ -65,19 +65,27 @@ async function completeStartFlow(page){
   });
   assert(rideResult.ok,rideResult.reason||'Failed to choose Skateboard');
 
+  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
+  // beginRun is scheduled after the async rider-selection close handler. Wait
+  // for the tutorial/countdown/run hand-off rather than sampling the tutorial
+  // visibility on the same task that closed the modal.
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-    return d?.mode==='playing'||document.querySelector('.session-tutorial:not([hidden])');
-  },null,{timeout:60000});
+    const tutorial=document.querySelector('.session-tutorial:not([hidden])');
+    return !!tutorial||d?.mode==='countdown'||d?.mode==='playing';
+  },null,{timeout:20000});
 
   const tutorial=page.locator('.session-tutorial:not([hidden])');
   if(await tutorial.isVisible().catch(()=>false)){
-    await page.keyboard.press('Enter');
+    // Pointer dismissal uses the same capture-path as a real player and avoids
+    // focus-dependent keyboard races in headless Chromium.
+    await page.mouse.click(24,24);
+    await tutorial.waitFor({state:'hidden',timeout:5000});
   }
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return d?.mode==='playing';
-  },null,{timeout:20000});
+  },null,{timeout:30000});
 
   const state=await diagnostics(page);
   assert.equal(state?.sportMode,'skateboard','Urban runtime must remain in Skateboard sport mode');

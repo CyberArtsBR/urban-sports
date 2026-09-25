@@ -98,8 +98,20 @@ function applyUrbanPresentationCopy(){
   applyUrbanTutorialCopy();
 }
 function observeUrbanPresentation(){
-  const observer=new MutationObserver(()=>applyUrbanPresentationCopy());
-  observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  const isRelevantNode=node=>{
+    if(node?.nodeType!==Node.ELEMENT_NODE)return false;
+    const element=node;
+    return element.matches?.('.selector-dialog,.session-tutorial')||
+      !!element.querySelector?.('.selector-dialog,.session-tutorial');
+  };
+  const observer=new MutationObserver(records=>{
+    if(records.some(record=>Array.from(record.addedNodes||[]).some(isRelevantNode))){
+      applyUrbanPresentationCopy();
+    }
+  });
+  // HUD text changes every frame. Watch only structural additions so Urban
+  // presentation work never becomes a per-frame mutation cost.
+  observer.observe(document.body,{childList:true,subtree:true});
   window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
   return observer;
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createUrbanMaterials} from './urbanMaterials.js';
+import {createUrbanBuildingSkyline} from './urbanBuildings.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
@@ -222,57 +223,7 @@ export function createStreetlights(options={}){
 }
 
 export function createBuildingSkyline(options={}){
-  const config=commonOptions(options);
-  const {materials,owned}=makeOwnedMaterials(options.materials,options.renderer);
-  const group=new THREE.Group();group.name='UrbanBuildingSkyline';
-  const pairs=Math.ceil((config.recycleNear-config.farZ)/config.buildingSpacing)+3;
-  const capacity=pairs*2;
-  const boxGeometry=new THREE.BoxGeometry(1,1,1);
-  const bodies=createMesh(boxGeometry,materials.building,capacity,'urban-buildings');
-  const windows=createMesh(boxGeometry,materials.windows,capacity,'urban-building-windows');
-  const roofs=createMesh(boxGeometry,materials.rooftop,capacity,'urban-building-roofs');
-  group.add(bodies,windows,roofs);
-  const entries=Array.from({length:capacity},(_,i)=>({side:i%2===0?-1:1,z:0,generation:0}));
-  let density=config.density;
-  function configure(entry,index){
-    const generation=entry.generation||0;
-    const r=index+generation*capacity;
-    entry.width=8+random01(config.seed,r,1)*10;
-    entry.depth=7+random01(config.seed,r,2)*10;
-    entry.height=10+Math.pow(random01(config.seed,r,3),.72)*34;
-    entry.setback=1.2+random01(config.seed,r,4)*5.6;
-    entry.tint=random01(config.seed,r,5);
-    entry.lightTint=random01(config.seed,r,6);
-  }
-  function refresh(){
-    const count=activeCount(capacity,density,10,true);
-    const edge=config.roadWidth*.5+config.sidewalkWidth;
-    for(let i=0;i<count;i++){
-      const e=entries[i];
-      const x=e.side*(edge+e.setback+e.depth*.5);
-      setMatrix(bodies,i,{x,y:e.height*.5-.02,z:e.z,sx:e.depth,sy:e.height,sz:e.width});
-      const facadeX=e.side*(edge+e.setback-.035);
-      setMatrix(windows,i,{x:facadeX,y:e.height*.54,z:e.z,sx:.055,sy:e.height*.63,sz:e.width*.72});
-      setMatrix(roofs,i,{x,y:e.height+.18,z:e.z,sx:e.depth*.42,sy:.36,sz:e.width*.46});
-      _color.setHSL(.58+e.tint*.08,.12,.30+e.tint*.12);bodies.setColorAt(i,_color);
-      _color.setHSL(e.lightTint>.72?.10:.55,.58,.72);windows.setColorAt(i,_color);
-    }
-    finish(bodies,count);finish(windows,count);finish(roofs,count);
-  }
-  function reset(){
-    for(let i=0;i<entries.length;i++){
-      const e=entries[i];e.z=config.recycleNear-Math.floor(i/2)*config.buildingSpacing-(i%2)*5;e.generation=0;configure(e,i);
-    }
-    refresh();
-  }
-  function update(dt,worldSpeed){
-    const dz=(Number(worldSpeed)||0)*(Number(dt)||0);if(!Number.isFinite(dz)||Math.abs(dz)<1e-8)return;
-    for(let i=0;i<entries.length;i++)advance(entries[i],dz,config.recycleNear,config.farZ,entry=>configure(entry,i));
-    refresh();
-  }
-  function setDensity(value){density=densityFromQuality(value);refresh();}
-  reset();group.userData.urbanComponent='skyline';group.userData.streaming=true;
-  return makeController({group,meshes:[bodies,windows,roofs],geometries:[boxGeometry],materialsRef:materials,ownedMaterials:owned,update,reset,setDensity,getDiagnostics(){const count=activeCount(capacity,density,10,true);return {name:'skyline',logical:count,instances:count*3,drawCalls:3};}});
+  return createUrbanBuildingSkyline(options);
 }
 
 export function createTrafficCones(options={}){
@@ -457,6 +408,9 @@ export function createUrbanEnvironment(options={}){
     for(const component of Object.values(components))component.update(dt,worldSpeed);
   }
   function reset(){for(const component of Object.values(components))component.reset();}
+  function setDistrict(value){
+    return components.skyline.setDistrict?.(value)??components.skyline.getDiagnostics();
+  }
   function getDiagnostics(){
     const parts=Object.values(components).map(component=>component.getDiagnostics());
     return {
@@ -476,5 +430,5 @@ export function createUrbanEnvironment(options={}){
     if(ownsMaterials)materials.dispose?.();
   }
   setQualityProfile(quality);
-  return {group,components,materials,update,reset,setQualityProfile,getDiagnostics,dispose};
+  return {group,components,materials,update,reset,setQualityProfile,setDistrict,getDiagnostics,dispose};
 }

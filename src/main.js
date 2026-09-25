@@ -165,25 +165,17 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
 app.prepend(renderer.domElement);
 
-// Let EffectComposer allocate a driver-compatible render target. The previous
-// multisampled HalfFloat target produced valid game/HUD updates but black WebGL
-// frames on some production GPU/browser combinations.
-composer=new EffectComposer(renderer);
-composerPixelRatio=renderer.getPixelRatio();
-composer.setPixelRatio(composerPixelRatio);
-composer.setSize(innerWidth,innerHeight);
-renderPass=new RenderPass(scene,camera);
-composer.addPass(renderPass);
-ssaoPass=new SSAOPass(scene,camera,innerWidth,innerHeight);
-ssaoPass.enabled=false;
-ssaoPass.kernelRadius=18;
-ssaoPass.minDistance=.0025;
-ssaoPass.maxDistance=.12;
-composer.addPass(ssaoPass);
-bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.62,.38,1.22);
-composer.addPass(bloomPass);
-composer.addPass(new OutputPass());
-applyBloomQuality();
+// Stability hotfix: render the production gameplay scene directly with the
+// WebGLRenderer. The composed post-processing path can produce a black frame on
+// real client GPUs even when gameplay/HUD continue normally. Keep the pass
+// variables null so quality/diagnostic code remains compatible, but do not
+// allocate or execute EffectComposer until the pipeline is revalidated across
+// production hardware.
+composer=null;
+renderPass=null;
+ssaoPass=null;
+bloomPass=null;
+composerPixelRatio=0;
 
 const world=new THREE.Group();scene.add(world);
 const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
@@ -1710,7 +1702,9 @@ function render(now){
   if(firstPersonBody)firstPersonBody.visible=cameraViewMode!==CAMERA_VIEW.FIRST_PERSON||
     (state.mode!=='playing'&&state.mode!=='paused'&&state.mode!=='crashed');
   renderer.info.reset();
-  composer.render(dt);
+  // Direct rendering is the production-safe path. This guarantees the world is
+  // presented even on GPUs/drivers that fail the offscreen composer pipeline.
+  renderer.render(scene,camera);
   renderFrameHandle=requestAnimationFrame(render);
 }
 renderFrameHandle=requestAnimationFrame(render);
@@ -1718,7 +1712,6 @@ renderFrameHandle=requestAnimationFrame(render);
 function resize(){
   camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
-  composer?.setSize(innerWidth,innerHeight);
   applyRendererResolution();
 }
 runtimeListeners.on(window,'resize',resize);

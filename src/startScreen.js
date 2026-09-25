@@ -66,15 +66,20 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urba
     audio?.unlock?.();
     root.classList.add('is-leaving');
     setTimeout(()=>{
+      // Retire the artwork layer before opening the modal rider selector.
+      // Keeping the full-screen start surface active while showModal() runs can
+      // leave the selector visually occluded in headless and some browsers.
+      root.hidden=true;
+      document.body.classList.remove('start-screen-active');
       const started=onStart?.();
       if(started===false){
+        root.hidden=false;
+        document.body.classList.add('start-screen-active');
         closing=false;
         root.classList.remove('is-leaving');
         refreshReady();
         return;
       }
-      root.hidden=true;
-      document.body.classList.remove('start-screen-active');
       previousButtons=[];
       axisLatch=0;
     },300);

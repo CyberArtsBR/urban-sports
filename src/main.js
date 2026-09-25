@@ -736,7 +736,9 @@ function applyRideProfileToState(mode,{resetSpeed=false}={}){
 }
 
 function audioTrickType(type){
-  return type==='BACKFLIP'?'backflip':type==='360'?'360':null;
+  // Reuse the existing airborne trick sound family for the expanded street
+  // vocabulary; dedicated skate audio can subscribe to skateboard events.
+  return type==='BACKFLIP'?'backflip':type?'360':null;
 }
 
 function announceTrickAudio(event){
@@ -764,8 +766,8 @@ let avatarRequest=0;
 let avatarLoadController=null;
 async function setAvatar(entry,rideMode=selectedRideMode){
   if(!entry)return;
-  // Skateboard is the first active Urban Sports discipline. Until sport-specific
-  // physics diverge, it deliberately reuses the proven snowboard handling.
+  // Skateboard uses the snowboard ride mode only for the shared speed/avatar/
+  // equipment compatibility contract. Native handling lives in skateboardPhysics.
   const nextRideMode=getLegacyRideModeForSport(selectedSportMode);
 
   if(avatarCommitted&&selectedAvatar?.id===entry.id&&riderController.rider){

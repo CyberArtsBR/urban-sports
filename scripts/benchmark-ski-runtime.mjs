@@ -114,10 +114,14 @@ async function main(){
     results.network=tracker.summarize(portraitUrls);
     if(results.network.musicFullMp3.status==='FAIL')results.warnings.push('Forbidden chimp-jump.onrender.com/audio/music-full.mp3 runtime dependency detected.');
     for(const [phaseName,phase] of Object.entries(results.phases)){
-      const course=phase?.course;
-      if(!course)continue;
-      for(const [metric,analysis] of Object.entries(course)){
-        if(analysis?.suspiciousMonotonicGrowth)results.warnings.push(`${phaseName}: suspicious monotonic growth in ${metric}`);
+      for(const category of ['course','graphics']){
+        const analysisGroup=phase?.[category];
+        if(!analysisGroup)continue;
+        for(const [metric,analysis] of Object.entries(analysisGroup)){
+          if(analysis?.suspiciousMonotonicGrowth){
+            results.warnings.push(`${phaseName}: suspicious monotonic growth in ${category}.${metric}`);
+          }
+        }
       }
     }
   }catch(error){

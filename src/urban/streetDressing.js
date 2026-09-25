@@ -250,7 +250,7 @@ export function createUrbanStreetDressing(options={}){
     push('vehiclePaint',{x:px,y:baseY+bodyH*.48,z,sx:width,sy:bodyH,sz:length,ry:yaw},paint);
     push('vehiclePaint',{x:px,y:baseY+bodyH+upperH*.88,z:z+upperZ,sx:width*.88,sy:.16*s,sz:upperLen*.94,ry:yaw},paint);
     if(heroDetail>=1&&type!=='truck'){
-      const hoodLength=((type==='van'||type==='delivery')?.20:.25)*length;
+      const hoodLength=((type==='van'||type==='delivery') ? 0.20 : 0.25)*length;
       push('vehiclePaint',{x:px,y:baseY+bodyH*.82,z:z+length*.36,sx:width*.92,sy:.10*s,sz:hoodLength,ry:yaw},paint);
       if(type!=='van'&&type!=='delivery')push('vehiclePaint',{x:px,y:baseY+bodyH*.76,z:z-length*.40,sx:width*.90,sy:.08*s,sz:length*.16,ry:yaw},paint);
     }

@@ -86,10 +86,16 @@ assert.equal(grinding.grinding,true);
 const grindStep=grind.step(grinding,.04,{steer:.2});
 assert.equal(grindStep.active,true);
 assert.ok(grinding.skate.grindDuration>0);
+grinding.jumpBufferTime=.11;
+grinding.jumpBuffered=true;
+grinding.coyoteTime=.075;
 const jumpOff=grind.jumpOff(grinding);
 assert.ok(jumpOff);
 assert.equal(grinding.air,true);
 assert.equal(grinding.jumpSource,'grind');
+assert.equal(grinding.jumpBufferTime,0,'grind jump-off must consume the buffered Jump press');
+assert.equal(grinding.jumpBuffered,false,'grind jump-off must not leave a second pop armed');
+assert.equal(grinding.coyoteTime,0,'grind jump-off must not inherit ground coyote time');
 
 const failedLanding=state({air:true,grounded:false,y:.13,vy:-20,vx:12,heading:.8,speed:profile.baseSpeed+10,jumpSource:'ollie',jumpProfile:'ollie'});
 const landing=stepSkateboardAir(failedLanding,.03,.12);

@@ -6,9 +6,9 @@ import {resolveUrbanDistrict} from './urbanDistricts.js';
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
 const PROFILE_DENSITY=Object.freeze({max:1,high:1,medium:.72,low:.48});
-const ARCHETYPE_HEIGHT=Object.freeze([1,1.18,.58,1.02,1.28,.82,1.08,.72]);
-const ARCHETYPE_WIDTH=Object.freeze([1,.88,1.16,.92,.82,1.08,.90,1.18]);
-const ARCHETYPE_DEPTH=Object.freeze([1,.92,1.18,.94,.84,1.02,.94,1.12]);
+const ARCHETYPE_HEIGHT=Object.freeze([1,1.18,.58,1.02,1.28,.82,1.08]);
+const ARCHETYPE_WIDTH=Object.freeze([1,.88,1.16,.92,.82,1.08,.90]);
+const ARCHETYPE_DEPTH=Object.freeze([1,.92,1.18,.94,.84,1.02,.94]);
 const LED_PALETTE=Object.freeze([0x37d7ff,0xff4f9a,0xffc44a,0x7b8cff,0x54f2b5]);
 
 function clamp(value,min,max){return Math.max(min,Math.min(max,value));}

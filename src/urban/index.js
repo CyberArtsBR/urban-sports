@@ -41,12 +41,17 @@ export {
 
 export {
   URBAN_DISTRICT_PRESETS,
+  URBAN_DISTRICT_PROGRESSION,
   listUrbanDistricts,
-  resolveUrbanDistrict
+  resolveUrbanDistrict,
+  advanceUrbanDistrict,
+  selectUrbanDistrictForDistance
 } from './urbanDistricts.js';
 
 export {
   URBAN_BUILDING_ARCHETYPES,
+  URBAN_FACADE_FAMILIES,
+  URBAN_ARCHETYPE_MATERIAL_KEYS,
   createUrbanFacadeGeometrySet
 } from './urbanFacadeSystem.js';
 

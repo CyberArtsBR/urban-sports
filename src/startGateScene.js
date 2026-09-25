@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {createUrbanStartEventScene} from './startEventDressing.js';
 
 function canvasTexture(width,height,draw){
   const canvas=document.createElement('canvas');
@@ -186,6 +187,7 @@ function addSafetyFence(parent,material,x,z,ground,side=1){
 
 export function createStartGateScene({world,terrainHeight=()=>0,theme='alpine'}={}){
   const urbanMode=String(theme).toLowerCase()==='urban';
+  if(urbanMode)return createUrbanStartEventScene({world,terrainHeight});
   const root=new THREE.Group();
   root.name=urbanMode?'premium-urban-start-gate':'premium-alpine-start-gate';
   world?.add(root);

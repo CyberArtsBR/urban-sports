@@ -20,7 +20,8 @@ const requiredWiring=[
   ['check:visual','checks/avatar-compatibility-invariants.mjs','avatar compatibility suite'],
   ['check:urban','checks/skateboard-equipment-invariants.mjs','skateboard equipment suite'],
   ['check:urban','checks/sport-mode-invariants.mjs','urban sport profile suite'],
-  ['check:urban','checks/urban-environment-invariants.mjs','urban environment performance/disposal suite']
+  ['check:urban','checks/urban-environment-invariants.mjs','urban environment performance/disposal suite'],
+  ['check:urban','checks/street-dressing-invariants.mjs','AAA street dressing performance/disposal suite']
 ];
 for(const [script,file,label] of requiredWiring)assert(String(scripts[script]||'').includes(file),label+' is no longer wired into npm run '+script);
 assert(String(scripts.check||'').includes('npm run check:urban'),'main CI check path must execute Urban Sports regressions');

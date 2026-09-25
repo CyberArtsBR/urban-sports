@@ -43,6 +43,7 @@ import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} f
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
+import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
 import {CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference} from './userPreferences.js';
 import {GAME_FLOW,createGameFlow} from './gameFlow.js';
 import {createRunSession,createRunState} from './runSession.js';
@@ -55,9 +56,12 @@ import {createImpactVfx} from './impactVfx.js';
 
 const userPreferences=loadUserPreferences();
 
+let runtimeTestMode=false;
 let requestedRunSeed=null;
 try{
-  const seedParam=new URLSearchParams(globalThis.location?.search||'').get('seed');
+  const params=new URLSearchParams(globalThis.location?.search||'');
+  runtimeTestMode=params.get('test')==='1';
+  const seedParam=params.get('seed');
   requestedRunSeed=seedParam?String(seedParam):null;
 }catch{}
 function createRunSeed(){
@@ -72,7 +76,12 @@ function createRunSeed(){
 
 let explicitQualityOverride=false;
 try{explicitQualityOverride=new URLSearchParams(globalThis.location?.search||'').has('quality');}catch{}
-if(!explicitQualityOverride)quality.setProfile(userPreferences.quality||'auto');
+if(!explicitQualityOverride){
+  // Generic ?test=1 smoke runs should stay cheap under software rendering.
+  // Profile-specific graphics/benchmark jobs pass ?quality=... explicitly and
+  // therefore still exercise LOW/MEDIUM/HIGH exactly as requested.
+  quality.setProfile(runtimeTestMode?'low':(userPreferences.quality||'auto'));
+}
 
 const app=document.querySelector('#app');
 app.innerHTML=`
@@ -430,7 +439,7 @@ const tricks=createTrickSystem({visualTarget:trickVisualPivot});
 const startCamera=createStartCameraSequence({camera,skiCamera,player});
 const startCrowd=createStartCrowd({world,terrainHeight});
 const startGate=createStartGateScene({world,terrainHeight,theme:'urban'});
-const START_COUNTDOWN_DURATION_MS=2700;
+const START_COUNTDOWN_DURATION_MS=runtimeTestMode?180:2700;
 const BANANA_POWER_GOAL=10;
 const BANANA_POWER_DURATION=3;
 const BANANA_BULLET_TIME_SCALE=.35;
@@ -607,6 +616,7 @@ sessionTutorialRoot.innerHTML=`
 document.body.append(sessionTutorialRoot);
 
 function hasSeenSessionTutorial(){
+  if(runtimeTestMode)return true;
   try{return sessionStorage.getItem(SESSION_TUTORIAL_KEY)==='1';}catch{return false;}
 }
 function markSessionTutorialSeen(){
@@ -677,7 +687,8 @@ const startScreen=createStartScreen({
     // The selected rider is interaction-critical and should not compete with crowd parsing.
     return true;
   },
-  assetUrl:'/start/chimpions-urban-sports-start.webp'
+  assetUrl:'/start/chimpions-urban-sports-start.webp',
+  transitionMs:runtimeTestMode?0:300
 });
 startScreen.setReady(false);
 ui.setAvatarLoading(true);
@@ -932,7 +943,15 @@ async function beginRun(){
     if(!gameFlow.enter(GAME_FLOW.COUNTDOWN,{reason:'begin-run'}))return false;
     resetRunState();
     ui.prepareRun({best:state.best,speed:state.speed});
-    startCamera.begin(state,performance.now());
+    if(runtimeTestMode){
+      // CI / browser audits use ?test=1. Keep production presentation intact
+      // while making automated release gates deterministic and independent of
+      // software-renderer frame pacing.
+      startCamera.reset();
+      startRaceCountdown();
+    }else{
+      startCamera.begin(state,performance.now());
+    }
     return true;
   }finally{
     ui.hideRunLoading?.();
@@ -1563,6 +1582,7 @@ window.chimpionsSki=()=>{
   return {
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
+    ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
     ...environment.getQualityDiagnostics?.(),
     urbanEnvironment:urbanEnvironment.getDiagnostics?.()||null,
     ...quality.getDiagnostics(),

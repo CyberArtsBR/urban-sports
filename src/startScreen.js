@@ -1,6 +1,6 @@
 const GAME_SELECTION_URL='https://chimp-jump.onrender.com/';
 
-export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urban-sports-start.webp'}={}){
+export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urban-sports-start.webp',transitionMs=300}={}){
   const root=document.createElement('section');
   root.className='start-screen is-loading';
   root.setAttribute('aria-label','Chimpions Urban Sports start screen');
@@ -65,7 +65,7 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urba
     closing=true;
     audio?.unlock?.();
     root.classList.add('is-leaving');
-    setTimeout(()=>{
+    const retireArtwork=()=>{
       // Retire the artwork layer before opening the modal rider selector.
       // Keeping the full-screen start surface active while showModal() runs can
       // leave the selector visually occluded in headless and some browsers.
@@ -82,7 +82,10 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urba
       }
       previousButtons=[];
       axisLatch=0;
-    },300);
+    };
+    const delay=Math.max(0,Number(transitionMs)||0);
+    if(delay>0)setTimeout(retireArtwork,delay);
+    else retireArtwork();
   }
 
   play.addEventListener('click',start);

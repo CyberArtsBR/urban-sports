@@ -1,4 +1,4 @@
-import {CONFIG,analyzeCourse,analyzeMetric,frameMark,frameSummarySince,pending,readDiagnostics,round,runtimeSnapshot,sampleRuntime,speedBins} from './core.mjs';
+import {CONFIG,analyzeCourse,analyzeGraphics,analyzeMetric,frameMark,frameSummarySince,pending,readDiagnostics,round,runtimeSnapshot,sampleRuntime,speedBins} from './core.mjs';
 import {closeSelector,openSelector} from './selector.mjs';
 
 async function completeStartSelectionIfNeeded(page){
@@ -169,6 +169,7 @@ export async function benchmarkGameplay(page,seconds,{trickHeavy=false,label='ga
     startSequence:start,
     frames,
     course:analyzeCourse(samples),
+    graphics:analyzeGraphics(samples),
     hotspots:{
       courseTraversalMs:analyzeMetric(samples,'perfCourseTraversalMs'),
       courseBatchSyncMs:analyzeMetric(samples,'perfCourseBatchSyncMs'),

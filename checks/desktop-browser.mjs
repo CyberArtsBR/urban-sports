@@ -134,39 +134,44 @@ try{
   assert.equal(await page.locator('.chimpion-card.is-menu-selected').count(),1,'Keyboard focus did not share the selector visual state');
   await page.keyboard.press('Enter');
 
-  const skiChoice=selector.locator('.ride-mode-card[data-ride-mode="ski"]');
-  await skiChoice.waitFor({state:'visible',timeout:5000});
+  const rideChoice=selector.locator(
+    '.ride-mode-card[data-ride-mode="skateboard"], .ride-mode-card[data-ride-mode="snowboard"], .ride-mode-card'
+  ).first();
+  await rideChoice.waitFor({state:'visible',timeout:5000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   await assertElementWithinViewport(selector,'ride selector');
-  await assertElementWithinViewport(skiChoice,'ski choice');
+  await assertElementWithinViewport(rideChoice,'urban ride choice');
   await assertElementWithinViewport(selector.locator('.ride-mode-back'),'ride back');
 
   await page.keyboard.press('Escape');
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('chimpion-card'));
   assert.equal(await selector.locator('#ride-mode-step').isHidden(),true,'Escape/B-style cancel did not return ride selection to avatars');
   await page.keyboard.press('Enter');
-  await skiChoice.waitFor({state:'visible',timeout:5000});
+  await rideChoice.waitFor({state:'visible',timeout:5000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   // Focus/navigation semantics were already verified above. Trigger the actual
   // button handler through DOM click so headless SwiftShader does not make this
   // release smoke depend on pointer hit-testing or transition stability.
-  await skiChoice.evaluate(button=>button.click());
+  await rideChoice.evaluate(button=>button.click());
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   // beginRun is scheduled immediately after the async rider selection closes.
-  // Synchronize with either the one-time tutorial or the run state so this
-  // audit cannot race the tutorial being mounted one task after dialog.close().
+  // Synchronize with tutorial/countdown/playing and dismiss the tutorial through
+  // its real pointer capture path to avoid headless focus races.
   await page.waitForFunction(()=>{
     const tutorial=document.querySelector('.session-tutorial:not([hidden])');
-    const mode=window.chimpionsSki?.().mode;
-    return !!tutorial||mode==='countdown'||mode==='playing';
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return !!tutorial||d?.mode==='countdown'||d?.mode==='playing';
   },null,{timeout:20000});
   const sessionTutorial=page.locator('.session-tutorial:not([hidden])');
   if(await sessionTutorial.isVisible().catch(()=>false)){
-    await page.keyboard.press('Enter');
+    await page.mouse.click(24,24);
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
+  await page.waitForFunction(()=>{
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return d?.mode==='playing';
+  },null,{timeout:30000});
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 

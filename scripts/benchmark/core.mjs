@@ -174,6 +174,15 @@ export function analyzeCourse(samples){
     visibleHazardCount:analyzeMetric(samples,'visibleHazardCount')
   };
 }
+export function analyzeGraphics(samples){
+  const metrics=[
+    'rendererCalls','rendererTriangles','rendererGeometries','rendererTextures',
+    'sceneGeometryCount','sceneTextureCount','sceneObjectCount','instancedMeshCount','materialCount','lightCount',
+    'streamingSegmentCount','urbanPropPopulation','skylinePopulation',
+    'urbanDrawCalls','urbanInstances'
+  ];
+  return Object.fromEntries(metrics.map(metric=>[metric,analyzeMetric(samples,metric)]));
+}
 export function speedBins(samples){
   const bins=new Map();
   for(const sample of samples){
@@ -441,6 +450,18 @@ export async function sampleRuntime(page){
       rendererTriangles:d?.rendererTriangles??null,
       rendererGeometries:d?.rendererGeometries??null,
       rendererTextures:d?.rendererTextures??null,
+      sceneGeometryCount:d?.sceneGeometryCount??null,
+      sceneTextureCount:d?.sceneTextureCount??null,
+      sceneObjectCount:d?.sceneObjectCount??null,
+      instancedMeshCount:d?.instancedMeshCount??null,
+      materialCount:d?.materialCount??null,
+      lightCount:d?.lightCount??null,
+      streamingSegmentCount:d?.streamingSegmentCount??null,
+      urbanPropPopulation:d?.urbanPropPopulation??null,
+      skylinePopulation:d?.skylinePopulation??null,
+      urbanDrawCalls:d?.urbanDrawCalls??d?.urbanEnvironment?.drawCalls??null,
+      urbanInstances:d?.urbanInstances??d?.urbanEnvironment?.instances??null,
+
       qualityProfile:d?.qualityProfile??null,
       rendererPixelRatio:d?.rendererPixelRatio??null,
       environmentShadowMapSize:d?.environmentShadowMapSize??null,

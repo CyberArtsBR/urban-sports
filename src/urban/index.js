@@ -13,6 +13,19 @@ export {
 } from './urbanEnvironment.js';
 
 export {
+  URBAN_STREET_DRESSING_DEFAULTS,
+  URBAN_STREET_ZONES,
+  PARKED_VEHICLE_TYPES,
+  createParkedVehicle,
+  createStreetFurnitureCluster,
+  createBusStop,
+  createUtilityCluster,
+  createSidewalkDetailSet,
+  createCommercialStreetCluster,
+  createUrbanStreetDressing
+} from './streetDressing.js';
+
+export {
   URBAN_OBSTACLE_DIMENSIONS,
   URBAN_OBSTACLE_MAPPING,
   URBAN_OBSTACLE_FACTORIES,
@@ -25,3 +38,20 @@ export {
   createUrbanRampObstacle,
   createUrbanOilHazard
 } from './urbanObstacles.js';
+
+export {
+  URBAN_DISTRICT_PRESETS,
+  listUrbanDistricts,
+  resolveUrbanDistrict
+} from './urbanDistricts.js';
+
+export {
+  URBAN_BUILDING_ARCHETYPES,
+  createUrbanFacadeGeometrySet
+} from './urbanFacadeSystem.js';
+
+export {
+  createUrbanBuildingSkyline
+} from './urbanBuildings.js';
+
+export {createUrbanAtmosphere} from './urbanAtmosphere.js';

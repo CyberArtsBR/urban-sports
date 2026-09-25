@@ -9,6 +9,7 @@ import {
   clampGameplayObjectX,
   gameplayObjectCenterLimit
 } from './environmentCorridor.js';
+import {composeUrbanCourseSection,URBAN_SECTION_TYPES} from './urbanCourse/index.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const lerp=(a,b,t)=>a+(b-a)*t;
@@ -62,6 +63,11 @@ export const COURSE_TYPES=[
   'LOG JUMP'
 ];
 
+// Urban-native gameplay semantics sit on top of the proven legacy safety families.
+// Keep COURSE_TYPES stable for collision/streaming compatibility while exposing the
+// authored skateboard vocabulary independently.
+export const URBAN_COURSE_TYPES=URBAN_SECTION_TYPES;
+
 export const FORMATION_TYPES=[
   'STAGGER',
   'CLUSTER',
@@ -92,6 +98,7 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
   let routeDecisionSerial=0;
   let recentFormations=[];
   let denseFormationStreak=0;
+  let lastUrbanType='';
   const safeRoute=createSafeRouteTracker(0,null);
   const runDirector=createExpertRunDirector({random:()=>random()});
 
@@ -1191,7 +1198,7 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     }
   }
 
-  function next({startZ,difficulty=0,speed,postMaxTime=0,runTime=0,performance=null}){
+  function next({startZ,difficulty=0,speed,postMaxTime=0,runTime=0,performance=null,district=null}){
     const currentSpeed=effectiveSpeed(speed,difficulty);
     const sectionStartSafeX=safeRoute.previousSafeX??0;
     const runPlan=runDirector.plan({
@@ -1591,6 +1598,30 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
           .map(item=>item.kind)
       )
     ];
+
+    // Compose the Urban Skateboarding semantic layer only after all mature
+    // safe-route, threat-budget and landing repairs are complete. This layer
+    // never changes collision kinds or gameplay transforms.
+    const urbanSection=composeUrbanCourseSection({
+      legacyType:type,
+      placements,
+      startZ,
+      endZ:startZ-length,
+      length,
+      speed:currentSpeed,
+      difficulty,
+      sectionIndex,
+      runSeed,
+      runPhase:runPlan.phase,
+      district,
+      previousUrbanType:lastUrbanType,
+      startSafeX:sectionStartSafeX,
+      endSafeX:safeRoute.previousSafeX,
+      courseHalfWidth:T.COURSE_OBJECT_HALF_WIDTH,
+      safeRouteHalfWidth:T.SAFE_ROUTE_HALF_WIDTH,
+      landing:pendingLanding
+    });
+
     runDirector.noteSection({
       phase:runPlan.phase,
       pattern:runPlan.pattern,
@@ -1601,10 +1632,19 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       threatCost:threatBudgetResult.estimatedCost
     });
 
+    lastUrbanType=urbanSection.type;
     lastType=type;
     sectionIndex++;
     return {
       type,
+      urbanType:urbanSection.type,
+      urbanSectionId:urbanSection.id,
+      urban:urbanSection.metadata,
+      grindTargets:urbanSection.grindTargets,
+      grindValidation:urbanSection.grindValidation,
+      grindRenderDescriptors:urbanSection.grindRenderDescriptors,
+      gameplayFeatures:urbanSection.gameplayFeatures,
+      jumpOpportunities:urbanSection.jumpOpportunities,
       placements,
       endZ:startZ-length,
       length,
@@ -1650,6 +1690,7 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       routeDecisionSerial=0;
       recentFormations=[];
       denseFormationStreak=0;
+      lastUrbanType='';
       runDirector.reset();
       safeRoute.reset(0,null);
     },
@@ -1660,6 +1701,7 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     get pendingLanding(){return pendingLanding;},
     get recentRunPhases(){return runDirector.recentPhases;},
     get recentExpertPatterns(){return runDirector.recentPatterns;},
+    get lastUrbanType(){return lastUrbanType;},
     get runSeed(){return runSeed;},
     get mastery(){return runDirector.mastery;}
   };

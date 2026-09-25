@@ -189,6 +189,11 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
     };
   }
 
+  function dispose(){
+    lighting.removeFromParent();
+    lighting.clear();
+  }
+
   setQuality(quality);
-  return {update,setQuality,getDiagnostics,materials,lighting};
+  return {update,setQuality,getDiagnostics,dispose,materials,lighting};
 }

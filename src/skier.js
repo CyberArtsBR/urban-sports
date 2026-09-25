@@ -781,8 +781,8 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       modelCarrier.rotation.y=snowboardMode?snowboardStance.carrierYaw:Math.PI;
       updateRig?.setRideMode?.(currentRideMode);
       root.userData.rideMode=currentRideMode;
-      root.userData.equipmentType=snowboardMode?'snowboard':'skis';
-      root.userData.poseMode=snowboardMode?'snowboard-side-stance':'ski-a-pose';
+      root.userData.equipmentType=snowboardMode?'skateboard':'skis';
+      root.userData.poseMode=snowboardMode?'skateboard-side-stance':'ski-a-pose';
       root.userData.trailContacts=snowboardMode?snowboard.trailContacts:skis;
       return currentRideMode;
     }

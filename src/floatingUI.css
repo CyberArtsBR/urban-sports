@@ -731,7 +731,7 @@ body{
   background:rgba(0,0,0,.52)!important;color:#fff!important;
   font-size:clamp(9px,.72vw,12px)!important;
 }
-.start-screen.is-art-ready:not(.is-loading) .start-screen-status{opacity:.72}
+.start-screen.is-art-ready:not(.is-loading) .start-screen-status{display:none}
 @media(max-width:700px){
   .start-screen-play{left:33.5%!important;width:32.5%!important}
   .start-screen-back{left:35%!important;width:30%!important}

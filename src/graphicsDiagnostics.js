@@ -163,11 +163,13 @@ export function extractUrbanGraphicsPopulation(urbanEnvironment){
     const part=componentByName(diagnostics,name);
     return sum+logicalPopulation(part,Math.max(1,finite(part?.drawCalls)||1));
   },0);
+  // Road entries are the actual recycled streaming segments. Marking entries
+  // are individual dash instances within those segments and must not inflate
+  // the segment count.
   const roadSegments=road?logicalPopulation(road,5):0;
-  const markingSegments=markings?logicalPopulation(markings,1):0;
 
   return {
-    streamingSegmentCount:Math.max(roadSegments,markingSegments),
+    streamingSegmentCount:roadSegments,
     urbanPropPopulation,
     skylinePopulation:logicalPopulation(skyline,3),
     urbanDrawCalls:finite(diagnostics.drawCalls)??0,

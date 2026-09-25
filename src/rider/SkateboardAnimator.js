@@ -277,7 +277,7 @@ export function createSkateboardAnimator({
       targetY=.018;
     }
 
-    const vibration=reduced?0:Math.sin((Number(frame.time)||0)*43.0)*.0035*s.speed01*(s.air?0:.6:1);
+    const vibration=reduced?0:Math.sin((Number(frame.time)||0)*43.0)*.0035*s.speed01*(s.air?0:.6);
     targetY+=vibration-compression*.010;
     targetX=(Number(frame.boardVisualOffsetX)||0);
     targetZ=(Number(frame.boardVisualOffsetZ)||0);

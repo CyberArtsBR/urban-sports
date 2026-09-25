@@ -188,7 +188,7 @@ function patchGeometry(scaleX,scaleZ,segments=40,phase=.37){
       Math.sin(angle)*scaleZ*contour
     );
   }
-  for(let i=0;i<segments;i++)indices.push(0,1+i,1+((i+1)%segments));
+  for(let i=0;i<segments;i++)indices.push(0,1+((i+1)%segments),1+i);
   const geometry=new THREE.BufferGeometry();
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geometry.setIndex(indices);

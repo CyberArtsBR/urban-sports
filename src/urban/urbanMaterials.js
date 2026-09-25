@@ -88,7 +88,16 @@ export function createUrbanMaterials({renderer=null}={}){
     planter:new THREE.MeshStandardMaterial({color:0x5b5550,roughness:.88,metalness:0}),
     foliage:new THREE.MeshStandardMaterial({color:0x315f42,roughness:.9,metalness:0,flatShading:true}),
     utility:new THREE.MeshStandardMaterial({color:0x515962,roughness:.72,metalness:.18}),
-    bollard:new THREE.MeshStandardMaterial({color:0x303943,roughness:.48,metalness:.45})
+    bollard:new THREE.MeshStandardMaterial({color:0x303943,roughness:.48,metalness:.45}),
+    vehiclePaint:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.38,metalness:.42}),
+    vehicleGlass:new THREE.MeshStandardMaterial({color:0x1a2732,roughness:.22,metalness:.25,transparent:true,opacity:.88}),
+    tire:new THREE.MeshStandardMaterial({color:0x111317,roughness:.88,metalness:.02}),
+    vehicleLight:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.30,metalness:.08}),
+    streetPaint:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.64,metalness:.28}),
+    streetGlass:new THREE.MeshStandardMaterial({
+      color:0x9fc4d7,roughness:.18,metalness:.08,transparent:true,opacity:.36,depthWrite:false
+    }),
+    streetDetail:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.82,metalness:.16})
   };
 
   const textures=[asphaltMap,sidewalkMap];

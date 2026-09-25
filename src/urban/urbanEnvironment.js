@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createUrbanMaterials} from './urbanMaterials.js';
+import {createUrbanStreetDressing} from './streetDressing.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
@@ -442,7 +443,8 @@ export function createUrbanEnvironment(options={}){
     cones:createTrafficCones(shared),
     barriers:createBarriers(shared),
     signs:createRoadSigns(shared),
-    roadside:createUrbanRoadsideScenery(shared)
+    roadside:createUrbanRoadsideScenery(shared),
+    dressing:createUrbanStreetDressing(shared)
   };
   for(const component of Object.values(components))group.add(component.group);
   options.parent?.add?.(group);

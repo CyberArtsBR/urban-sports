@@ -3,16 +3,22 @@ const GAME_SELECTION_URL='https://chimp-jump.onrender.com/';
 export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-ski-start.jpg'}={}){
   const root=document.createElement('section');
   root.className='start-screen is-loading';
-  root.setAttribute('aria-label','Chimpions Ski start screen');
+  root.setAttribute('aria-label','Chimpions Urban Sports start screen');
   root.innerHTML=`
     <div class="start-screen-stage">
-      <img class="start-screen-art" src="${assetUrl}" alt="Chimpions Ski snowy mountain start screen" width="1920" height="1080" decoding="async" fetchpriority="high" draggable="false" />
-      <button class="start-screen-hit start-screen-play" type="button" aria-label="Start Game" disabled>
-        <span class="sr-only">Start Game</span>
-      </button>
-      <a class="start-screen-hit start-screen-back" href="${GAME_SELECTION_URL}" aria-label="Back to the Game selection">
-        <span class="sr-only">Back to the Game selection</span>
-      </a>
+      <img class="start-screen-art" src="${assetUrl}" alt="" aria-hidden="true" width="1920" height="1080" decoding="async" fetchpriority="high" draggable="false" />
+      <div class="start-screen-city-grid" aria-hidden="true"></div>
+      <main class="start-screen-content">
+        <div class="start-screen-kicker">CHIMPIONS SERIES · STREET EDITION</div>
+        <h1 class="start-screen-title">CHIMPIONS <span>URBAN SPORTS</span></h1>
+        <p class="start-screen-current">CURRENT RIDE <strong>SKATEBOARD</strong></p>
+        <p class="start-screen-roadmap"><span class="is-live">SKATEBOARD · LIVE</span><span>INLINE · COMING SOON</span><span>BMX · COMING SOON</span></p>
+        <p class="start-screen-tagline">Own the street. Link tricks. Chase bananas. Keep your line.</p>
+        <div class="start-screen-actions">
+          <button class="start-screen-hit start-screen-play" type="button" aria-label="Enter Chimpions Urban Sports with Skateboard" disabled>ENTER STREET</button>
+          <a class="start-screen-hit start-screen-back" href="${GAME_SELECTION_URL}" aria-label="Back to game selection">BACK TO GAME SELECT</a>
+        </div>
+      </main>
       <div class="start-screen-status" aria-live="polite">Loading start screen…</div>
     </div>
   `;
@@ -37,7 +43,7 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-ski-
     if(artFailed)status.textContent='Start artwork unavailable';
     else if(!artReady)status.textContent='Loading start screen…';
     else if(!chimpionReady)status.textContent='Loading Chimpion…';
-    else status.textContent='ENTER / A · START';
+    else status.textContent='ENTER / A · ENTER STREET';
     if(ready&&root.isConnected&&!root.hidden&&document.activeElement===document.body){
       requestAnimationFrame(()=>{if(!play.disabled&&!root.hidden)play.focus();});
     }

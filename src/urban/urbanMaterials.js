@@ -74,10 +74,13 @@ export function createUrbanMaterials({renderer=null}={}){
       color:0xd9f3ff,roughness:.18,metalness:.08,emissive:0x88d8ff,emissiveIntensity:2.2,
       toneMapped:false
     }),
-    building:new THREE.MeshStandardMaterial({color:0x59616b,roughness:.84,metalness:.04}),
+    building:new THREE.MeshStandardMaterial({
+      color:0xffffff,roughness:.80,metalness:.05,vertexColors:true
+    }),
     rooftop:new THREE.MeshStandardMaterial({color:0x333b45,roughness:.78,metalness:.12}),
-    windows:new THREE.MeshBasicMaterial({
-      color:0xbcdcff,transparent:true,opacity:.76,depthWrite:false,toneMapped:false
+    windows:new THREE.MeshStandardMaterial({
+      color:0xffffff,roughness:.28,metalness:.07,
+      emissive:0x2b3b4c,emissiveIntensity:.38,vertexColors:true
     }),
     cone:new THREE.MeshStandardMaterial({color:0xff6a16,roughness:.48,metalness:0}),
     coneStripe:new THREE.MeshStandardMaterial({

@@ -55,6 +55,7 @@ try{
 
   await domClick(selector.locator('.chimpion-card:not(.is-upload-avatar)').first());
   await domClick(selector.locator('.ride-mode-card[data-ride-mode="ski"]'));
+  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   await page.locator('.session-tutorial:not([hidden])').waitFor({state:'visible',timeout:5000}).catch(()=>{});
   await dismissTutorial(page);
   await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:RUN_TIMEOUT});
@@ -105,6 +106,7 @@ try{
   await customSelector.locator('#ride-mode-step:not([hidden])').waitFor({state:'visible',timeout:20000});
   assert.equal(local.glbs.length,0,'Valid local GLB parsing must stay local-only');
   await domClick(customSelector.locator('.ride-mode-card[data-ride-mode="snowboard"]'));
+  await custom.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   await custom.locator('.session-tutorial:not([hidden])').waitFor({state:'visible',timeout:5000}).catch(()=>{});
   await dismissTutorial(custom);
   await custom.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:RUN_TIMEOUT});

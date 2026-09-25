@@ -378,7 +378,7 @@ function logPrototype(variant){
   }
   root=new THREE.Group();
   const beam=mesh(mergedBoxes([{w:2.86,h:.20,d:.16,y:.52}]),materials.orange,{name:'sawhorse-beam'});
-  const legs=mesh(mergedBoxes([{w:.10,h:.58,d:.10,x:-1.10,y:.29,rz:.18},{w:.10,h:.58,d:.10,x:-.86,y:.29,rz:-.18},{w:.10,h:.58,d:.10,x:.86,y:.29,rz:.18},{w:.10,h:.58,d:.10,x:1.10,y:.29,rz:-.18}]),materials.darkMetal,{name:'sawhorse-legs'});
+  const legs=mesh(mergedBoxes([{w:.10,h:.58,d:.10,x:-1.10,y:.30,rz:.18},{w:.10,h:.58,d:.10,x:-.86,y:.30,rz:-.18},{w:.10,h:.58,d:.10,x:.86,y:.30,rz:.18},{w:.10,h:.58,d:.10,x:1.10,y:.30,rz:-.18}]),materials.darkMetal,{name:'sawhorse-legs'});
   root.add(beam,legs);addStripeBlocks(root,{width:2.62,y:.52,z:.091,count:7,height:.11,material:materials.reflective});
   return finalize(root,URBAN_OBSTACLE_DIMENSIONS.log,'UrbanObstacle_StripedSawhorse',variant,'stripedSawhorse');
 }

@@ -161,8 +161,13 @@ assert(
 }
 
 const feedbackSource=readFileSync(new URL('../src/gameFeedback.js',import.meta.url),'utf8');
-assert(!feedbackSource.includes('showLandingFeedback'),'landing text feedback hook is still active');
-assert(!feedbackSource.includes('CLEAN LANDING'),'CLEAN LANDING text remains in gameplay feedback');
+// Landing callouts remain an intentional game-feel hook, but routine clean
+// landings must stay quiet. Protect the behavioral gate rather than asserting
+// that the UI hook itself has been deleted.
+assert(
+  /feedback\.dramatic\|\|feedback\.quality!==['"]clean['"][\s\S]{0,120}showLandingFeedback/.test(feedbackSource),
+  'landing callout lost its dramatic/non-clean gating'
+);
 
 console.log(JSON.stringify({
   check:'airborne-scoring-invariants',

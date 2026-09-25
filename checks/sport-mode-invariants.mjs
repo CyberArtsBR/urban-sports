@@ -3,7 +3,7 @@ import {RIDE_MODE,getRideProfile} from '../src/rideMode.js';
 import {SPORT_MODE,getLegacyRideModeForSport,getSportProfile,listSportProfiles,normalizeSportMode} from '../src/sportMode.js';
 
 const expected={
-  [SPORT_MODE.SKATEBOARD]:{legacyRideMode:RIDE_MODE.SNOWBOARD,equipment:'skateboard',stance:'sideways',wheelCount:4,supportsGrinding:true},
+  [SPORT_MODE.SKATEBOARD]:{legacyRideMode:RIDE_MODE.SNOWBOARD,physicsProfile:'skateboard-native',displaySpeedProfile:'skateboard',equipment:'skateboard',stance:'sideways',wheelCount:4,supportsGrinding:true,supportsManuals:true,supportsPowerslides:true},
   [SPORT_MODE.INLINE]:{legacyRideMode:RIDE_MODE.SKI,equipment:'inline-skates',stance:'forward',wheelCount:8,supportsGrinding:true},
   [SPORT_MODE.BMX]:{legacyRideMode:RIDE_MODE.SNOWBOARD,equipment:'bmx',stance:'bike',wheelCount:2,supportsGrinding:true}
 };
@@ -21,7 +21,7 @@ for(const mode of Object.values(SPORT_MODE)){
 }
 assert.equal(normalizeSportMode('SKATEBOARD'),SPORT_MODE.SKATEBOARD,'sport normalization remains case-insensitive');
 assert.equal(normalizeSportMode('unknown-future-sport'),SPORT_MODE.SKATEBOARD,'unknown sport safely falls back to Skateboard');
-assert.equal(getLegacyRideModeForSport(SPORT_MODE.SKATEBOARD),RIDE_MODE.SNOWBOARD,'Skateboard must continue using the proven legacy snowboard handling profile during Phase 1');
-assert.strictEqual(getRideProfile(getLegacyRideModeForSport(SPORT_MODE.SKATEBOARD)),getRideProfile(RIDE_MODE.SNOWBOARD),'Skateboard resolves to the same immutable snowboard handling profile');
+assert.equal(getLegacyRideModeForSport(SPORT_MODE.SKATEBOARD),RIDE_MODE.SNOWBOARD,'Skateboard keeps snowboard only as the legacy speed/avatar/equipment compatibility profile');
+assert.strictEqual(getRideProfile(getLegacyRideModeForSport(SPORT_MODE.SKATEBOARD)),getRideProfile(RIDE_MODE.SNOWBOARD),'Skateboard compatibility mode still resolves to the immutable shared speed contract');
 
 console.log(JSON.stringify({check:'sport-mode-invariants',profiles:profiles.map(({mode,legacyRideMode,equipment,wheelCount})=>({mode,legacyRideMode,equipment,wheelCount}))}));

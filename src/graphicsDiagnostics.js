@@ -13,7 +13,7 @@ const LOW=Object.freeze({
   urbanPropPopulation:650,
   skylinePopulation:80,
   urbanDrawCalls:40,
-  urbanInstances:900
+  urbanInstances:1300
 });
 
 const MEDIUM=Object.freeze({
@@ -29,7 +29,7 @@ const MEDIUM=Object.freeze({
   urbanPropPopulation:950,
   skylinePopulation:120,
   urbanDrawCalls:56,
-  urbanInstances:1350
+  urbanInstances:1850
 });
 
 const HIGH=Object.freeze({
@@ -45,7 +45,7 @@ const HIGH=Object.freeze({
   urbanPropPopulation:1450,
   skylinePopulation:180,
   urbanDrawCalls:80,
-  urbanInstances:2200
+  urbanInstances:2800
 });
 
 export const GRAPHICS_QUALITY_BUDGETS=Object.freeze({

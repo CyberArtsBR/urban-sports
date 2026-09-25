@@ -56,9 +56,12 @@ import {createImpactVfx} from './impactVfx.js';
 
 const userPreferences=loadUserPreferences();
 
+let runtimeTestMode=false;
 let requestedRunSeed=null;
 try{
-  const seedParam=new URLSearchParams(globalThis.location?.search||'').get('seed');
+  const params=new URLSearchParams(globalThis.location?.search||'');
+  runtimeTestMode=params.get('test')==='1';
+  const seedParam=params.get('seed');
   requestedRunSeed=seedParam?String(seedParam):null;
 }catch{}
 function createRunSeed(){
@@ -431,7 +434,7 @@ const tricks=createTrickSystem({visualTarget:trickVisualPivot});
 const startCamera=createStartCameraSequence({camera,skiCamera,player});
 const startCrowd=createStartCrowd({world,terrainHeight});
 const startGate=createStartGateScene({world,terrainHeight,theme:'urban'});
-const START_COUNTDOWN_DURATION_MS=2700;
+const START_COUNTDOWN_DURATION_MS=runtimeTestMode?180:2700;
 const BANANA_POWER_GOAL=10;
 const BANANA_POWER_DURATION=3;
 const BANANA_BULLET_TIME_SCALE=.35;
@@ -608,6 +611,7 @@ sessionTutorialRoot.innerHTML=`
 document.body.append(sessionTutorialRoot);
 
 function hasSeenSessionTutorial(){
+  if(runtimeTestMode)return true;
   try{return sessionStorage.getItem(SESSION_TUTORIAL_KEY)==='1';}catch{return false;}
 }
 function markSessionTutorialSeen(){
@@ -933,7 +937,15 @@ async function beginRun(){
     if(!gameFlow.enter(GAME_FLOW.COUNTDOWN,{reason:'begin-run'}))return false;
     resetRunState();
     ui.prepareRun({best:state.best,speed:state.speed});
-    startCamera.begin(state,performance.now());
+    if(runtimeTestMode){
+      // CI / browser audits use ?test=1. Keep production presentation intact
+      // while making automated release gates deterministic and independent of
+      // software-renderer frame pacing.
+      startCamera.reset();
+      startRaceCountdown();
+    }else{
+      startCamera.begin(state,performance.now());
+    }
     return true;
   }finally{
     ui.hideRunLoading?.();

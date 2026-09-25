@@ -677,7 +677,7 @@ const startScreen=createStartScreen({
     // The selected rider is interaction-critical and should not compete with crowd parsing.
     return true;
   },
-  assetUrl:'/start/chimpions-urban-sports-start.jpg'
+  assetUrl:'/start/chimpions-urban-sports-start.webp'
 });
 startScreen.setReady(false);
 ui.setAvatarLoading(true);

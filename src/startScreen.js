@@ -1,6 +1,6 @@
 const GAME_SELECTION_URL='https://chimp-jump.onrender.com/';
 
-export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urban-sports-start.jpg'}={}){
+export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urban-sports-start.webp'}={}){
   const root=document.createElement('section');
   root.className='start-screen is-loading';
   root.setAttribute('aria-label','Chimpions Urban Sports start screen');

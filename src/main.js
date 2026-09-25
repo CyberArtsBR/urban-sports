@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
 import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import './style.css';
 import './floatingUI.css';
@@ -137,14 +138,14 @@ applyCameraMotionPreference();
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
-let composer=null,bloomPass=null,composerPixelRatio=0;
+let composer=null,renderPass=null,bloomPass=null,ssaoPass=null,composerPixelRatio=0;
 
 function applyBloomQuality(){
   if(!bloomPass)return;
   const profile=quality.active;
-  bloomPass.strength=profile==='max'?1.28:profile==='high'?1.08:profile==='medium'?.82:.62;
-  bloomPass.radius=profile==='max'?.52:profile==='high'?.48:profile==='medium'?.42:.36;
-  bloomPass.threshold=1.55;
+  bloomPass.strength=profile==='max'?.72:profile==='high'?.62:profile==='medium'?.48:.35;
+  bloomPass.radius=profile==='max'?.42:profile==='high'?.38:profile==='medium'?.34:.28;
+  bloomPass.threshold=profile==='max'?1.15:profile==='high'?1.22:profile==='medium'?1.35:1.55;
 }
 
 function applyRendererResolution(){
@@ -176,8 +177,15 @@ composer=new EffectComposer(renderer,postTarget);
 composerPixelRatio=renderer.getPixelRatio();
 composer.setPixelRatio(composerPixelRatio);
 composer.setSize(innerWidth,innerHeight);
-composer.addPass(new RenderPass(scene,camera));
-bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),1.08,.48,1.55);
+renderPass=new RenderPass(scene,camera);
+composer.addPass(renderPass);
+ssaoPass=new SSAOPass(scene,camera,innerWidth,innerHeight);
+ssaoPass.enabled=false;
+ssaoPass.kernelRadius=18;
+ssaoPass.minDistance=.0025;
+ssaoPass.maxDistance=.12;
+composer.addPass(ssaoPass);
+bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.62,.38,1.22);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 applyBloomQuality();
@@ -591,9 +599,95 @@ ui.configureSettings?.({
     saveHapticsPreference(enabled);
   }
 });
+let currentRenderingSettings=quality.getSettings();
+
+function rememberShadowDefault(mesh){
+  if(!mesh?.isMesh)return false;
+  if(mesh.userData.aaaOriginalCastShadow===undefined)mesh.userData.aaaOriginalCastShadow=!!mesh.castShadow;
+  return mesh.userData.aaaOriginalCastShadow;
+}
+function setUrbanShadowCasters(enabled,profile){
+  const allowMax=profile==='max';
+  const allowHigh=profile==='high'||allowMax;
+  urbanEnvironment.group?.traverse?.(object=>{
+    if(!object?.isMesh)return;
+    rememberShadowDefault(object);
+    const name=String(object.name||'');
+    const selectedProp=/vehicle|barrier|traffic-cone|bollard|sign-post|sign-panel|utility|planter/.test(name);
+    const building=/urban-building/.test(name);
+    object.castShadow=allowHigh&&selectedProp&&!building;
+    if(/urban-asphalt|urban-sidewalk|urban-curb|road-repair|road-drain/.test(name))object.receiveShadow=allowHigh;
+  });
+}
+function applyRiderShadowPolicy(root=riderController.rider){
+  const enabled=currentRenderingSettings?.profile==='max'||currentRenderingSettings?.profile==='high';
+  root?.traverse?.(object=>{
+    if(!object?.isMesh)return;
+    const material=Array.isArray(object.material)?object.material[0]:object.material;
+    const tooTransparent=!!material?.transparent&&Number(material?.opacity)<.45;
+    object.castShadow=enabled&&!tooTransparent;
+    if(enabled)object.receiveShadow=true;
+  });
+}
+function applyStartShadowPolicy(enabled){
+  startGate.root?.traverse?.(object=>{
+    if(!object?.isMesh)return;
+    const original=rememberShadowDefault(object);
+    object.castShadow=enabled&&original;
+  });
+}
+function applyRenderingQuality(settings=quality.getSettings()){
+  currentRenderingSettings=settings;
+  const profile=settings?.profile||quality.active;
+  const realShadows=profile==='max'||profile==='high';
+  const keyLight=environment.weatherBindings?.sun||null;
+
+  renderer.shadowMap.enabled=realShadows;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  if(keyLight){
+    keyLight.castShadow=realShadows;
+    if(realShadows){
+      const mapSize=Math.max(512,Number(settings.shadowMapSize)||1024);
+      if(keyLight.shadow.map&&(
+        keyLight.shadow.map.width!==mapSize||keyLight.shadow.map.height!==mapSize
+      )){
+        keyLight.shadow.map.dispose?.();
+        keyLight.shadow.map=null;
+      }
+      keyLight.shadow.mapSize.set(mapSize,mapSize);
+      const range=profile==='max'?24:18;
+      keyLight.shadow.camera.left=-range;
+      keyLight.shadow.camera.right=range;
+      keyLight.shadow.camera.top=profile==='max'?28:22;
+      keyLight.shadow.camera.bottom=-6;
+      keyLight.shadow.camera.near=.5;
+      keyLight.shadow.camera.far=Math.max(42,Number(settings.shadowDistance)||58);
+      keyLight.shadow.bias=-.00032;
+      keyLight.shadow.normalBias=profile==='max'?.032:.040;
+      keyLight.shadow.radius=profile==='max'?2.1:1.4;
+      keyLight.shadow.camera.updateProjectionMatrix();
+      keyLight.shadow.needsUpdate=true;
+    }
+  }
+
+  setUrbanShadowCasters(realShadows,profile);
+  applyStartShadowPolicy(realShadows);
+  applyRiderShadowPolicy();
+
+  if(ssaoPass){
+    const aoEnabled=profile==='max'&&settings.contactAO!==false;
+    ssaoPass.enabled=aoEnabled;
+    ssaoPass.kernelRadius=Math.max(8,Number(settings.aoKernelRadius)||18);
+    ssaoPass.minDistance=.0025;
+    ssaoPass.maxDistance=.12;
+    if(renderPass)renderPass.enabled=!aoEnabled;
+  }
+  applyBloomQuality();
+}
 function applyRuntimeQuality(settings=quality.getSettings()){
   environment.applyQuality?.(settings);
   urbanEnvironment.setQualityProfile?.(settings);
+  applyRenderingQuality(settings);
 }
 const unsubscribeRuntimeQuality=quality.subscribe(applyRuntimeQuality,{immediate:true});
 
@@ -802,6 +896,7 @@ async function setAvatar(entry,rideMode=selectedRideMode){
     if(request!==avatarRequest){disposeAvatarObject(nextSkier);return;}
     riderController.replace(nextSkier);
     mountainWeather.setRider(riderController.rider);
+  applyRiderShadowPolicy(riderController.rider);
     selectedAvatar=entry;
     avatarCommitted=true;
     selectedRideMode=nextRideMode;
@@ -870,6 +965,7 @@ function installAvatarSelector(initialAvatar){
   const initialAvatar=catalog.find(entry=>entry?.name===savedAvatarName)||catalog.find(entry=>entry?.name===DEFAULT_AVATAR_NAME)||catalog[0]||createBuiltinAvatarEntry(DEFAULT_AVATAR_NAME);
   riderController.replace(createFallbackSkier({rideMode:selectedRideMode}),{disposePrevious:false});
   mountainWeather.setRider(riderController.rider);
+    applyRiderShadowPolicy(riderController.rider);
   selectedAvatar=initialAvatar;
   avatarCommitted=false;
   ui.setAvatar(initialAvatar);
@@ -1544,13 +1640,6 @@ function update(dt,frameMs=dt*1000){
   const urbanWeather=mountainWeather.getState?.();
   const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
   roadWetness=wet;
-  const asphalt=urbanEnvironment.materials?.asphalt;
-  if(asphalt){
-    asphalt.roughness=THREE.MathUtils.lerp(.94,.48,wet);
-    asphalt.clearcoat=THREE.MathUtils.lerp(0,.82,wet);
-    asphalt.clearcoatRoughness=THREE.MathUtils.lerp(.28,.12,wet);
-    asphalt.envMapIntensity=THREE.MathUtils.lerp(.20,.65,wet);
-  }
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 
@@ -1664,6 +1753,19 @@ window.chimpionsSki=()=>{
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
+    renderingQuality:{
+      profile:quality.active,
+      shadowMapsEnabled:!!renderer.shadowMap.enabled,
+      shadowMapSize:environment.weatherBindings?.sun?.shadow?.mapSize?.x??0,
+      shadowDistance:environment.weatherBindings?.sun?.shadow?.camera?.far??0,
+      ssaoEnabled:!!ssaoPass?.enabled,
+      ssaoKernelRadius:ssaoPass?.kernelRadius??0,
+      bloomStrength:bloomPass?.strength??0,
+      bloomRadius:bloomPass?.radius??0,
+      bloomThreshold:bloomPass?.threshold??0,
+      materialQuality:urbanEnvironment.materials?.getDiagnostics?.()||null,
+      atmosphere:mountainWeather.getLightingDiagnostics?.()||null
+    },
     ...environment.getQualityDiagnostics?.(),
     urbanEnvironment:urbanEnvironment.getDiagnostics?.()||null,
     ...quality.getDiagnostics(),
@@ -1772,6 +1874,7 @@ if(import.meta.hot){
     riderController.dispose();
     impactVfx.dispose?.();
     urbanEnvironment.dispose?.();
+    ssaoPass?.dispose?.();
     composer?.dispose?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();

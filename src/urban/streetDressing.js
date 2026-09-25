@@ -1,13 +1,24 @@
 import * as THREE from 'three';
 import {createUrbanMaterials} from './urbanMaterials.js';
+import {resolveUrbanDistrict} from './urbanDistricts.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:1,medium:.72,low:.46});
+const PROFILE_DENSITY=Object.freeze({max:1,high:.90,medium:.66,low:.44});
+const PROFILE_DETAIL=Object.freeze({max:2,high:2,medium:1,low:0});
 // These close-range accents cost five scene batches even when no instances are
 // rendered. Keep the pools allocated for quality changes, but detach them on LOW.
 const LOW_OMITTED_BATCHES=new Set(['vehicleTrim','vehicleArches','foliage','glass','flats']);
 const ZONES=Object.freeze(['parking','storefront','downtown','transit','construction','utility','clean']);
+const DISTRICT_ZONE_WEIGHTS=Object.freeze({
+  mixed:[['parking',.21],['storefront',.18],['downtown',.18],['transit',.12],['construction',.11],['utility',.11],['clean',.09]],
+  downtown:[['downtown',.29],['parking',.20],['transit',.16],['storefront',.15],['utility',.09],['construction',.04],['clean',.07]],
+  commercial:[['storefront',.34],['parking',.22],['downtown',.16],['transit',.12],['utility',.06],['construction',.03],['clean',.07]],
+  construction:[['construction',.34],['utility',.20],['parking',.18],['clean',.10],['transit',.06],['storefront',.05],['downtown',.07]],
+  industrial:[['utility',.27],['construction',.24],['parking',.23],['clean',.11],['transit',.06],['storefront',.04],['downtown',.05]],
+  entertainment:[['storefront',.30],['downtown',.23],['parking',.18],['transit',.14],['clean',.07],['utility',.05],['construction',.03]],
+  event:[['transit',.25],['storefront',.24],['downtown',.19],['parking',.15],['clean',.10],['utility',.04],['construction',.03]]
+});
 
 export const URBAN_STREET_DRESSING_DEFAULTS=Object.freeze({
   roadWidth:13.5,
@@ -44,6 +55,11 @@ function hashString(value){
 function random01(seed,index,salt=0){
   const n=Math.sin((seed+index*374761393+salt*668265263)*.000001)*43758.5453123;
   return fract(n);
+}
+function profileName(value){
+  const raw=typeof value==='string'?value:value?.profile;
+  const key=String(raw??'high').toLowerCase();
+  return PROFILE_DENSITY[key]!=null?key:'high';
 }
 function densityFromQuality(value){
   if(typeof value==='number')return clamp(value,0,1);
@@ -129,14 +145,18 @@ const STREET_COLORS=Object.freeze({
   concrete:0x9c9b95,awningA:0xc64242,awningB:0x315f93,planter:0x655b52,kiosk:0x33475c
 });
 
-function zoneFrom(value){
-  if(value<.21)return 'parking';
-  if(value<.39)return 'storefront';
-  if(value<.57)return 'downtown';
-  if(value<.69)return 'transit';
-  if(value<.80)return 'construction';
-  if(value<.91)return 'utility';
+function zoneFrom(value,districtId='mixed'){
+  const weights=DISTRICT_ZONE_WEIGHTS[districtId]||DISTRICT_ZONE_WEIGHTS.mixed;
+  let cursor=0;
+  for(const [zone,weight] of weights){cursor+=weight;if(value<=cursor)return zone;}
   return 'clean';
+}
+function vehicleKindsForDistrict(districtId){
+  if(districtId==='industrial'||districtId==='construction')return ['van','delivery','truck','sedan','compact'];
+  if(districtId==='commercial')return ['compact','sedan','taxi','van','delivery','scooter'];
+  if(districtId==='entertainment'||districtId==='event')return ['compact','sedan','taxi','scooter','van'];
+  if(districtId==='downtown')return ['sedan','taxi','compact','van','scooter'];
+  return ['compact','sedan','taxi','van','delivery','truck'];
 }
 
 export function createUrbanStreetDressing(options={}){
@@ -156,11 +176,11 @@ export function createUrbanStreetDressing(options={}){
   const planeGeometry=new THREE.PlaneGeometry(1,1);
 
   const meshes={
-    vehiclePaint:createMesh(boxGeometry,materials.vehiclePaint,slotCapacity*3,'urban-dressing-vehicle-paint',{castShadow:true}),
+    vehiclePaint:createMesh(boxGeometry,materials.vehiclePaint,slotCapacity*4,'urban-dressing-vehicle-paint',{castShadow:true}),
     vehicleWindows:createMesh(boxGeometry,materials.vehicleGlass,slotCapacity*2,'urban-dressing-vehicle-windows'),
     vehicleTires:createMesh(wheelGeometry,materials.tire,slotCapacity*4,'urban-dressing-vehicle-tires'),
-    vehicleTrim:createMesh(boxGeometry,materials.darkMetal,slotCapacity*2,'urban-dressing-vehicle-trim'),
-    vehicleLights:createMesh(boxGeometry,materials.vehicleLight,slotCapacity*4,'urban-dressing-vehicle-lights'),
+    vehicleTrim:createMesh(boxGeometry,materials.darkMetal,slotCapacity*4,'urban-dressing-vehicle-trim'),
+    vehicleLights:createMesh(boxGeometry,materials.vehicleLight,slotCapacity*5,'urban-dressing-vehicle-lights'),
     vehicleArches:createMesh(archGeometry,materials.darkMetal,slotCapacity*4,'urban-dressing-vehicle-wheel-arches'),
     streetBoxes:createMesh(boxGeometry,materials.streetPaint,slotCapacity*10,'urban-dressing-street-boxes',{castShadow:true}),
     streetCylinders:createMesh(cylinderGeometry,materials.streetPaint,slotCapacity*7,'urban-dressing-street-cylinders'),
@@ -171,8 +191,11 @@ export function createUrbanStreetDressing(options={}){
   group.add(...Object.values(meshes));
 
   const counts={vehiclePaint:0,vehicleWindows:0,vehicleTires:0,vehicleTrim:0,vehicleLights:0,vehicleArches:0,streetBoxes:0,streetCylinders:0,foliage:0,glass:0,flats:0};
+  let qualityProfile=profileName(options.quality??options.density??'high');
+  let heroDetail=PROFILE_DETAIL[qualityProfile]??2;
   let density=config.density;
-  let lowDetail=String(options.quality?.profile??options.quality??'').toLowerCase()==='low';
+  let district=resolveUrbanDistrict(options.district??'mixed');
+  let lowDetail=qualityProfile==='low';
   const entries=Array.from({length:slotCapacity},(_,i)=>({side:i%2===0?-1:1,z:0,generation:0}));
   const customEntries=(options.placements??[]).map((item,index)=>({descriptor:item,z:Number(item?.position?.z??item?.z??0)||0,index,generation:0}));
 
@@ -184,12 +207,13 @@ export function createUrbanStreetDressing(options={}){
   }
   function configure(entry,index){
     const r=index+(entry.generation||0)*slotCapacity;
-    entry.zone=zoneFrom(random01(config.seed,r,1));
+    entry.zone=zoneFrom(random01(config.seed,r,1),district.id);
     entry.densityGate=random01(config.seed,r,2);
     entry.variant=random01(config.seed,r,3);
     entry.jitter=(random01(config.seed,r,4)-.5)*4.4;
     entry.colorIndex=Math.floor(random01(config.seed,r,5)*VEHICLE_COLORS.length)%VEHICLE_COLORS.length;
-    entry.vehicleKind=['compact','sedan','taxi','van','delivery','truck'][Math.floor(random01(config.seed,r,6)*6)%6];
+    const vehicleKinds=vehicleKindsForDistrict(district.id);
+    entry.vehicleKind=vehicleKinds[Math.floor(random01(config.seed,r,6)*vehicleKinds.length)%vehicleKinds.length];
     entry.phase=random01(config.seed,r,7);
   }
   function resetEntries(){
@@ -225,6 +249,11 @@ export function createUrbanStreetDressing(options={}){
     const upperZ=type==='van'||type==='delivery'?0:length*.03;
     push('vehiclePaint',{x:px,y:baseY+bodyH*.48,z,sx:width,sy:bodyH,sz:length,ry:yaw},paint);
     push('vehiclePaint',{x:px,y:baseY+bodyH+upperH*.88,z:z+upperZ,sx:width*.88,sy:.16*s,sz:upperLen*.94,ry:yaw},paint);
+    if(heroDetail>=1&&type!=='truck'){
+      const hoodLength=((type==='van'||type==='delivery') ? 0.20 : 0.25)*length;
+      push('vehiclePaint',{x:px,y:baseY+bodyH*.82,z:z+length*.36,sx:width*.92,sy:.10*s,sz:hoodLength,ry:yaw},paint);
+      if(type!=='van'&&type!=='delivery')push('vehiclePaint',{x:px,y:baseY+bodyH*.76,z:z-length*.40,sx:width*.90,sy:.08*s,sz:length*.16,ry:yaw},paint);
+    }
     if(type==='truck')push('vehiclePaint',{x:px,y:baseY+bodyH+upperH*.5,z:z-length*.18,sx:width*.94,sy:upperH,sz:length*.48,ry:yaw},paint);
     else push('vehicleWindows',{x:px,y:baseY+bodyH+upperH*.48,z:z+upperZ,sx:width*.84,sy:upperH*.68,sz:upperLen*.88,ry:yaw},0x18232d);
     if(type==='van'||type==='delivery')push('vehicleWindows',{x:px,y:baseY+bodyH+upperH*.52,z:z+length*.22,sx:width*.87,sy:upperH*.55,sz:length*.10,ry:yaw},0x17232c);
@@ -236,10 +265,16 @@ export function createUrbanStreetDressing(options={}){
     }
     push('vehicleTrim',{x:px,y:baseY+bodyH*.30,z:z+length*.51,sx:width*.92,sy:.18*s,sz:.12*s,ry:yaw});
     push('vehicleTrim',{x:px,y:baseY+bodyH*.30,z:z-length*.51,sx:width*.92,sy:.18*s,sz:.12*s,ry:yaw});
+    if(heroDetail>=1){
+      for(const mirrorSide of [-1,1]){
+        push('vehicleTrim',{x:px+mirrorSide*width*.53,y:baseY+bodyH+upperH*.46,z:z+length*.08,sx:.13*s,sy:.09*s,sz:.18*s,ry:yaw},0x20262d);
+      }
+    }
     for(const lx of [-width*.28,width*.28]){
       push('vehicleLights',{x:px+lx,y:baseY+bodyH*.55,z:z+length*.515,sx:.28*s,sy:.16*s,sz:.035*s,ry:yaw},0xe8e1b6);
       push('vehicleLights',{x:px+lx,y:baseY+bodyH*.52,z:z-length*.515,sx:.24*s,sy:.15*s,sz:.035*s,ry:yaw},0xb9413b);
     }
+    if(heroDetail>=2)push('vehicleLights',{x:px,y:baseY+bodyH*.30,z:z-length*.525,sx:.42*s,sy:.12*s,sz:.025*s,ry:yaw},0xe8e6dc);
     if(type==='taxi')push('vehiclePaint',{x:px,y:spec.height*s+.12,z,sx:.62*s,sy:.20*s,sz:.28*s,ry:yaw},0xf3c531);
   }
 
@@ -361,6 +396,16 @@ export function createUrbanStreetDressing(options={}){
     emitBox(boardX,.58,z+1.30,.08,1.12,.68,0x4c4037,0,-side*.15);
     emitBox(side*(config.roadWidth*.5+2.1),.22,z+.15,.52,.44,.52,0x8c6746);
     emitBox(side*(config.roadWidth*.5+2.1),.58,z+.15,.72,.10,.72,0x7a6754);
+    if(heroDetail>=1){
+      push('glass',{x:outer+towardRoad*.16,y:1.18,z,sx:.055,sy:1.72,sz:2.55},0x9fc4d7);
+      emitBox(outer+towardRoad*.12,1.16,z-1.05,.08,1.90,.08,STREET_COLORS.dark);
+      emitBox(outer+towardRoad*.12,1.16,z+1.05,.08,1.90,.08,STREET_COLORS.dark);
+      emitBox(outer+towardRoad*.12,2.06,z,.08,.08,2.18,STREET_COLORS.dark);
+    }
+    if(heroDetail>=2){
+      emitBox(outer+towardRoad*.20,1.05,z+1.34,.18,.56,.42,STREET_COLORS.utility);
+      emitCylinder(outer+towardRoad*.21,1.46,z+1.34,.045,.58,.045,STREET_COLORS.steel);
+    }
   }
   function emitConstruction(side,z){
     const x=side*(config.roadWidth*.5+1.65);
@@ -382,6 +427,8 @@ export function createUrbanStreetDressing(options={}){
       emitFlat(tactileX,.186,entry.z+entry.jitter*.30,.72,1.22,0xcaaa45);
     }
     if(detailLevel>=1&&entry.phase>.62)emitDrainGrate(side,entry.z-3.1);
+    if(heroDetail>=1&&detailLevel>=1&&entry.variant>.54)emitFlat(side*(roadEdge+1.52),.188,entry.z-entry.jitter*.18,.52,.78,0x666b6d);
+    if(heroDetail>=2&&detailLevel>=2&&entry.phase<.30)emitFlat(side*(roadEdge+.34),.020,entry.z+2.2,.22,1.55,0x45494b);
     if(detailLevel>=2&&entry.variant>.76)emitTreeGrate(side,entry.z+3.0);
   }
   function detailLevel(z){if(z<config.farDetailZ)return 0;if(z<config.mediumDetailZ)return 1;return 2;}
@@ -454,13 +501,21 @@ export function createUrbanStreetDressing(options={}){
     refresh();
   }
   function setDensity(value){
+    qualityProfile=profileName(value);
+    heroDetail=PROFILE_DETAIL[qualityProfile]??2;
     density=densityFromQuality(value);
-    lowDetail=String(value?.profile??value??'').toLowerCase()==='low';
+    lowDetail=qualityProfile==='low';
     for(const name of LOW_OMITTED_BATCHES){
       const mesh=meshes[name];
       if(lowDetail)mesh.removeFromParent();
       else if(mesh.parent!==group)group.add(mesh);
     }
+    refresh();
+    return getDiagnostics();
+  }
+  function setDistrict(value){
+    district=resolveUrbanDistrict(value);
+    for(let i=0;i<entries.length;i++)configure(entries[i],i);
     refresh();
     return getDiagnostics();
   }
@@ -470,7 +525,7 @@ export function createUrbanStreetDressing(options={}){
     const activeSlots=entries.reduce((sum,e)=>sum+(e.densityGate<=density?1:0),0);
     const zoneCounts=Object.fromEntries(ZONES.map(zone=>[zone,0]));
     for(const e of entries)if(e.densityGate<=density)zoneCounts[e.zone]=(zoneCounts[e.zone]||0)+1;
-    return {name:'street-dressing',logical:activeSlots+customEntries.length,instances:active,allocatedInstances:allocated,drawCalls:group.children.length,realtimeLights:0,customPlacements:customEntries.length,zones:zoneCounts};
+    return {name:'street-dressing',district:district.id,quality:qualityProfile,heroTier:heroDetail,logical:activeSlots+customEntries.length,instances:active,allocatedInstances:allocated,drawCalls:group.children.length,realtimeLights:0,customPlacements:customEntries.length,zones:zoneCounts};
   }
   function dispose(){
     group.removeFromParent();for(const mesh of Object.values(meshes))mesh.removeFromParent();
@@ -478,5 +533,5 @@ export function createUrbanStreetDressing(options={}){
     if(owned)materials.dispose?.();
   }
   reset();setDensity(options.quality??options.density??'high');options.parent?.add?.(group);
-  return {group,meshes,materials,update,reset,setDensity,getDiagnostics,dispose};
+  return {group,meshes,materials,update,reset,setDensity,setDistrict,getDiagnostics,dispose};
 }

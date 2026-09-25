@@ -83,16 +83,16 @@ app.innerHTML=`
   </div>
   <div class="overlay" id="overlay">
     <section class="card" aria-labelledby="game-title">
-      <div class="badge">❄️ ALPINE ARCADE</div>
-      <h1 class="logo" id="game-title">CHIMPIONS <span>SKI</span></h1>
-      <p class="tagline">Carve the endless mountain, chase bananas, clear the jumps and keep your line as the descent gets faster.</p>
+      <div class="badge">🌆 URBAN ARCADE</div>
+      <h1 class="logo" id="game-title">CHIMPIONS <span>URBAN SPORTS</span></h1>
+      <p class="tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
       <div class="selected-avatar" id="selected-avatar">
         <span class="selected-avatar-image" id="selected-avatar-image">🐵</span>
-        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKI · 150–300 KM/H</em></span>
+        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD · 150–300 KM/H</em></span>
       </div>
       <div class="menu-actions">
         <button class="secondary" id="choose" aria-label="Choose Chimpion" disabled>CHOOSE CHIMPION</button>
-        <button class="primary" id="start" aria-label="Start skiing" disabled>LOADING CHIMPION…</button>
+        <button class="primary" id="start" aria-label="Start riding" disabled>LOADING CHIMPION…</button>
       </div>
       <div class="tip">A / D or LEFT STICK / D-PAD · CARVE &nbsp; · &nbsp; SPACE / A · CROSS · JUMP &nbsp; · &nbsp; ESC / START · MENU · PAUSE</div>
     </section>
@@ -207,8 +207,8 @@ const {
 
 const tiles=[];
 for(let i=0;i<9;i++){
-  // Gameplay remains ±11.3, but the rendered mountain surface extends far beyond
-  // the camera frustum so the player never sees a hard left/right snow border.
+  // The rendered street substrate extends far beyond the playable corridor so
+  // the player never sees a hard left/right ground border behind the city.
   const geometry=new THREE.PlaneGeometry(320,28,128,18);
   const uv=geometry.attributes.uv;
   for(let vertex=0;vertex<uv.count;vertex++)uv.setX(vertex,uv.getX(vertex)*10);
@@ -623,7 +623,7 @@ const unsubscribeRuntimeQuality=quality.subscribe(applyRuntimeQuality,{immediate
 const feedback=createGameFeedback({audio,ui,haptics});
 const scorePresentation=createScorePresentation({hud:document.querySelector('.hud')});
 
-const SESSION_TUTORIAL_KEY='chimpions-ski-tutorial-seen-v2';
+const SESSION_TUTORIAL_KEY='chimpions-urban-sports-tutorial-seen-v1';
 let sessionTutorialVisible=false;
 let sessionTutorialResolve=null;
 let tutorialPreviousButtons=[];
@@ -634,12 +634,12 @@ sessionTutorialRoot.className='session-tutorial';
 sessionTutorialRoot.hidden=true;
 sessionTutorialRoot.setAttribute('role','dialog');
 sessionTutorialRoot.setAttribute('aria-modal','true');
-sessionTutorialRoot.setAttribute('aria-label','Chimpions Ski how to play tutorial');
+sessionTutorialRoot.setAttribute('aria-label','Chimpions Urban Sports how to play tutorial');
 sessionTutorialRoot.innerHTML=`
   <div class="session-tutorial-stage">
     <div class="session-tutorial-bg" aria-hidden="true"></div>
     <header class="session-tutorial-title">
-      <strong>CHIMPIONS <span>SKI</span></strong>
+      <strong>CHIMPIONS <span>URBAN SPORTS</span></strong>
       <em>HOW TO PLAY</em>
     </header>
     <div class="session-tutorial-grid">
@@ -647,7 +647,7 @@ sessionTutorialRoot.innerHTML=`
       <section><h3><b>2</b> JUMP + TRICKS</h3><div class="tutorial-controls"><kbd>SPACE</kbd><span>or</span><i class="pad-a">A</i></div><p>Jump ramps and clear hazards.</p><strong class="tutorial-highlight">↑ + JUMP · 360° SPIN &nbsp; ↓ + JUMP · BACKFLIP</strong></section>
       <section><h3><b>3</b> 🍌 BANANA POWER</h3><p>Collect 10 bananas to charge 1 Banana Power.</p><div class="tutorial-controls"><kbd>Q</kbd><span>or</span><i class="pad-x">X</i><strong>= BULLET TIME</strong></div><p>Bullet Time lasts 3 seconds.</p></section>
       <section><h3><b>4</b> CAMERA</h3><div class="tutorial-controls"><kbd>E</kbd><span>or</span><i class="pad-y">Y</i><strong>CHANGE VIEW</strong></div><p>Chase · Fixed View · High + Far · First Person</p><div class="tutorial-controls tutorial-motion-row"><kbd>R</kbd><span>or</span><i class="pad-b">B</i><strong>CAMERA MOTION</strong></div><p>Full · Fixed · Reduced</p></section>
-      <section><h3><b>5</b> GOAL</h3><p>🏔️ Ski as far as possible.</p><p>🌲 Avoid trees, rocks, logs and oil.</p><p>🍌 Grab bananas and survive the increasing speed.</p></section>
+      <section><h3><b>5</b> GOAL</h3><p>🌆 Ride as far as possible through the city.</p><p>🚧 Avoid street hazards and construction obstacles.</p><p>🍌 Grab bananas and survive the increasing speed.</p></section>
       <section><h3><b>6</b> PAUSE</h3><div class="tutorial-controls"><kbd>ESC</kbd><span>or</span><i>START</i></div><p>Pause or resume the run.</p></section>
     </div>
     <footer class="session-tutorial-start">PRESS ANY KEY OR BUTTON TO START</footer>

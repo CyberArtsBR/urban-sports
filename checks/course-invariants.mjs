@@ -59,7 +59,14 @@ for(const seed of seeds){
     totalMeters+=section.length;
 
     assert(COURSE_TYPES.includes(section.type),'unknown course section type');
-    const maxJumpLength=Math.ceil(62+estimateRampFlightEnvelope(T.MAX_SPEED).protectedEndDistance);
+    // Jump sections now include two readable post-landing decisions after the
+    // protected touchdown envelope. Account for ramp approach (34m), the
+    // post-landing offset (18m), max reaction spacing (24m * 1.22), and the
+    // final section tail (14m) instead of using the old pre-follow-up bound.
+    const maxLandingGap=24*1.22;
+    const maxJumpLength=Math.ceil(
+      34+estimateRampFlightEnvelope(T.MAX_SPEED).protectedEndDistance+18+maxLandingGap+14
+    );
     const lengthBounds=getCourseSectionLengthBounds(section.type,{maxJumpLength});
     assert(
       section.length>=lengthBounds.min&&section.length<=lengthBounds.max,

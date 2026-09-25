@@ -12,6 +12,7 @@ import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
 import {createSkiAudio} from './audio.js';
 import {createSkiEnvironment,decorateCourseObject} from './environment.js';
+import {createUrbanEnvironment} from './urban/index.js';
 import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
@@ -170,10 +171,28 @@ composer.addPass(new OutputPass());
 applyBloomQuality();
 
 const world=new THREE.Group();scene.add(world);
-const environment=createSkiEnvironment({scene,world,renderer,camera});
+const environment=createSkiEnvironment({scene,world,renderer,camera,mode:'urban'});
+const urbanEnvironment=createUrbanEnvironment({
+  parent:world,
+  renderer,
+  quality:quality.getSettings(),
+  seed:'chimpions-urban-main',
+  roadWidth:27.5,
+  sidewalkWidth:3.2,
+  segmentLength:28,
+  segmentCount:20,
+  recycleNear:36,
+  farZ:-520
+});
+// The gameplay heightfield is itself rendered as asphalt so it follows the
+// exact collision/landing surface. Keep the urban module's sidewalks, curbs,
+// markings and city props, but avoid drawing a second flat asphalt plane.
+if(urbanEnvironment.components?.road?.meshes?.[0]){
+  urbanEnvironment.components.road.meshes[0].visible=false;
+}
 const unsubscribeRendererQuality=quality.subscribe(applyRendererResolution);
 const unsubscribeRendererResolution=quality.subscribeResolution(applyRendererResolution);
-const snowMat=environment.terrainMaterial;
+const groundMat=urbanEnvironment.materials.asphalt;
 const {
   trunk:trunkMat,
   pine:pineMat,
@@ -193,7 +212,7 @@ for(let i=0;i<9;i++){
   const uv=geometry.attributes.uv;
   for(let vertex=0;vertex<uv.count;vertex++)uv.setX(vertex,uv.getX(vertex)*10);
   uv.needsUpdate=true;
-  const tile=new THREE.Mesh(geometry,snowMat);
+  const tile=new THREE.Mesh(geometry,groundMat);
   tile.rotation.x=-Math.PI/2;
   tile.position.set(0,0,-i*28+8);
   displaceTerrainChunk(geometry,tile.position.z);
@@ -595,6 +614,7 @@ ui.configureSettings?.({
 });
 function applyRuntimeQuality(settings=quality.getSettings()){
   environment.applyQuality?.(settings);
+  urbanEnvironment.setQualityProfile?.(settings);
 }
 const unsubscribeRuntimeQuality=quality.subscribe(applyRuntimeQuality,{immediate:true});
 
@@ -904,6 +924,7 @@ function resetRunState(){
     displaceTerrainChunk(tile.geometry,tile.position.z);
   });
   environment.reset();
+  urbanEnvironment.reset?.();
   Object.assign(state,sampleSkiGround(terrainHeight,0,player.position.z,0,riderController.trackSpacing));
   state.y=.12+state.centerGround;player.position.y=state.y;
   courseFrame=0;resetCourse(0);skiCamera.reset();startCamera.reset();feedback.reset();
@@ -1574,6 +1595,7 @@ window.chimpionsSki=()=>{
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
     ...environment.getQualityDiagnostics?.(),
+    urbanEnvironment:urbanEnvironment.getDiagnostics?.()||null,
     ...quality.getDiagnostics(),
     cameraViewMode,
     cameraMotionMode,
@@ -1660,6 +1682,7 @@ window.chimpionsSki=()=>{
     pooledCourseObjects:pooledObjects
   };
 };
+window.chimpionsUrbanSports=window.chimpionsSki;
 
 
 if(import.meta.hot){
@@ -1671,11 +1694,13 @@ if(import.meta.hot){
     runtimeListeners.dispose();
     riderController.dispose();
     impactVfx.dispose?.();
+    urbanEnvironment.dispose?.();
     composer?.dispose?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();
     selector?.dispose?.();
     delete window.chimpionsSki;
+    delete window.chimpionsUrbanSports;
   });
 }

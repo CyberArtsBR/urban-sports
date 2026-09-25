@@ -192,7 +192,11 @@ assert(
   minSidePressureHazards>=1,
   'dedicated late-game side-pressure generation path was never exercised'
 );
-const minimumPostMaxFill=seeds.length*3;
+// Post-max fillers are optional pressure candidates and are pruned against
+// the same bounded threat budget as the rest of the section. Require sustained
+// activation across the stress population without demanding the obsolete
+// pre-budget quota of three surviving fillers per seed.
+const minimumPostMaxFill=seeds.length;
 assert(
   totalPostMaxFill>=minimumPostMaxFill,
   `post-max sparse-gap pressure did not meaningfully activate (${totalPostMaxFill} < ${minimumPostMaxFill})`

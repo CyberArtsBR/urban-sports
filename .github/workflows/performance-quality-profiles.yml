@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      BASE_SHA: 744819df9486208e52dc9d922ce5732ec7c131b8
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
       BENCH_ENV: "GAMEPLAY_SECONDS=30 LONG_RUN_SECONDS=60 MODE_RUN_SECONDS=15 TRICK_RUN_SECONDS=15 RESTART_ITERATIONS=2 SELECTOR_ITERATIONS=2 SAMPLE_INTERVAL_MS=500"
     steps:
       - uses: actions/checkout@v7
@@ -39,7 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p benchmark-artifacts
-          git worktree add --detach /tmp/chimpions-ski-base "$BASE_SHA"
+          BASE_REF="${BASE_SHA:-origin/main}"
+          git worktree add --detach /tmp/chimpions-ski-base "$BASE_REF"
           ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/chimpions-ski-base/node_modules
           (cd /tmp/chimpions-ski-base && npm run build)
 

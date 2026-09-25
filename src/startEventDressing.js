@@ -33,8 +33,9 @@ function roundedRect(ctx,x,y,w,h,r){
   ctx.closePath();
 }
 
-function createHeroBannerTexture(){
+function createHeroBannerTexture({mirror=false}={}){
   return canvasTexture(2048,512,(ctx,w,h)=>{
+    if(mirror){ctx.translate(w,0);ctx.scale(-1,1);}
     const bg=ctx.createLinearGradient(0,0,w,h);
     bg.addColorStop(0,'#05080e');
     bg.addColorStop(.44,'#0b1724');
@@ -755,6 +756,12 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
     toneMapped:false,
     fog:false
   });
+  const heroRearMaterial=new THREE.MeshBasicMaterial({
+    map:createHeroBannerTexture({mirror:true}),
+    side:THREE.DoubleSide,
+    toneMapped:false,
+    fog:false
+  });
   const leftPanelMaterial=new THREE.MeshBasicMaterial({
     map:createSidePanelTexture(-1),
     side:THREE.DoubleSide,
@@ -791,8 +798,11 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
     toneMapped:false,
     fog:false
   });
+  const startRoadTexture=createStartRoadTexture();
+  startRoadTexture.center.set(.5,.5);
+  startRoadTexture.rotation=Math.PI;
   const startRoadMaterial=new THREE.MeshStandardMaterial({
-    map:createStartRoadTexture(),
+    map:startRoadTexture,
     transparent:true,
     alphaTest:.08,
     roughness:.82,
@@ -850,7 +860,7 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
   addPlane(root,heroMaterial,[0,centerGround+4.48,EVENT_Z-.45],[8.46,1.22,1],{
     name:'start-event-hero-banner'
   });
-  addPlane(root,heroMaterial,[0,centerGround+4.48,EVENT_Z+.45],[8.46,1.22,1],{
+  addPlane(root,heroRearMaterial,[0,centerGround+4.48,EVENT_Z+.45],[8.46,1.22,1],{
     rotation:[0,Math.PI,0],
     name:'start-event-hero-banner-rear'
   });
@@ -864,7 +874,7 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
   addFloodFixtures(root,materials,centerGround,EVENT_Z);
   addStartMarking(root,terrainHeight,startRoadMaterial,EVENT_Z);
   addBarrierLines(root,materials,barrierBannerMaterial,terrainHeight);
-  const crowdCount=addCrowdSilhouettes(root,materials,terrainHeight);
+  const crowdCount=0; // Primitive spectator silhouettes intentionally removed for AAA presentation.
   addEventCases(root,materials,terrainHeight);
   addTripodCamera(root,materials,terrainHeight,-6.88,-1.32,-1);
   addTripodCamera(root,materials,terrainHeight,6.88,-1.32,1);
@@ -891,7 +901,7 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
   );
 
   const stats=Object.freeze({
-    design:'aaa-urban-start-event-v1',
+    design:'aaa-urban-start-event-v2-clean',
     dynamicLights:0,
     crowdInstances:crowdCount,
     trussSegments:trussSegments.length,

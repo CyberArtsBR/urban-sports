@@ -85,7 +85,15 @@ export function createUrbanRoadSurfaceDetails(options={}){
   group.userData.urbanComponent='road-details';
   group.userData.streaming=true;
   group.userData.boundedDecals=true;
-  group.add(repairs,cracks,skids,damp,puddles,drains,grime);
+  const meshes=[repairs,cracks,skids,damp,puddles,drains,grime];
+  group.add(...meshes);
+
+  function syncQualityAttachment(enabled){
+    for(const mesh of meshes){
+      if(enabled&&mesh.parent!==group)group.add(mesh);
+      else if(!enabled&&mesh.parent===group)group.remove(mesh);
+    }
+  }
 
   const entries=Array.from({length:capacity},(_,index)=>({
     z:recycleNear-index*(span/capacity),
@@ -125,6 +133,13 @@ export function createUrbanRoadSurfaceDetails(options={}){
     refresh();
   }
   function refresh(){
+    if(activeQuality==='low'){
+      syncQualityAttachment(false);
+      for(const mesh of meshes)finish(mesh,0);
+      group.userData.activeCounts={repairCount:0,crackCount:0,skidCount:0,dampCount:0,puddleCount:0,drainCount:0,grimeCount:0};
+      return;
+    }
+    syncQualityAttachment(true);
     const count=Math.max(5,Math.min(capacity,Math.round(capacity*density)));
     let repairCount=0,crackCount=0,skidCount=0,dampCount=0,puddleCount=0,drainCount=0,grimeCount=0;
     const maxDrains=Math.ceil(drains.instanceMatrix.count||capacity*.58);
@@ -261,11 +276,11 @@ export function createUrbanRoadSurfaceDetails(options={}){
   }
   function dispose(){
     group.removeFromParent();
-    for(const mesh of [repairs,cracks,skids,damp,puddles,drains,grime])mesh.removeFromParent();
+    for(const mesh of meshes)mesh.removeFromParent();
     plane.dispose();
     drainGeometry.dispose();
   }
 
   reset();
-  return {group,meshes:[repairs,cracks,skids,damp,puddles,drains,grime],update,reset,setDensity,getDiagnostics,dispose};
+  return {group,meshes,update,reset,setDensity,getDiagnostics,dispose};
 }

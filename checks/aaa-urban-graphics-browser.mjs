@@ -152,8 +152,15 @@ try{
     restartSamples.push({...afterRestart,t:Date.now(),restartCycle:cycle});
   }
 
-  const restartStability=analyzeGraphicsStability([samples.at(-1),...restartSamples].filter(Boolean));
-  assert(restartStability.ok,`repeated restarts show suspicious resource growth: ${JSON.stringify(restartStability.violations)}`);
+  const restartStability=analyzeGraphicsStability(
+    [samples.at(-1),...restartSamples].filter(Boolean),
+    // renderer.info.memory.geometries can legitimately rise while pre-existing
+    // count=0 InstancedMesh batches are first rendered on later procedural
+    // runs. Every restart still enforces the hard profile geometry ceiling;
+    // retained scene geometry/material/object growth remains a leak signal.
+    {ignoredMetrics:['rendererGeometries']}
+  );
+  assert(restartStability.ok,`repeated restarts show suspicious retained-resource growth: ${JSON.stringify(restartStability.violations)}`);
   const afterRestart=restartSamples.at(-1);
 
   assert.deepEqual(jsErrors,[],'Browser emitted JavaScript errors during Start → Chimpion → Skateboard → gameplay → restart');
@@ -168,12 +175,16 @@ try{
     stability,
     restartStability,
     restartGeometries:restartSamples.map(sample=>sample.rendererGeometries),
+    restartSceneGeometries:restartSamples.map(sample=>sample.sceneGeometryCount),
     restartTextures:restartSamples.map(sample=>sample.rendererTextures),
+    restartSceneTextures:restartSamples.map(sample=>sample.sceneTextureCount),
     final:{
       rendererCalls:afterRestart?.rendererCalls,
       rendererTriangles:afterRestart?.rendererTriangles,
       rendererGeometries:afterRestart?.rendererGeometries,
       rendererTextures:afterRestart?.rendererTextures,
+      sceneGeometryCount:afterRestart?.sceneGeometryCount,
+      sceneTextureCount:afterRestart?.sceneTextureCount,
       sceneObjectCount:afterRestart?.sceneObjectCount,
       instancedMeshCount:afterRestart?.instancedMeshCount,
       materialCount:afterRestart?.materialCount,

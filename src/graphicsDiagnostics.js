@@ -3,7 +3,7 @@ const PROFILE_NAMES=Object.freeze(['low','medium','auto','high']);
 const LOW=Object.freeze({
   rendererCalls:180,
   rendererTriangles:500000,
-  rendererGeometries:240,
+  rendererGeometries:256,
   rendererTextures:96,
   sceneObjectCount:900,
   instancedMeshCount:96,

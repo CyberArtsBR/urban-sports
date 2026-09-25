@@ -6,7 +6,9 @@ import {createCollisionBroadphase} from '../src/collisionBroadphase.js';
 
 const required=[
   'profile','dprCap','snowSurfaceDetailDensity','environmentDecorationDensity',
-  'distantSceneryDetail','distantSceneryUpdateHz'
+  'distantSceneryDetail','distantSceneryUpdateHz','shadowQuality','shadowMapSize',
+  'shadowDistance','contactAO','aoKernelRadius','roadDetailDensity',
+  'roadTextureAnisotropy','facadeDetail','weatherDetail','maxExtras'
 ];
 
 assert.deepEqual([...QUALITY_PROFILE_NAMES],['auto','high','max','medium','low'],'quality values changed unexpectedly');
@@ -21,7 +23,14 @@ for(const name of ['high','max','medium','low']){
 }
 assert(QUALITY_PROFILES.low.dprCap<QUALITY_PROFILES.medium.dprCap);
 assert(QUALITY_PROFILES.medium.dprCap<QUALITY_PROFILES.high.dprCap);
-assert(QUALITY_PROFILES.high.dprCap<QUALITY_PROFILES.max.dprCap,'MAX should only extend premium DPR headroom');
+assert(QUALITY_PROFILES.high.dprCap<QUALITY_PROFILES.max.dprCap,'MAX must extend premium DPR headroom');
+assert(QUALITY_PROFILES.max.shadowMapSize>QUALITY_PROFILES.high.shadowMapSize,'MAX needs a higher-resolution shadow tier');
+assert(QUALITY_PROFILES.max.shadowDistance>QUALITY_PROFILES.high.shadowDistance,'MAX needs a longer high-detail shadow range');
+assert.equal(QUALITY_PROFILES.max.contactAO,true,'MAX must enable contact AO');
+assert.equal(QUALITY_PROFILES.high.contactAO,false,'HIGH must avoid the MAX AO render cost');
+assert(QUALITY_PROFILES.max.roadDetailDensity>QUALITY_PROFILES.high.roadDetailDensity,'MAX must increase bounded road-detail density');
+assert(QUALITY_PROFILES.max.roadTextureAnisotropy>QUALITY_PROFILES.high.roadTextureAnisotropy,'MAX must improve oblique road texture filtering');
+assert.equal(QUALITY_PROFILES.max.maxExtras,true,'MAX must expose dedicated premium rendering features');
 assert(QUALITY_PROFILES.low.environmentDecorationDensity<QUALITY_PROFILES.high.environmentDecorationDensity);
 assert.equal(resolveQualityProfile('reduced'),'medium','legacy reduced profile must map to medium');
 assert.equal(resolveQualityProfile('bogus'),'auto');

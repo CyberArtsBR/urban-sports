@@ -7,7 +7,36 @@ const HIGH=Object.freeze({
   snowSurfaceDetailDensity:1,
   environmentDecorationDensity:1,
   distantSceneryDetail:1,
-  distantSceneryUpdateHz:0
+  distantSceneryUpdateHz:0,
+  shadowQuality:'high',
+  shadowMapSize:1024,
+  shadowDistance:58,
+  contactAO:false,
+  aoKernelRadius:0,
+  roadDetailDensity:.72,
+  roadTextureAnisotropy:8,
+  facadeDetail:.82,
+  weatherDetail:.82,
+  maxExtras:false
+});
+
+const MAX=Object.freeze({
+  profile:'max',
+  dprCap:2.0,
+  snowSurfaceDetailDensity:1,
+  environmentDecorationDensity:1,
+  distantSceneryDetail:1,
+  distantSceneryUpdateHz:0,
+  shadowQuality:'max',
+  shadowMapSize:2048,
+  shadowDistance:88,
+  contactAO:true,
+  aoKernelRadius:18,
+  roadDetailDensity:1,
+  roadTextureAnisotropy:16,
+  facadeDetail:1,
+  weatherDetail:1,
+  maxExtras:true
 });
 
 const MEDIUM=Object.freeze({
@@ -16,7 +45,17 @@ const MEDIUM=Object.freeze({
   snowSurfaceDetailDensity:.72,
   environmentDecorationDensity:.72,
   distantSceneryDetail:.74,
-  distantSceneryUpdateHz:30
+  distantSceneryUpdateHz:30,
+  shadowQuality:'contact',
+  shadowMapSize:0,
+  shadowDistance:0,
+  contactAO:false,
+  aoKernelRadius:0,
+  roadDetailDensity:.40,
+  roadTextureAnisotropy:4,
+  facadeDetail:.62,
+  weatherDetail:.60,
+  maxExtras:false
 });
 
 const LOW=Object.freeze({
@@ -25,12 +64,22 @@ const LOW=Object.freeze({
   snowSurfaceDetailDensity:.48,
   environmentDecorationDensity:.48,
   distantSceneryDetail:.52,
-  distantSceneryUpdateHz:18
+  distantSceneryUpdateHz:18,
+  shadowQuality:'contact',
+  shadowMapSize:0,
+  shadowDistance:0,
+  contactAO:false,
+  aoKernelRadius:0,
+  roadDetailDensity:.20,
+  roadTextureAnisotropy:2,
+  facadeDetail:.42,
+  weatherDetail:.38,
+  maxExtras:false
 });
 
 export const QUALITY_PROFILES=Object.freeze({
   high:HIGH,
-  max:Object.freeze({...HIGH,profile:'max',dprCap:2}),
+  max:MAX,
   medium:MEDIUM,
   low:LOW
 });

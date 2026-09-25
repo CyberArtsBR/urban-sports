@@ -20,6 +20,8 @@ function add(name,material){
 }
 
 const asphalt=add('urban-asphalt',new THREE.MeshPhysicalMaterial({color:0x41454b,roughness:.94,metalness:.02}));
+const roadDamp=add('urban-road-damp-patches',new THREE.MeshPhysicalMaterial({color:0x252a2d,roughness:.72,clearcoat:.06,transparent:true,opacity:0}));
+const roadPuddle=add('urban-road-puddles',new THREE.MeshPhysicalMaterial({color:0x1d2529,roughness:.24,clearcoat:.44,transparent:true,opacity:0}));
 const sidewalk=add('urban-sidewalks',new THREE.MeshStandardMaterial({color:0xa8aaab,roughness:.92}));
 add('urban-curbs',new THREE.MeshStandardMaterial({color:0xc8c8c3,roughness:.88}));
 const building=add('urban-buildings',new THREE.MeshStandardMaterial({color:0x59616b,roughness:.84}));
@@ -56,7 +58,11 @@ assert(scene.fog.far>scene.fog.near*3,'urban fog lacks near/mid/far separation')
 assert(renderer.toneMappingExposure>=.98&&renderer.toneMappingExposure<=1.08,'urban exposure should stay restrained');
 assert(asphalt.envMapIntensity>.20&&asphalt.envMapIntensity<.50,'wet asphalt environment response is outside matte-road range');
 assert.equal(asphalt.metalness,0,'wet asphalt must never become metallic');
-assert(asphalt.roughness>=.86,'wet asphalt became too glossy');
+assert.equal(asphalt.clearcoat,0,'global asphalt must never gain clearcoat during rain');
+assert(asphalt.roughness>=.90,'wet asphalt substrate became too glossy');
+assert(roadDamp.opacity>0,'rain should expose localized damp patches');
+assert(roadPuddle.opacity>0,'rain should expose localized puddles');
+assert(roadPuddle.clearcoat>roadDamp.clearcoat,'puddles should carry the localized reflection response');
 assert(windows.emissiveIntensity>1.5&&windows.emissiveIntensity<2.5,'night windows are outside selective bloom range');
 assert(lamp.emissiveIntensity>1.7&&lamp.emissiveIntensity<2.8,'street lamps are outside selective bloom range');
 assert(lamp.emissive.r>lamp.emissive.g&&lamp.emissive.g>lamp.emissive.b,'street lamp emissive lost warm color identity');
@@ -80,7 +86,12 @@ assert(shared.asphalt.bumpScale>0&&shared.asphalt.bumpScale<.05,'asphalt bump sc
 assert(shared.streetlightPool?.transparent===true,'streetlight pool material is missing');
 assert.equal(shared.streetlightPool.blending,THREE.NormalBlending,'streetlight pools must not use additive whiteout blending');
 assert.equal(shared.lamp.toneMapped,true,'lamp must be tone mapped so bloom retains color');
-assert.equal(shared.windows.toneMapped,true,'window emissive must be tone mapped so bloom retains color');
+assert.equal(shared.windows.toneMapped,true,'window emission must be tone mapped so bloom retains color');
+assert.equal(shared.windows.isMeshBasicMaterial,true,'instanced windows should emit their per-instance warm/cool hue directly');
+assert.equal(shared.buildingLed.isMeshBasicMaterial,true,'building LEDs should emit their per-instance saturated hue directly');
+assert.equal(shared.asphalt.clearcoat,0,'shared dry asphalt baseline must stay free of universal clearcoat');
+assert(shared.asphalt.roughness>=.94,'shared dry asphalt baseline is not matte enough');
+assert(shared.getDiagnostics().asphaltTextureSize>=1024,'AAA asphalt source detail regressed below 1K procedural source density');
 shared.dispose();
 
 console.log(JSON.stringify({

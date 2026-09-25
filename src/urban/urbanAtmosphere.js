@@ -66,6 +66,8 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
   const root=scene.getObjectByName('UrbanEnvironment');
   const materials={
     asphalt:materialFor(root,'urban-asphalt'),
+    roadDamp:materialFor(root,'urban-road-damp-patches'),
+    roadPuddle:materialFor(root,'urban-road-puddles'),
     sidewalk:materialFor(root,'urban-sidewalks'),
     curb:materialFor(root,'urban-curbs'),
     building:materialFor(root,['urban-buildings','urban-building-slab','urban-building-tower','urban-building-stepped','urban-building-warehouse']),
@@ -123,9 +125,26 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
     if(materials.asphalt){
       _roadColor.copy(DAY_ROAD).lerp(NIGHT_ROAD,night).lerp(WET_ROAD,wet*.26);
       setStandardColor(materials.asphalt,_roadColor);
-      materials.asphalt.roughness=.96-wet*.08;
+      // Dry asphalt stays mineral and matte. Rain only nudges the substrate;
+      // reflective response is owned by the localized damp/puddle overlays.
+      materials.asphalt.roughness=.95-wet*.035;
       materials.asphalt.metalness=0;
-      materials.asphalt.envMapIntensity=.10+wet*.24+night*.04;
+      if('clearcoat' in materials.asphalt)materials.asphalt.clearcoat=0;
+      if('clearcoatRoughness' in materials.asphalt)materials.asphalt.clearcoatRoughness=1;
+      materials.asphalt.envMapIntensity=.12+wet*.12+night*.03;
+    }
+    if(materials.roadDamp){
+      materials.roadDamp.opacity=wet*(.12+night*.07)*qualityFactors.pools;
+      materials.roadDamp.roughness=.76-wet*.08;
+      materials.roadDamp.envMapIntensity=.26+wet*.18+night*.05;
+      if('clearcoat' in materials.roadDamp)materials.roadDamp.clearcoat=.04+wet*.05;
+    }
+    if(materials.roadPuddle){
+      materials.roadPuddle.opacity=wet*wet*(.24+night*.12)*qualityFactors.pools;
+      materials.roadPuddle.roughness=.28-wet*.06;
+      materials.roadPuddle.envMapIntensity=.58+wet*.20+night*.08;
+      if('clearcoat' in materials.roadPuddle)materials.roadPuddle.clearcoat=.34+wet*.12;
+      if('clearcoatRoughness' in materials.roadPuddle)materials.roadPuddle.clearcoatRoughness=.18-wet*.04;
     }
     if(materials.sidewalk){
       _sidewalkColor.copy(DAY_SIDEWALK).lerp(NIGHT_SIDEWALK,night*.88);
@@ -142,16 +161,27 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
       materials.building.envMapIntensity=.18+wet*.18;
     }
     if(materials.windows){
-      setStandardColor(materials.windows,WINDOW_COLOR);
-      if(materials.windows.emissive)materials.windows.emissive.copy(WINDOW_EMISSIVE);
-      if('emissiveIntensity' in materials.windows){
-        materials.windows.emissiveIntensity=(.12+night*1.52+wet*.34)*qualityFactors.emissive;
+      const energy=(.34+night*1.42+wet*.18)*qualityFactors.emissive;
+      if(materials.windows.isMeshBasicMaterial){
+        // Instance colors carry warm/cool interior hue. Keep the shared energy
+        // neutral so HDR bloom never bleaches every facade to the same blue.
+        materials.windows.color.setRGB(energy,energy,energy);
+      }else{
+        setStandardColor(materials.windows,WINDOW_COLOR);
+        if(materials.windows.emissive)materials.windows.emissive.copy(WINDOW_EMISSIVE);
+        if('emissiveIntensity' in materials.windows)materials.windows.emissiveIntensity=energy;
       }
-      if('opacity' in materials.windows)materials.windows.opacity=.64+night*.22;
+      if('opacity' in materials.windows)materials.windows.opacity=.58+night*.28;
     }
     if(materials.buildingLed){
-      if(materials.buildingLed.emissive)materials.buildingLed.emissive.copy(BUILDING_LED_EMISSIVE);
-      materials.buildingLed.emissiveIntensity=(.28+night*1.12+wet*.10)*qualityFactors.emissive;
+      const ledEnergy=(.46+night*1.44+wet*.10)*qualityFactors.emissive;
+      if(materials.buildingLed.isMeshBasicMaterial){
+        // Per-instance cyan/magenta/amber colors remain the emitted color.
+        materials.buildingLed.color.setRGB(ledEnergy,ledEnergy,ledEnergy);
+      }else{
+        if(materials.buildingLed.emissive)materials.buildingLed.emissive.copy(BUILDING_LED_EMISSIVE);
+        if('emissiveIntensity' in materials.buildingLed)materials.buildingLed.emissiveIntensity=ledEnergy;
+      }
     }
     if(materials.lamp){
       setStandardColor(materials.lamp,LAMP_COLOR);
@@ -192,7 +222,13 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
       fakeStreetlightPools:!!materials.pool,
       linearFog:!!scene.fog?.isFog,
       fogNear:scene.fog?.near??null,
-      fogFar:scene.fog?.far??null
+      fogFar:scene.fog?.far??null,
+      wetRoadMode:'localized-overlays',
+      asphaltGlobalClearcoat:Number(materials.asphalt?.clearcoat??0),
+      asphaltRoughness:Number(materials.asphalt?.roughness??0),
+      dampOverlayOpacity:Number(materials.roadDamp?.opacity??0),
+      puddleOverlayOpacity:Number(materials.roadPuddle?.opacity??0),
+      huePreservingFacadeEmission:!!(materials.windows?.isMeshBasicMaterial&&materials.buildingLed?.isMeshBasicMaterial)
     };
   }
 

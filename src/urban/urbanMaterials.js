@@ -1,17 +1,30 @@
 import * as THREE from 'three';
 
-function textureAnisotropy(renderer){
+const ASPHALT_TEXTURE_SIZE=1024;
+const ANISOTROPY_TARGET=Object.freeze({max:16,high:8,medium:4,low:2});
+let asphaltSourceCache=null;
+
+function qualityName(value='high'){
+  const name=String(value?.profile??value??'high').toLowerCase();
+  return Object.hasOwn(ANISOTROPY_TARGET,name)?name:'high';
+}
+function maxAnisotropy(renderer){
   const getMax=renderer?.capabilities?.getMaxAnisotropy;
   if(typeof getMax!=='function')return 1;
-  return Math.max(1,Math.min(4,getMax.call(renderer.capabilities)||1));
+  return Math.max(1,getMax.call(renderer.capabilities)||1);
+}
+function textureAnisotropy(renderer,quality='high'){
+  const explicit=Number(quality?.roadTextureAnisotropy);
+  const target=Number.isFinite(explicit)&&explicit>0?explicit:ANISOTROPY_TARGET[qualityName(quality)];
+  return Math.max(1,Math.min(target,maxAnisotropy(renderer)));
 }
 
-function configureRoadTexture(texture,renderer){
+function configureRoadTexture(texture,renderer,quality='high'){
   texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
-  texture.repeat.set(2.5,7);
+  texture.repeat.set(4,8);
   texture.magFilter=THREE.LinearFilter;
   texture.minFilter=THREE.LinearMipmapLinearFilter;
-  texture.anisotropy=textureAnisotropy(renderer);
+  texture.anisotropy=textureAnisotropy(renderer,quality);
   texture.needsUpdate=true;
   return texture;
 }
@@ -34,46 +47,79 @@ function periodicNoise(x,y,cell,size,seed){
   const d=hash2(wrap(ix+1),wrap(iy+1),seed);
   return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a,b,tx),THREE.MathUtils.lerp(c,d,tx),ty);
 }
+function lanePolish(x,size){
+  const u=x/size;
+  const centers=[.22,.38,.62,.78];
+  let strength=0;
+  for(const center of centers){
+    const distance=Math.abs(u-center);
+    strength=Math.max(strength,Math.max(0,1-distance/.035));
+  }
+  return strength;
+}
 
-function makeAsphaltTextures(renderer){
-  const size=256;
+function createAsphaltSource(size=ASPHALT_TEXTURE_SIZE){
   const colorData=new Uint8Array(size*size*4);
   const roughnessData=new Uint8Array(size*size*4);
   const bumpData=new Uint8Array(size*size*4);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4;
-    const broad=periodicNoise(x,y,48,size,17);
-    const medium=periodicNoise(x,y,17,size,29);
-    const aggregate=periodicNoise(x,y,5,size,43);
-    const micro=periodicNoise(x,y,2,size,71);
-    const patch=periodicNoise(x,y,72,size,97);
-    const crackNoise=periodicNoise(x,y,23,size,113);
-    const crack=Math.abs(crackNoise-.5)<.018&&medium>.56 ? 1 : 0;
-    const pebble=(aggregate>.78?1:0)+(micro>.88?1:0);
-    const base=65+(broad-.5)*13+(medium-.5)*9+(aggregate-.5)*6-pebble*3-crack*15+(patch>.72?4:0);
-    const value=Math.max(38,Math.min(94,Math.round(base)));
+    const broad=periodicNoise(x,y,192,size,17);
+    const medium=periodicNoise(x,y,67,size,29);
+    const aggregate=periodicNoise(x,y,13,size,43);
+    const micro=periodicNoise(x,y,4,size,71);
+    const patchNoise=periodicNoise(x,y,257,size,97);
+    const crackNoise=periodicNoise(x,y,49,size,113);
+    const lane=lanePolish(x,size);
+    const crack=(Math.abs(crackNoise-.5)<.010&&medium>.54)?1:0;
+    const hairline=(Math.abs(periodicNoise(x,y,23,size,191)-.5)<.006&&aggregate>.57)?1:0;
+    const repaired=patchNoise>.72&&medium>.49;
+    const repairSeam=repaired&&(x%173<3||y%211<3);
+    const aggregatePebble=(aggregate>.80?1:0)+(micro>.90?1:0);
+    const contamination=(hash2(x>>3,y>>3,239)>.986)?1:0;
+
+    let base=62+(broad-.5)*15+(medium-.5)*10+(aggregate-.5)*7+(micro-.5)*4;
+    base-=aggregatePebble*3+crack*17+hairline*8;
+    if(repaired)base-=5;
+    if(repairSeam)base-=10;
+    base+=lane*2-contamination*5;
+    const value=Math.max(31,Math.min(98,Math.round(base)));
     colorData[i]=Math.max(0,value-2);
     colorData[i+1]=value;
     colorData[i+2]=Math.min(255,value+2);
     colorData[i+3]=255;
-    const rough=Math.max(205,Math.min(250,Math.round(
-      236+(aggregate-.5)*18+(micro-.5)*10-(patch>.76?12:0)+crack*7
-    )));
+
+    let rough=238+(aggregate-.5)*16+(micro-.5)*10-crack*4-hairline*2;
+    rough-=lane*18;
+    if(repaired)rough-=7;
+    if(contamination)rough-=12;
+    rough=Math.max(196,Math.min(252,Math.round(rough)));
     roughnessData[i]=roughnessData[i+1]=roughnessData[i+2]=rough;
     roughnessData[i+3]=255;
-    const height=Math.max(58,Math.min(198,Math.round(
-      126+(aggregate-.5)*46+(micro-.5)*24-crack*54
-    )));
+
+    let height=127+(aggregate-.5)*46+(micro-.5)*29-crack*62-hairline*35;
+    if(repairSeam)height-=36;
+    height=Math.max(46,Math.min(210,Math.round(height)));
     bumpData[i]=bumpData[i+1]=bumpData[i+2]=height;
     bumpData[i+3]=255;
   }
-  const map=configureRoadTexture(new THREE.DataTexture(colorData,size,size,THREE.RGBAFormat),renderer);
-  map.repeat.set(4,8);
-  map.colorSpace=THREE.SRGBColorSpace;
-  const roughnessMap=configureRoadTexture(new THREE.DataTexture(roughnessData,size,size,THREE.RGBAFormat),renderer);
-  roughnessMap.repeat.copy(map.repeat);
-  const bumpMap=configureRoadTexture(new THREE.DataTexture(bumpData,size,size,THREE.RGBAFormat),renderer);
-  bumpMap.repeat.copy(map.repeat);
+  return {colorData,roughnessData,bumpData,size};
+}
+function asphaltSource(){
+  asphaltSourceCache??=createAsphaltSource();
+  return asphaltSourceCache;
+}
+function makeDataTexture(data,size,renderer,quality,{srgb=false}={}){
+  const texture=configureRoadTexture(new THREE.DataTexture(data,size,size,THREE.RGBAFormat),renderer,quality);
+  if(srgb)texture.colorSpace=THREE.SRGBColorSpace;
+  texture.userData.proceduralRoadDetail='2k-class-tiled-density';
+  return texture;
+}
+function makeAsphaltTextures(renderer,quality){
+  const source=asphaltSource();
+  const map=makeDataTexture(source.colorData,source.size,renderer,quality,{srgb:true});
+  const roughnessMap=makeDataTexture(source.roughnessData,source.size,renderer,quality);
+  const bumpMap=makeDataTexture(source.bumpData,source.size,renderer,quality);
   return {map,roughnessMap,bumpMap};
 }
 
@@ -96,14 +142,14 @@ function makeLightPoolTexture(){
   return texture;
 }
 
-function makeSidewalkTexture(renderer){
-  const size=64;
+function makeSidewalkTexture(renderer,quality){
+  const size=128;
   const data=new Uint8Array(size*size*4);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4;
-    const seam=(x%16<2||y%16<2)?-17:0;
-    const grain=((x*7+y*11+x*y)%13)-6;
-    const value=Math.max(86,Math.min(154,128+seam+grain));
+    const seam=(x%32<2||y%32<2)?-17:0;
+    const grain=((x*7+y*11+x*y)%17)-8;
+    const value=Math.max(82,Math.min(158,128+seam+grain));
     data[i]=value;
     data[i+1]=value;
     data[i+2]=value+2;
@@ -114,22 +160,49 @@ function makeSidewalkTexture(renderer){
   texture.repeat.set(2,4);
   texture.magFilter=THREE.LinearFilter;
   texture.minFilter=THREE.LinearMipmapLinearFilter;
-  texture.anisotropy=textureAnisotropy(renderer);
+  texture.anisotropy=textureAnisotropy(renderer,quality);
   texture.colorSpace=THREE.SRGBColorSpace;
   texture.needsUpdate=true;
   return texture;
 }
 
-export function createUrbanMaterials({renderer=null}={}){
-  const {map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap}=makeAsphaltTextures(renderer);
-  const sidewalkMap=makeSidewalkTexture(renderer);
+export function createUrbanMaterials({renderer=null,quality='high'}={}){
+  const {map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap}=makeAsphaltTextures(renderer,quality);
+  const sidewalkMap=makeSidewalkTexture(renderer,quality);
   const lightPoolMap=makeLightPoolTexture();
 
   const materials={
     asphalt:new THREE.MeshPhysicalMaterial({
-      color:0xd2d4d5,map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap,
-      roughness:.96,metalness:0,bumpScale:.032,
-      clearcoat:0,clearcoatRoughness:1,envMapIntensity:.10
+      color:0xb9bdc0,map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap,
+      roughness:.95,metalness:0,bumpScale:.034,
+      clearcoat:0,clearcoatRoughness:1,envMapIntensity:.12
+    }),
+    roadRepair:new THREE.MeshStandardMaterial({
+      color:0x35393b,roughness:.90,metalness:0,transparent:true,opacity:.78,depthWrite:false,
+      polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2
+    }),
+    roadCrack:new THREE.MeshBasicMaterial({
+      color:0x151719,transparent:true,opacity:.68,depthWrite:false,toneMapped:true,
+      polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3
+    }),
+    roadSkid:new THREE.MeshStandardMaterial({
+      color:0x17191a,roughness:.72,metalness:0,transparent:true,opacity:.42,depthWrite:false,
+      polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3
+    }),
+    roadDamp:new THREE.MeshPhysicalMaterial({
+      color:0x252a2d,roughness:.72,metalness:0,clearcoat:.06,clearcoatRoughness:.46,
+      envMapIntensity:.30,transparent:true,opacity:0,depthWrite:false,
+      polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4
+    }),
+    roadPuddle:new THREE.MeshPhysicalMaterial({
+      color:0x1d2529,roughness:.24,metalness:0,clearcoat:.44,clearcoatRoughness:.16,
+      envMapIntensity:.70,transparent:true,opacity:0,depthWrite:false,
+      polygonOffset:true,polygonOffsetFactor:-5,polygonOffsetUnits:-5
+    }),
+    roadDrain:new THREE.MeshStandardMaterial({color:0x23272b,roughness:.62,metalness:.72}),
+    roadGrime:new THREE.MeshStandardMaterial({
+      color:0x403a33,roughness:.96,metalness:0,transparent:true,opacity:.34,depthWrite:false,
+      polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2
     }),
     sidewalk:new THREE.MeshStandardMaterial({
       color:0xa8aaab,map:sidewalkMap,roughness:.92,metalness:0
@@ -151,14 +224,12 @@ export function createUrbanMaterials({renderer=null}={}){
       color:0xffffff,roughness:.80,metalness:.05,vertexColors:true
     }),
     rooftop:new THREE.MeshStandardMaterial({color:0x333b45,roughness:.78,metalness:.12}),
-    windows:new THREE.MeshStandardMaterial({
-      color:0xffffff,roughness:.20,metalness:.10,
-      emissive:0x67b9ff,emissiveIntensity:.62,
-      transparent:true,opacity:.88,depthWrite:false,toneMapped:true,vertexColors:true
+    windows:new THREE.MeshBasicMaterial({
+      color:new THREE.Color(1.10,1.10,1.10),
+      transparent:true,opacity:.72,depthWrite:false,toneMapped:true,vertexColors:true
     }),
-    buildingLed:new THREE.MeshStandardMaterial({
-      color:0x9ce9ff,roughness:.24,metalness:.05,
-      emissive:0x2faeff,emissiveIntensity:.55,
+    buildingLed:new THREE.MeshBasicMaterial({
+      color:new THREE.Color(1.55,1.55,1.55),
       toneMapped:true,vertexColors:true
     }),
     cone:new THREE.MeshStandardMaterial({color:0xff6a16,roughness:.48,metalness:0}),
@@ -183,10 +254,32 @@ export function createUrbanMaterials({renderer=null}={}){
   };
 
   const textures=[asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap,lightPoolMap];
+  let activeQuality=qualityName(quality);
+  function setQuality(next=activeQuality){
+    activeQuality=qualityName(next);
+    const anisotropy=textureAnisotropy(renderer,next);
+    for(const texture of [asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap]){
+      texture.anisotropy=anisotropy;
+      texture.needsUpdate=true;
+    }
+    materials.asphalt.bumpScale=activeQuality==='max'?.040:activeQuality==='high'?.034:activeQuality==='medium'?.028:.022;
+    return {profile:activeQuality,anisotropy,asphaltTextureSize:ASPHALT_TEXTURE_SIZE};
+  }
+  function getDiagnostics(){
+    return {
+      profile:activeQuality,
+      asphaltTextureSize:ASPHALT_TEXTURE_SIZE,
+      effectiveDetailClass:'2k-4k-equivalent tiled procedural microdetail',
+      anisotropy:asphaltMap.anisotropy,
+      localizedWetMaterials:true,
+      dryAsphalt:{roughness:materials.asphalt.roughness,clearcoat:materials.asphalt.clearcoat,metalness:materials.asphalt.metalness}
+    };
+  }
   function dispose(){
     for(const material of Object.values(materials))material.dispose();
     for(const texture of textures)texture.dispose();
   }
 
-  return {...materials,textures,dispose};
+  setQuality(quality);
+  return {...materials,textures,setQuality,getDiagnostics,dispose};
 }

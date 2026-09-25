@@ -17,7 +17,8 @@ export function createRiderController({visualRoot,disposeRider=null}={}){
   }
 
   function updatePose(frame){
-    rider?.userData?.updateSkiPose?.(frame);
+    const update=rider?.userData?.updateRidePose||rider?.userData?.updateSkiPose;
+    update?.(frame);
   }
 
   function snapshot(){
@@ -29,7 +30,10 @@ export function createRiderController({visualRoot,disposeRider=null}={}){
       skierFallback:!!rider?.userData?.fallback,
       rigReady:!!rider?.userData?.rigReady,
       localAvatarComplexity:rider?.userData?.localAvatarComplexity||null,
-      modelForwardAxis:rider?.userData?.modelForwardAxis||'procedural'
+      modelForwardAxis:rider?.userData?.modelForwardAxis||'procedural',
+      animationState:rider?.userData?.animationState||'unknown',
+      animationHooks:rider?.userData?.skateAnimationHooks||null,
+      footPlacementMode:rider?.userData?.skateAnimator?.footPlacementMode||'legacy'
     };
   }
 

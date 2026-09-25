@@ -333,6 +333,7 @@ try{
     const touchSkiChoice=touchSelector.locator('.ride-mode-card[data-ride-mode="ski"]');
     await touchSkiChoice.waitFor({state:'visible',timeout:5000});
     await touchSkiChoice.evaluate(button=>button.click());
+    await touchPage.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
     const touchTutorial=touchPage.locator('.session-tutorial:not([hidden])');
     if(await touchTutorial.isVisible().catch(()=>false)){
       await touchPage.keyboard.press('Enter');

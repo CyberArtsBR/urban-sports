@@ -101,12 +101,11 @@ export function createTrickSystem({visualTarget=null}={}){
     if(!visualPivot?.quaternion||!isActive())return;
     let axis=null;
     if(snapshot.type===TRICK_TYPE.BACKFLIP)axis=axisX;
-    else if(FLIP_TRICKS.has(snapshot.type))axis=new THREE.Vector3(0,0,1);
-    else if(snapshot.type===TRICK_TYPE.SPIN_360||snapshot.type===TRICK_TYPE.SPIN_180||SHOVE_TRICKS.has(snapshot.type))axis=axisY;
+    else if(snapshot.type===TRICK_TYPE.SPIN_360||snapshot.type===TRICK_TYPE.SPIN_180)axis=axisY;
+    // Street board tricks are animated on the skateboard equipment motion root,
+    // not by rotating the full rider/collision visual pivot.
     if(!axis)return;
-    // Positive X remains the backward somersault direction for BACKFLIP.
-    const reverse=snapshot.type===TRICK_TYPE.HEELFLIP||snapshot.type===TRICK_TYPE.FRONTSIDE_SHOVE_IT;
-    const angle=snapshot.rotation*(reverse?-1:1);
+    const angle=snapshot.rotation;
     trickQuaternion.setFromAxisAngle(axis,angle);
     visualPivot.quaternion.copy(baseQuaternion).multiply(trickQuaternion);
   }

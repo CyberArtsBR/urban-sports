@@ -916,10 +916,72 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
     root.visible=root.position.z<28;
   }
 
+  function getDiagnostics(){
+    let objects=0;
+    let meshes=0;
+    let instancedMeshes=0;
+    let triangles=0;
+    const geometrySet=new Set();
+    const materialSet=new Set();
+    const textureSet=new Set();
+    root.traverse(object=>{
+      objects++;
+      if(object.isMesh){
+        meshes++;
+        if(object.isInstancedMesh)instancedMeshes++;
+        const geometry=object.geometry;
+        if(geometry){
+          geometrySet.add(geometry);
+          const positionCount=geometry.attributes?.position?.count||0;
+          const indexCount=geometry.index?.count||0;
+          const primitiveTriangles=indexCount?indexCount/3:positionCount/3;
+          triangles+=primitiveTriangles*Math.max(1,object.isInstancedMesh?object.count||0:1);
+        }
+        for(const material of (Array.isArray(object.material)?object.material:[object.material])){
+          if(!material?.isMaterial)continue;
+          materialSet.add(material);
+          for(const value of Object.values(material))if(value?.isTexture)textureSet.add(value);
+        }
+      }
+    });
+    return {
+      ...stats,
+      objects,
+      meshes,
+      instancedMeshes,
+      geometries:geometrySet.size,
+      materials:materialSet.size,
+      textures:textureSet.size,
+      triangles:Math.round(triangles)
+    };
+  }
+
+  function dispose(){
+    const sharedGeometries=new Set([UNIT_BOX,UNIT_PLANE,UNIT_CYLINDER,CROWD_HEAD_GEOMETRY]);
+    const geometries=new Set();
+    const materialSet=new Set();
+    const textures=new Set();
+    root.traverse(object=>{
+      if(object.geometry&&!sharedGeometries.has(object.geometry))geometries.add(object.geometry);
+      for(const material of (Array.isArray(object.material)?object.material:[object.material])){
+        if(!material?.isMaterial)continue;
+        materialSet.add(material);
+        for(const value of Object.values(material))if(value?.isTexture)textures.add(value);
+      }
+    });
+    root.removeFromParent();
+    root.clear();
+    for(const geometry of geometries)geometry.dispose?.();
+    for(const texture of textures)texture.dispose?.();
+    for(const material of materialSet)material.dispose?.();
+  }
+
   return {
     root,
     reset,
     update,
+    getDiagnostics,
+    dispose,
     get visible(){return root.visible;},
     get stats(){return stats;}
   };

@@ -385,7 +385,7 @@ export async function createNetworkTracker(context,page){
 export async function runtimeSnapshot(page,label){
   return page.evaluate(currentLabel=>{
     let diagnostics=null;
-    try{diagnostics=typeof window.chimpionsSki==='function'?window.chimpionsSki():null;}catch{}
+    try{diagnostics=window.chimpionsUrbanSports?.()??window.chimpionsSki?.()??null;}catch{}
     const memory=performance.memory?{
       usedJSHeapSize:performance.memory.usedJSHeapSize,
       totalJSHeapSize:performance.memory.totalJSHeapSize,
@@ -402,13 +402,13 @@ export async function runtimeSnapshot(page,label){
 }
 export async function readDiagnostics(page){
   return page.evaluate(()=>{
-    try{return typeof window.chimpionsSki==='function'?window.chimpionsSki():null;}catch{return null;}
+    try{return window.chimpionsUrbanSports?.()??window.chimpionsSki?.()??null;}catch{return null;}
   });
 }
 export async function sampleRuntime(page){
   return page.evaluate(()=>{
     let d=null;
-    try{d=typeof window.chimpionsSki==='function'?window.chimpionsSki():null;}catch{}
+    try{d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.()??null;}catch{}
     const futureCounters={};
     if(d&&typeof d==='object'){
       for(const [key,value] of Object.entries(d)){
@@ -497,5 +497,8 @@ export async function sampleRuntime(page){
 }
 
 export async function waitUntilReady(page){
-  await page.waitForFunction(()=>typeof window.chimpionsSki==='function'&&window.chimpionsSki()?.ready===true,undefined,{timeout:CONFIG.readyTimeoutMs});
+  await page.waitForFunction(()=>{
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return d?.ready===true;
+  },undefined,{timeout:CONFIG.readyTimeoutMs});
 }

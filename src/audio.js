@@ -1,6 +1,7 @@
 import {SKI_TUNING} from './gameplayTuning.js';
 import {DEFAULT_RIDE_MODE,getRideAudioProfile,getRideSpeedFeel,normalizeRideMode} from './rideAudioProfile.js';
 import {createTrickAudioState,getTrickFailProfile,getTrickStartProfile,getTrickSuccessProfile} from './trickAudio.js';
+import {getSkateContinuousMix,getSkateEventCue,normalizeSkateQualityProfile,normalizeSkateSurface} from './skateAudioProfile.js';
 import {calculateCarveFeedback} from './gameFeelFeedback.js';
 
 const clamp=(value,min=0,max=1)=>Math.max(min,Math.min(max,value));
@@ -20,6 +21,18 @@ export function createSkiAudio(){
   let lastGoVoiceAt=-Infinity;
   let lastBananaAt=-Infinity;
   let bananaChain=0;
+  const activeTransientSources=new Set();
+  const MAX_TRANSIENT_SOURCES=24;
+  let eventDuckUntil=-Infinity;
+  let skateSurface='dry_asphalt';
+  let skateQuality='high';
+  let skateManual='none';
+  let skateDistrict='downtown';
+  let skateGrind={active:false,intensity:0,type:'50-50',surface:'grind_rail'};
+  const skateMixScratch={
+    lowRoll:0,bearing:0,roadHiss:0,wetHiss:0,slide:0,wind:0,city:0,
+    lowFrequency:210,bearingFrequency:1450,roadFrequency:2600,slideFrequency:1850
+  };
   let lastSemanticFeedback={carve:calculateCarveFeedback(pendingState)};
   const trickState=createTrickAudioState();
   const buffers=new Map();
@@ -28,7 +41,12 @@ export function createSkiAudio(){
     banana:.035,jump:.10,ramp:.12,land:.08,hardLand:.13,oil:.18,edgeScrape:.115,clear:.07,crash:.34,deathCry:.85,
     nearMiss:.14,specialReady:.45,specialActivate:.60,specialEnd:.35,newBest:1,
     menu:.025,button:.025,countTick:.10,countTickStrong:.10,speedUp:.28,go:.14,
-    trick360Start:.20,trick360Success:.12,trickBackflipStart:.24,trickBackflipSuccess:.14,trickFail:.20
+    trick360Start:.20,trick360Success:.12,trickBackflipStart:.24,trickBackflipSuccess:.14,trickFail:.20,
+    'skate-tail-pop':.075,'skate-nollie-pop':.075,'skate-wheel-land':.07,'skate-hard-land':.12,
+    'skate-slide-start':.10,'skate-slide-loop':.085,'skate-slide-end':.10,
+    'skate-grind-start':.09,'skate-grind-loop':.075,'skate-grind-end':.10,'skate-ledge-scrape':.085,
+    'skate-truck-creak':.16,'skate-trick-flip':.09,'skate-board-air':.10,'skate-trick-fail':.16,
+    'skate-near-miss':.14,'skate-power-ready':.45,'skate-power-start':.55,'skate-power-end':.30
   };
 
   const settings={
@@ -121,7 +139,37 @@ export function createSkiAudio(){
       const white=seed/4294967296*2-1;
       smoothNoise=smoothNoise*.62+white*.38;
       let hz=220,tone=0,noise=0,env=Math.pow(1-u,2.2)*Math.min(1,t/.006);
-      if(type==='banana'){
+      if(type.startsWith('skate-')){
+        const impact=/tail-pop|nollie-pop|wheel-land|hard-land/.test(type);
+        const metal=/grind/.test(type);
+        const slide=/slide|ledge-scrape/.test(type);
+        const power=/power/.test(type);
+        const flip=/trick-flip|board-air/.test(type);
+        hz=impact
+          ?(type==='skate-hard-land'?92:170+260*(1-u))
+          :metal
+            ?620+980*u
+            :slide
+              ?310+210*Math.sin(u*Math.PI*5)
+              :power
+                ?520+760*u
+                :flip?360+540*u:480+330*u;
+        phase+=Math.PI*2*hz/context.sampleRate;
+        phase2+=Math.PI*2*(hz*(metal?2.12:1.48))/context.sampleRate;
+        tone=Math.sin(phase)*(impact?.38:power?.42:.16)+Math.sin(phase2)*(metal?.10:power?.12:.04);
+        noise=smoothNoise*(
+          impact
+            ?(type==='skate-hard-land'?.92:.60)
+            :metal?.76:slide?.70:flip?.28:power?.18:.34
+        );
+        env=impact
+          ?Math.pow(1-u,3.0)*Math.min(1,t/.0025)
+          :metal
+            ?Math.pow(1-u,1.35)*Math.min(1,t/.002)
+            :slide
+              ?Math.pow(1-u,1.55)*Math.min(1,t/.003)
+              :Math.pow(1-u,1.8)*Math.min(1,t/.004);
+      }else if(type==='banana'){
         hz=u<.45?660:990;
         phase+=Math.PI*2*hz/context.sampleRate;
         phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
@@ -272,7 +320,7 @@ export function createSkiAudio(){
         tone=Math.sin(phase);
         env=Math.pow(1-u,3.5)*Math.min(1,t/.002);
       }
-      const scale=type==='crash'?.34:type==='deathCry'?.29:type==='hardLand'?.31:type==='oil'?.25:type==='edgeScrape'?.22:type==='land'?.27:type==='clear'?.20:
+      const scale=type.startsWith('skate-')?.30:type==='crash'?.34:type==='deathCry'?.29:type==='hardLand'?.31:type==='oil'?.25:type==='edgeScrape'?.22:type==='land'?.27:type==='clear'?.20:
         type==='nearMiss'?.20:type==='specialReady'?.24:type==='specialActivate'?.28:type==='specialEnd'?.18:type==='newBest'?.25:
         type==='jump'?.24:type==='trickBackflipStart'?.25:type==='trick360Start'?.20:
         type==='trickBackflipSuccess'?.25:type==='trick360Success'?.22:type==='trickFail'?.27:.22;
@@ -392,6 +440,27 @@ export function createSkiAudio(){
     windFilter.connect(windGain);
     windGain.connect(continuousBus);
 
+    const makeSkateLayer=(seed,frequency,q=.55,type='bandpass')=>{
+      const source=makeLoop(noiseBuffer(2.6,seed));
+      const filter=context.createBiquadFilter();
+      const gain=context.createGain();
+      filter.type=type;
+      filter.frequency.value=frequency;
+      filter.Q.value=q;
+      gain.gain.value=0;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(continuousBus);
+      source.start();
+      return {source,filter,gain};
+    };
+    const skateWheelLow=makeSkateLayer(54121,260,.72);
+    const skateBearing=makeSkateLayer(93481,1700,1.2);
+    const skateRoad=makeSkateLayer(61211,3100,.50,'highpass');
+    const skateWet=makeSkateLayer(71867,2400,.46,'highpass');
+    const skateSlide=makeSkateLayer(82723,1550,.90);
+    const skateCity=makeSkateLayer(44717,430,.42,'lowpass');
+
     const musicSource=makeLoop(musicBuffer());
     const musicFilter=context.createBiquadFilter();
     const musicGain=context.createGain();
@@ -419,7 +488,13 @@ export function createSkiAudio(){
     graph={
       master,sfxBus,musicBus,continuousBus,eventBus,worldFilter,compressor,
       contactFilter,contactGain,carveFilter,carveGain,boardScrapeFilter,boardScrapeGain,
-      windFilter,windGain,musicFilter,musicGain
+      windFilter,windGain,musicFilter,musicGain,
+      skateWheelLow,skateBearing,skateRoad,skateWet,skateSlide,skateCity,
+      sources:[
+        contactSource,carveSource,boardScrapeSource,windSource,musicSource,
+        skateWheelLow.source,skateBearing.source,skateRoad.source,
+        skateWet.source,skateSlide.source,skateCity.source
+      ]
     };
     applyState(pendingState,true);
     return graph;
@@ -440,6 +515,7 @@ export function createSkiAudio(){
     const speed01=getRideSpeedFeel(pendingState.speed,rideMode);
     const air=!!pendingState.air;
     const specialActive=!!pendingState.specialActive;
+    const isSkateboard=rideMode==='skateboard';
     const carveFeedback=calculateCarveFeedback({
       ...pendingState,
       edge:pendingState.edge??pendingState.carve,
@@ -454,19 +530,64 @@ export function createSkiAudio(){
     const response=instant?.01:.09;
 
     const rampAir=air&&pendingState.jumpSource==='ramp';
-    const contact=air?0:(running?(0.024+speed01*.058+carve*.032)*profile.contactGain:0);
-    const edge=air?0:(running?carve*(.014+speed01*.072)*profile.carveGain:0);
-    const boardScrape=air?0:(running?carve*(.010+speed01*.038)*profile.snowboardScrapeGain:0);
+    const contact=isSkateboard?0:(air?0:(running?(0.024+speed01*.058+carve*.032)*profile.contactGain:0));
+    const edge=isSkateboard?0:(air?0:(running?carve*(.014+speed01*.072)*profile.carveGain:0));
+    const boardScrape=isSkateboard?0:(air?0:(running?carve*(.010+speed01*.038)*profile.snowboardScrapeGain:0));
     const airWind=air?(rampAir?.058:.038):0;
     const wind=(running?(0.014+speed01*.076+airWind):countdown?.006:0)*profile.windGain;
     const musicBase=running?.13:countdown?.07:mode==='paused'?.025:mode==='crashed'?.018:.035;
     const intensity=clamp(pendingState.intensity??speed01);
     const usingJumpMusic=syncJumpMusic(mode);
+    skateSurface=normalizeSkateSurface(pendingState.surface??skateSurface);
+    const slideAmount=clamp(Math.max(
+      Number(pendingState.slideAmount)||0,
+      Number(pendingState.landingGripLoss)||0,
+      skateGrind.active?skateGrind.intensity*.18:0
+    ));
+    const manual=pendingState.manual??skateManual;
+    const skateMix=getSkateContinuousMix(
+      speed01,
+      slideAmount,
+      pendingState.wetness||0,
+      air,
+      skateSurface,
+      manual,
+      skateQuality,
+      skateMixScratch
+    );
+    const skateAudible=isSkateboard&&running?1:0;
+    setTarget(graph.skateWheelLow.gain.gain,skateMix.lowRoll*skateAudible,response);
+    setTarget(graph.skateBearing.gain.gain,skateMix.bearing*skateAudible,response);
+    setTarget(graph.skateRoad.gain.gain,skateMix.roadHiss*skateAudible,response);
+    setTarget(graph.skateWet.gain.gain,skateMix.wetHiss*skateAudible,response);
+    setTarget(
+      graph.skateSlide.gain.gain,
+      (skateMix.slide+(skateGrind.active?skateGrind.intensity*.024:0))*skateAudible,
+      .055
+    );
+    setTarget(
+      graph.skateCity.gain.gain,
+      skateMix.city*(isSkateboard&&(running||countdown)?1:0),
+      .35
+    );
+    setTarget(graph.skateWheelLow.filter.frequency,skateMix.lowFrequency,.12);
+    setTarget(graph.skateBearing.filter.frequency,skateMix.bearingFrequency,.10);
+    setTarget(graph.skateRoad.filter.frequency,skateMix.roadFrequency,.12);
+    setTarget(graph.skateSlide.filter.frequency,skateMix.slideFrequency,.08);
+    const districtFrequency=skateDistrict==='industrial'
+      ?300
+      :skateDistrict==='commercial'
+        ?520
+        :skateDistrict==='entertainment'
+          ?610
+          :skateDistrict==='construction'?360:430;
+    setTarget(graph.skateCity.filter.frequency,districtFrequency,.4);
+    setTarget(graph.continuousBus.gain,context.currentTime<eventDuckUntil?.68:1,.045);
 
     setTarget(graph.contactGain.gain,contact,response);
     setTarget(graph.carveGain.gain,edge,response);
     setTarget(graph.boardScrapeGain.gain,boardScrape,response);
-    setTarget(graph.windGain.gain,wind,response);
+    setTarget(graph.windGain.gain,isSkateboard?(skateMix.wind*(running?1:countdown?.24:0)*profile.windGain):wind,response);
     setTarget(graph.contactFilter.frequency,(560+speed01*720+carve*300)*profile.contactFrequencyScale,.12);
     setTarget(graph.carveFilter.frequency,(980+carve*1280+speed01*520)*profile.carveFrequencyScale,.10);
     setTarget(graph.carveFilter.Q,profile.carveQ,.12);
@@ -488,6 +609,14 @@ export function createSkiAudio(){
   function getRideMode(){return rideMode;}
 
   function play(type,gain=1,rateScale=1,pan=0){
+    if(rideMode==='skateboard'){
+      const skateCue=getSkateEventCue(type,{intensity:gain});
+      if(skateCue){
+        type=skateCue.sound;
+        gain*=skateCue.gain;
+        rateScale*=skateCue.rate;
+      }
+    }
     unlock();
     if(!context||!graph||!settings.sfxEnabled)return false;
     const now=context.currentTime;
@@ -495,7 +624,13 @@ export function createSkiAudio(){
     const last=eventLast.get(type)??-Infinity;
     if(now-last<cooldown)return false;
     eventLast.set(type,now);
+    if(activeTransientSources.size>=MAX_TRANSIENT_SOURCES)return false;
+    eventDuckUntil=Math.max(
+      eventDuckUntil,
+      now+(/hard-land|power-start|crash/.test(type)?.18:.07)
+    );
     const source=context.createBufferSource();
+    activeTransientSources.add(source);
     const amp=context.createGain();
     const canPan=Math.abs(pan)>.001&&typeof context.createStereoPanner==='function';
     const panner=canPan?context.createStereoPanner():null;
@@ -513,6 +648,7 @@ export function createSkiAudio(){
       amp.connect(graph.eventBus);
     }
     source.onended=()=>{
+      activeTransientSources.delete(source);
       source.disconnect();
       amp.disconnect();
       panner?.disconnect();
@@ -600,11 +736,102 @@ export function createSkiAudio(){
     const cue=getTrickFailProfile(event.type);
     return cue?play(cue.sound,cue.gain,cue.rate,cue.pan):false;
   }
+  function setSkateSurface(surface){
+    skateSurface=normalizeSkateSurface(surface);
+    pendingState.surface=skateSurface;
+    return skateSurface;
+  }
+
+  function setAudioQualityProfile(profile){
+    skateQuality=normalizeSkateQualityProfile(profile);
+    applyState(pendingState,false);
+    return skateQuality;
+  }
+
+  function updateSkateState(next={}){
+    if(next.surface!=null)setSkateSurface(next.surface);
+    if(next.manual!=null){
+      skateManual=String(next.manual||'none').toLowerCase().replace(/\s+/g,'_');
+      pendingState.manual=skateManual;
+    }
+    if(next.slideAmount!=null)pendingState.slideAmount=clamp(next.slideAmount);
+    if(next.wetness!=null)pendingState.wetness=clamp(next.wetness);
+    if(next.district!=null)skateDistrict=String(next.district||'downtown').toLowerCase();
+    if(next.grind){
+      skateGrind={
+        ...skateGrind,
+        ...next.grind,
+        active:next.grind.active!==false
+      };
+    }
+    applyState(pendingState,false);
+    return {
+      surface:skateSurface,
+      manual:skateManual,
+      district:skateDistrict,
+      grind:{...skateGrind}
+    };
+  }
+
+  function playSkateEvent(name,payload={}){
+    const key=String(name||'').replace(/[\s-]+/g,'_').toLowerCase();
+    if(key==='surfacechanged'||key==='surface_changed'){
+      setSkateSurface(payload.surface);
+      return true;
+    }
+    if(key==='powerslideloop'||key==='powerslide_loop'){
+      pendingState.slideAmount=clamp(payload.intensity??payload.amount??.5);
+    }
+    if(key==='powerslideend'||key==='powerslide_end')pendingState.slideAmount=0;
+    if(key==='manualstart'||key==='manual_start'){
+      skateManual=String(payload.type||'manual').toLowerCase().replace(/\s+/g,'_');
+    }
+    if(key==='manualend'||key==='manual_end')skateManual='none';
+    if(
+      key==='grindstart'||key==='grind_start'||
+      key==='grindloop'||key==='grind_loop'
+    ){
+      skateGrind={
+        active:true,
+        intensity:clamp(payload.intensity??.6),
+        type:payload.type||skateGrind.type,
+        surface:payload.surface||skateGrind.surface
+      };
+    }
+    if(key==='grindend'||key==='grind_end'){
+      skateGrind={...skateGrind,active:false,intensity:0};
+    }
+    pendingState.manual=skateManual;
+    const cue=getSkateEventCue(name,payload);
+    applyState(pendingState,false);
+    return cue
+      ?play(cue.sound,cue.gain*(payload.gain??1),cue.rate*(payload.rate??1),payload.pan??0)
+      :false;
+  }
+
+  function stopTransientSources(){
+    for(const source of activeTransientSources){
+      try{source.stop();}catch{}
+      try{source.disconnect();}catch{}
+    }
+    activeTransientSources.clear();
+  }
+
   function resetRun(){
     lastClearEventId=0;
     lastGoVoiceAt=-Infinity;
     lastBananaAt=-Infinity;
     bananaChain=0;
+    stopTransientSources();
+    eventDuckUntil=-Infinity;
+    skateSurface='dry_asphalt';
+    skateManual='none';
+    skateDistrict='downtown';
+    skateGrind={active:false,intensity:0,type:'50-50',surface:'grind_rail'};
+    pendingState.slideAmount=0;
+    pendingState.wetness=0;
+    pendingState.surface=skateSurface;
+    pendingState.manual=skateManual;
     trickState.reset();
     eventLast.clear();
     pendingState={...pendingState,carve:0,edge:0,carveLoad:0,lateralVelocity:0,air:false,grounded:true,groundRoll:0,groundPitch:0,landingGripLoss:0,intensity:0,jumpSource:'',specialActive:false};
@@ -618,7 +845,15 @@ export function createSkiAudio(){
     return {
       contextState:context?.state??'uninitialized',
       graphInitialized:!!graph,
-      persistentLoopCount:graph?(weatherGraph?7:5):0,
+      persistentLoopCount:(graph?.sources?.length||0)+(weatherGraph?2:0),
+      activeTransientCount:activeTransientSources.size,
+      maxTransientCount:MAX_TRANSIENT_SOURCES,
+      rideAudioMode:rideMode,
+      skateSurface,
+      skateQuality,
+      skateManual,
+      skateDistrict,
+      grindActive:skateGrind.active,
       bufferCount:buffers.size,
       recentEventCount:eventLast.size,
       jumpMusicInitialized:!!jumpMusic,
@@ -679,7 +914,8 @@ export function createSkiAudio(){
   return {
     updateWeather,playWeatherThunder,play,playGoCue,playEdgeContact,playClear,playBananaPickup,playNearMiss,
     playBananaReady,playBananaPowerActivate,playBananaPowerEnd,playNewBest,
-    playTrickStart,playTrickSuccess,playTrickFail,resetRun,unlock,update,
+    playTrickStart,playTrickSuccess,playTrickFail,playSkateEvent,setSkateSurface,updateSkateState,setAudioQualityProfile,
+    resetRun,unlock,update,
     getSemanticFeedback,getDiagnostics,setRideMode,getRideMode,getSettings,setMasterVolume,setSfxVolume,setMusicVolume,setSfxEnabled,setMusicEnabled
   };
 }

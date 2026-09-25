@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createUrbanEnvironment} from '../src/urban/urbanEnvironment.js';
 
-const DRAW_CALL_BUDGET=42;
-const ACTIVE_INSTANCE_BUDGET=3000;
-const ALLOCATED_INSTANCE_BUDGET=4500;
-const EXPECTED_COMPONENTS=['road','markings','streetlights','skyline','traffic-cones','barriers','signs','roadside-scenery','street-dressing'];
+const DRAW_CALL_BUDGET=50;
+const ACTIVE_INSTANCE_BUDGET=3200;
+const ALLOCATED_INSTANCE_BUDGET=4800;
+const EXPECTED_COMPONENTS=['road','road-details','markings','streetlights','skyline','traffic-cones','barriers','signs','roadside-scenery','street-dressing'];
 
 function inventory(root){
   let objects=0;
@@ -26,10 +26,14 @@ assert.equal(environment.group.userData.streaming,true,'environment advertises s
 assert.equal(environment.group.userData.gameplayIntegration,false,'standalone environment does not silently alter gameplay');
 
 const diagnostics=environment.getDiagnostics();
-assert.equal(diagnostics.componentCount,9,'urban environment retains all nine reusable component groups');
+assert.equal(diagnostics.componentCount,10,'urban environment retains all ten reusable component groups');
 assert.deepEqual(diagnostics.components.map(component=>component.name),EXPECTED_COMPONENTS,'urban environment component diagnostics changed unexpectedly');
 assert(diagnostics.drawCalls<=DRAW_CALL_BUDGET,`urban draw-call budget exceeded (${diagnostics.drawCalls} > ${DRAW_CALL_BUDGET})`);
 assert.equal(diagnostics.realtimeStreetLights,0,'decorative streetlights must not create per-instance realtime lights');
+const roadDetails=diagnostics.components.find(component=>component.name==='road-details');
+assert(roadDetails?.bounded===true,'road detail stream must remain explicitly bounded');
+assert(roadDetails.localizedWetZones>0,'road detail stream must expose localized damp/puddle zones');
+assert(roadDetails.drains>0,'road detail stream must retain drainage covers');
 
 const initial=inventory(environment.group);
 assert.equal(initial.drawCalls,diagnostics.drawCalls,'diagnostic draw calls match actual instanced drawables');

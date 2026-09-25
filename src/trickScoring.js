@@ -1,6 +1,16 @@
 export const TRICK_POINTS=Object.freeze({
+  '180':100,
   '360':200,
-  BACKFLIP:400
+  BACKFLIP:400,
+  KICKFLIP:250,
+  HEELFLIP:275,
+  'POP SHOVE-IT':220,
+  'FRONTSIDE SHOVE-IT':240,
+  INDY:180,
+  MELON:190,
+  NOSEGRAB:220,
+  'VARIAL FLIP':450,
+  '360 FLIP':600
 });
 
 function publish(state,{phase,type='',points=0,success=null,label='',source=''}={}){
@@ -48,7 +58,7 @@ export function scoreTrickCompletion(state,{type='',source=''}={}){
   state.trickPoints=points;
   state.trickSuccess=true;
   state.failedTrick=false;
-  const label=type==='BACKFLIP'?'BACKFLIP!':'360!';
+  const label=(type||'TRICK')+'!';
   return publish(state,{phase:'complete',type,points,success:true,label,source});
 }
 

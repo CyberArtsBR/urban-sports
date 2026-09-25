@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   import-ski-baseline:
-    if: github.event.issue.title == 'BOOTSTRAP_URBAN_SPORTS'
+    if: github.event.issue.title == 'BOOTSTRAP_URBAN_SPORTS_CLEAN'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Urban Sports
@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Import current Chimpions Ski main
+      - name: Import clean Chimpions Ski baseline
         shell: bash
         run: |
           set -euo pipefail
@@ -36,19 +36,40 @@ jobs:
           let render = fs.readFileSync(renderPath, 'utf8');
           render = render.replace('name: chimpions-ski', 'name: chimpions-urban-sports');
           fs.writeFileSync(renderPath, render);
+
+          const prodPath = 'scripts/production-url.mjs';
+          let prod = fs.readFileSync(prodPath, 'utf8');
+          prod = prod
+            .replaceAll('chimpions-ski.onrender.com', 'chimpions-urban-sports.onrender.com')
+            .replaceAll('CHIMPIONS_SKI_PRODUCTION_URL', 'CHIMPIONS_URBAN_SPORTS_PRODUCTION_URL');
+          fs.writeFileSync(prodPath, prod);
+
+          const readmePath = 'README.md';
+          let readme = fs.readFileSync(readmePath, 'utf8');
+          readme = readme.replace(/^# Chimpions Ski/m, '# Chimpions Urban Sports');
+          readme = readme.replace(
+            /^Chimpions Ski is a Three\.js\/Vite endless downhill game.*$/m,
+            'Chimpions Urban Sports is currently bootstrapped from the proven Chimpions Ski Three.js/Vite codebase. The first baseline intentionally preserves Ski gameplay while the project is converted to Skateboard, Inline Skates, and BMX.'
+          );
+          readme = readme.replaceAll('https://chimpions-ski.onrender.com', 'https://chimpions-urban-sports.onrender.com');
+          fs.writeFileSync(readmePath, readme);
           NODE
 
       - name: Verify production build
         run: |
-          npm install
+          npm install --no-package-lock
           npm run build
 
-      - name: Commit Urban Sports baseline
+      - name: Remove generated build/dependency files
+        run: |
+          rm -rf node_modules dist package-lock.json
+
+      - name: Commit clean Urban Sports baseline
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Import Chimpions Ski baseline for Urban Sports"
+          git commit -m "Establish clean Urban Sports baseline"
           git push origin main

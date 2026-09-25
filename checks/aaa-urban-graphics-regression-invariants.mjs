@@ -12,8 +12,8 @@ import {createUrbanEnvironment} from '../src/urban/urbanEnvironment.js';
 import {createUrbanObstacle} from '../src/urban/urbanObstacles.js';
 import {createSkateboardEquipment} from '../src/skateboardEquipment.js';
 
-const PROFILES=['low','medium','high'];
-const profileOrder=['low','medium','high'];
+const PROFILES=['low','medium','high','max'];
+const profileOrder=['low','medium','high','max'];
 
 for(const metric of GRAPHICS_BUDGET_METRICS){
   let previous=-Infinity;
@@ -27,6 +27,10 @@ for(const metric of GRAPHICS_BUDGET_METRICS){
 assert.deepEqual(GRAPHICS_QUALITY_BUDGETS.auto,GRAPHICS_QUALITY_BUDGETS.medium,'AUTO/MEDIUM resource envelope must remain aligned');
 assert(GRAPHICS_QUALITY_BUDGETS.low.rendererCalls<GRAPHICS_QUALITY_BUDGETS.medium.rendererCalls,
   'LOW must retain stricter composed-frame draw-call headroom than MEDIUM');
+assert.notDeepEqual(GRAPHICS_QUALITY_BUDGETS.max,GRAPHICS_QUALITY_BUDGETS.high,
+  'MAX must retain a dedicated rendering resource envelope');
+assert(GRAPHICS_QUALITY_BUDGETS.max.rendererCalls>GRAPHICS_QUALITY_BUDGETS.high.rendererCalls,
+  'MAX draw-call envelope should account for premium rendering passes');
 
 const syntheticScene=new THREE.Scene();
 const box=new THREE.BoxGeometry(1,1,1);

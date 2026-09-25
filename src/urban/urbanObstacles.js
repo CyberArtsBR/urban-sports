@@ -30,7 +30,7 @@ export const URBAN_OBSTACLE_MAPPING=Object.freeze({
 });
 
 export const URBAN_OBSTACLE_VARIANTS=Object.freeze({
-  tree:Object.freeze(['weightedTrafficCone','stripedConstructionDrum','bollardCluster','portableWarningBeacon','temporaryTrafficSign','waterBarrierEnd']),
+  tree:Object.freeze(['premiumRoadworkBeacon','stripedConstructionDrum','bollardCluster','portableWarningBeacon','temporaryTrafficSign','waterBarrierEnd']),
   rock:Object.freeze(['jerseyBarrier','concreteCubeBarrier','precastDivider','constructionBlock','heavyPlanterBarrier']),
   log:Object.freeze(['woodConstructionBarricade','metalPoliceBarricade','roadClosureStand','stripedSawhorse']),
   wideLog:Object.freeze(['multiPanelBarricade','temporaryConstructionFence','linkedWaterBarriers','wideStreetClosureGate']),
@@ -244,13 +244,27 @@ function treePrototype(variant){
   const {materials,geometries}=getShared();
   const root=new THREE.Group();
   if(variant===0){
-    const base=mesh(geometries.coneBase,materials.rubber,{name:'weighted-base'});base.position.y=.08;
-    const body=mesh(geometries.cone,materials.orange,{name:'cone-body'});body.position.y=1.58;
-    const stripesGeometry=mergeGeometries([geometries.coneStripeA.clone().translate(0,1.55,0),geometries.coneStripeB.clone().translate(0,2.05,0)],false);
-    const stripes=mesh(stripesGeometry,materials.reflective,{name:'reflective-bands',castShadow:false});
-    const beacon=mesh(geometries.beacon,materials.amber,{name:'safety-beacon',castShadow:false});beacon.position.y=3.08;
-    root.add(base,body,stripes,beacon);
-    return finalize(root,TREE_META,'UrbanObstacle_WeightedTrafficCone',variant,'weightedTrafficCone');
+    const base=mesh(mergedBoxes([
+      {w:1.34,h:.13,d:.82,y:.065},
+      {w:1.08,h:.10,d:.68,y:.18}
+    ]),materials.rubber,{name:'premium-roadwork-base'});
+    const frame=mesh(mergedBoxes([
+      {w:.10,h:1.62,d:.10,x:-.43,y:1.03},
+      {w:.10,h:1.62,d:.10,x:.43,y:1.03},
+      {w:.92,h:.09,d:.12,y:.42},
+      {w:.92,h:.09,d:.12,y:1.63}
+    ]),materials.darkMetal,{name:'premium-roadwork-frame'});
+    const panel=mesh(mergedBoxes([
+      {w:1.14,h:.58,d:.10,y:1.91},
+      {w:.86,h:.10,d:.13,y:2.28}
+    ]),materials.orange,{name:'premium-roadwork-panel'});
+    addStripeBlocks(root,{width:.98,y:1.91,z:.061,count:5,height:.34,material:materials.reflective});
+    const lamps=mesh(mergedCylinders([
+      {r:.13,h:.22,x:-.30,y:2.50,segments:12},
+      {r:.13,h:.22,x:.30,y:2.50,segments:12}
+    ]),materials.amber,{name:'dual-safety-beacons',castShadow:false});
+    root.add(base,frame,panel,lamps);
+    return finalize(root,TREE_META,'UrbanObstacle_PremiumRoadworkBeacon',variant,'premiumRoadworkBeacon');
   }
   if(variant===1){
     const base=mesh(mergedCylinders([{r:.58,h:.14,y:.07,segments:12}]),materials.rubber,{name:'drum-weighted-base'});
@@ -298,10 +312,21 @@ function rockPrototype(variant){
   const {materials,geometries}=getShared();
   const root=new THREE.Group();
   if(variant===0){
-    root.add(mesh(geometries.jersey,materials.concrete,{name:'jersey-barrier'}));
-    const reflectors=mesh(mergedBoxes([{w:.54,h:.10,d:.018,x:-.38,y:.55,z:.421},{w:.54,h:.10,d:.018,x:.38,y:.55,z:.421},{w:.54,h:.10,d:.018,x:-.38,y:.55,z:-.421},{w:.54,h:.10,d:.018,x:.38,y:.55,z:-.421}]),materials.reflective,{name:'jersey-reflectors',castShadow:false});
-    root.add(reflectors);
-    return finalize(root,ROCK_META,'UrbanObstacle_JerseyBarrier',variant,'jerseyBarrier');
+    const body=mesh(geometries.jersey,materials.concrete,{name:'premium-jersey-barrier'});
+    const rail=mesh(mergedBoxes([
+      {w:1.28,h:.08,d:.62,y:.84},
+      {w:.10,h:.24,d:.10,x:-.52,y:.78},
+      {w:.10,h:.24,d:.10,x:.52,y:.78}
+    ]),materials.darkMetal,{name:'jersey-top-rail'});
+    const reflectors=mesh(mergedBoxes([
+      {w:.42,h:.10,d:.018,x:-.42,y:.53,z:.421},
+      {w:.42,h:.10,d:.018,x:.42,y:.53,z:.421},
+      {w:.42,h:.10,d:.018,x:-.42,y:.53,z:-.421},
+      {w:.42,h:.10,d:.018,x:.42,y:.53,z:-.421}
+    ]),materials.reflective,{name:'jersey-reflectors',castShadow:false});
+    root.add(body,rail,reflectors);
+    addStripeBlocks(root,{width:1.18,y:.30,z:.431,count:5,height:.14,material:materials.orange});
+    return finalize(root,ROCK_META,'UrbanObstacle_PremiumJerseyBarrier',variant,'jerseyBarrier');
   }
   if(variant===1){
     const body=mesh(mergedBoxes([{w:1.62,h:.68,d:1.10,y:.34},{w:1.48,h:.10,d:.96,y:.73}]),materials.concrete,{name:'concrete-cube'});

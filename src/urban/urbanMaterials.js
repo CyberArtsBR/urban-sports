@@ -16,32 +16,65 @@ function configureRoadTexture(texture,renderer){
   return texture;
 }
 
+function hash2(x,y,seed=0){
+  let n=Math.imul((x|0)^seed,374761393)^Math.imul((y|0)+seed,668265263);
+  n=Math.imul(n^(n>>>13),1274126177);
+  return ((n^(n>>>16))>>>0)/4294967295;
+}
+function smooth(value){return value*value*(3-2*value);}
+function periodicNoise(x,y,cell,size,seed){
+  const period=Math.max(2,Math.floor(size/cell));
+  const fx=x/cell,fy=y/cell;
+  const ix=Math.floor(fx),iy=Math.floor(fy);
+  const tx=smooth(fx-ix),ty=smooth(fy-iy);
+  const wrap=value=>((value%period)+period)%period;
+  const a=hash2(wrap(ix),wrap(iy),seed);
+  const b=hash2(wrap(ix+1),wrap(iy),seed);
+  const c=hash2(wrap(ix),wrap(iy+1),seed);
+  const d=hash2(wrap(ix+1),wrap(iy+1),seed);
+  return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a,b,tx),THREE.MathUtils.lerp(c,d,tx),ty);
+}
+
 function makeAsphaltTextures(renderer){
-  const size=64;
+  const size=256;
   const colorData=new Uint8Array(size*size*4);
   const roughnessData=new Uint8Array(size*size*4);
+  const bumpData=new Uint8Array(size*size*4);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4;
-    const grain=(Math.sin(x*12.73+y*19.31)+Math.sin(x*3.17-y*5.91))*.5;
-    const pebble=((x*17+y*29+x*y*3)%23)/23;
-    const value=Math.max(32,Math.min(72,50+grain*8+(pebble-.5)*10));
-    colorData[i]=value;
-    colorData[i+1]=value+1;
-    colorData[i+2]=value+2;
+    const broad=periodicNoise(x,y,48,size,17);
+    const medium=periodicNoise(x,y,17,size,29);
+    const aggregate=periodicNoise(x,y,5,size,43);
+    const micro=periodicNoise(x,y,2,size,71);
+    const patch=periodicNoise(x,y,72,size,97);
+    const crackNoise=periodicNoise(x,y,23,size,113);
+    const crack=Math.abs(crackNoise-.5)<.018&&medium>.56 ? 1 : 0;
+    const pebble=(aggregate>.78?1:0)+(micro>.88?1:0);
+    const base=65+(broad-.5)*13+(medium-.5)*9+(aggregate-.5)*6-pebble*3-crack*15+(patch>.72?4:0);
+    const value=Math.max(38,Math.min(94,Math.round(base)));
+    colorData[i]=Math.max(0,value-2);
+    colorData[i+1]=value;
+    colorData[i+2]=Math.min(255,value+2);
     colorData[i+3]=255;
-
-    // Long, low-frequency channels keep rain highlights stretched along the
-    // travel direction without turning the road into a uniform mirror.
-    const channel=Math.pow(Math.max(0,Math.sin(x*.42+Math.sin(y*.075)*1.35)),6);
-    const micro=(grain*.5+.5)*.14+(pebble-.5)*.08;
-    const rough=Math.max(128,Math.min(255,229+micro*70-channel*72));
+    const rough=Math.max(205,Math.min(250,Math.round(
+      236+(aggregate-.5)*18+(micro-.5)*10-(patch>.76?12:0)+crack*7
+    )));
     roughnessData[i]=roughnessData[i+1]=roughnessData[i+2]=rough;
     roughnessData[i+3]=255;
+    const height=Math.max(58,Math.min(198,Math.round(
+      126+(aggregate-.5)*46+(micro-.5)*24-crack*54
+    )));
+    bumpData[i]=bumpData[i+1]=bumpData[i+2]=height;
+    bumpData[i+3]=255;
   }
   const map=configureRoadTexture(new THREE.DataTexture(colorData,size,size,THREE.RGBAFormat),renderer);
+  map.repeat.set(4,8);
   map.colorSpace=THREE.SRGBColorSpace;
   const roughnessMap=configureRoadTexture(new THREE.DataTexture(roughnessData,size,size,THREE.RGBAFormat),renderer);
-  return {map,roughnessMap};
+  roughnessMap.repeat.copy(map.repeat);
+  const bumpMap=configureRoadTexture(new THREE.DataTexture(bumpData,size,size,THREE.RGBAFormat),renderer);
+  bumpMap.repeat.copy(map.repeat);
+  return {map,roughnessMap,bumpMap};
 }
 
 function makeLightPoolTexture(){
@@ -88,14 +121,15 @@ function makeSidewalkTexture(renderer){
 }
 
 export function createUrbanMaterials({renderer=null}={}){
-  const {map:asphaltMap,roughnessMap:asphaltRoughnessMap}=makeAsphaltTextures(renderer);
+  const {map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap}=makeAsphaltTextures(renderer);
   const sidewalkMap=makeSidewalkTexture(renderer);
   const lightPoolMap=makeLightPoolTexture();
 
   const materials={
     asphalt:new THREE.MeshPhysicalMaterial({
-      color:0x41454b,map:asphaltMap,roughnessMap:asphaltRoughnessMap,roughness:.94,metalness:.02,
-      clearcoat:0,clearcoatRoughness:.28,envMapIntensity:.20
+      color:0xd2d4d5,map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap,
+      roughness:.96,metalness:0,bumpScale:.032,
+      clearcoat:0,clearcoatRoughness:1,envMapIntensity:.10
     }),
     sidewalk:new THREE.MeshStandardMaterial({
       color:0xa8aaab,map:sidewalkMap,roughness:.92,metalness:0
@@ -110,7 +144,7 @@ export function createUrbanMaterials({renderer=null}={}){
     }),
     streetlightPool:new THREE.MeshBasicMaterial({
       color:0xffd59a,map:lightPoolMap,transparent:true,opacity:0,depthWrite:false,
-      blending:THREE.AdditiveBlending,toneMapped:true,polygonOffset:true,
+      blending:THREE.NormalBlending,toneMapped:true,polygonOffset:true,
       polygonOffsetFactor:-2,polygonOffsetUnits:-2
     }),
     building:new THREE.MeshStandardMaterial({
@@ -118,9 +152,14 @@ export function createUrbanMaterials({renderer=null}={}){
     }),
     rooftop:new THREE.MeshStandardMaterial({color:0x333b45,roughness:.78,metalness:.12}),
     windows:new THREE.MeshStandardMaterial({
-      color:0xffffff,roughness:.28,metalness:.07,
-      emissive:0x67b9ff,emissiveIntensity:.12,
-      transparent:true,opacity:.78,depthWrite:false,toneMapped:true,vertexColors:true
+      color:0xffffff,roughness:.20,metalness:.10,
+      emissive:0x67b9ff,emissiveIntensity:.62,
+      transparent:true,opacity:.88,depthWrite:false,toneMapped:true,vertexColors:true
+    }),
+    buildingLed:new THREE.MeshStandardMaterial({
+      color:0x9ce9ff,roughness:.24,metalness:.05,
+      emissive:0x2faeff,emissiveIntensity:.55,
+      toneMapped:true,vertexColors:true
     }),
     cone:new THREE.MeshStandardMaterial({color:0xff6a16,roughness:.48,metalness:0}),
     coneStripe:new THREE.MeshStandardMaterial({
@@ -143,7 +182,7 @@ export function createUrbanMaterials({renderer=null}={}){
     streetDetail:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.82,metalness:.16})
   };
 
-  const textures=[asphaltMap,asphaltRoughnessMap,sidewalkMap,lightPoolMap];
+  const textures=[asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap,lightPoolMap];
   function dispose(){
     for(const material of Object.values(materials))material.dispose();
     for(const texture of textures)texture.dispose();

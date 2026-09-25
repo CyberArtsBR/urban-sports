@@ -13,7 +13,7 @@ function canvasTexture(width,height,draw){
   return texture;
 }
 
-function createBannerTexture(){
+function createBannerTexture({urban=false}={}){
   return canvasTexture(1536,320,(ctx,w,h)=>{
     const bg=ctx.createLinearGradient(0,0,w,h);
     bg.addColorStop(0,'#031e34');
@@ -57,6 +57,23 @@ function createBannerTexture(){
     ctx.strokeStyle='rgba(120,235,255,.32)';
     ctx.lineWidth=6;
     ctx.strokeRect(w*.31,66,w*.38,h-132);
+    if(urban){
+      ctx.save();
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(37,214,255,.55)';
+      ctx.shadowBlur=18;
+      ctx.fillStyle='#f4f8fb';
+      ctx.font='700 42px Arial, sans-serif';
+      ctx.fillText('CHIMPIONS URBAN SPORTS',w*.5,h*.31);
+      ctx.shadowColor='rgba(255,210,64,.48)';
+      ctx.shadowBlur=22;
+      ctx.fillStyle='#ffe277';
+      ctx.font='900 112px Arial Black, Arial, sans-serif';
+      ctx.fillText('START',w*.5,h*.62);
+      ctx.restore();
+    }
+
     for(const x of [18,w-18]){
       ctx.fillStyle='#f9dd75';
       ctx.beginPath();ctx.arc(x,12,5,0,Math.PI*2);ctx.fill();
@@ -167,16 +184,17 @@ function addSafetyFence(parent,material,x,z,ground,side=1){
   }
 }
 
-export function createStartGateScene({world,terrainHeight=()=>0}={}){
+export function createStartGateScene({world,terrainHeight=()=>0,theme='alpine'}={}){
+  const urbanMode=String(theme).toLowerCase()==='urban';
   const root=new THREE.Group();
-  root.name='premium-alpine-start-gate';
+  root.name=urbanMode?'premium-urban-start-gate':'premium-alpine-start-gate';
   world?.add(root);
 
   const z=1.25;
   const centerGround=terrainHeight(0,z);
-  const frameMaterial=new THREE.MeshStandardMaterial({color:0x092a47,roughness:.34,metalness:.62,envMapIntensity:.55});
-  const frameDarkMaterial=new THREE.MeshStandardMaterial({color:0x05131e,roughness:.30,metalness:.74,envMapIntensity:.46});
-  const accentMaterial=new THREE.MeshStandardMaterial({color:0xe8bd3f,roughness:.42,metalness:.34,envMapIntensity:.45});
+  const frameMaterial=new THREE.MeshStandardMaterial({color:urbanMode?0x17212c:0x092a47,roughness:.34,metalness:.62,envMapIntensity:.55});
+  const frameDarkMaterial=new THREE.MeshStandardMaterial({color:urbanMode?0x090d12:0x05131e,roughness:.30,metalness:.74,envMapIntensity:.46});
+  const accentMaterial=new THREE.MeshStandardMaterial({color:urbanMode?0xf0b92d:0xe8bd3f,roughness:.42,metalness:.34,envMapIntensity:.45});
   const boltMaterial=new THREE.MeshStandardMaterial({color:0xaac0ca,roughness:.30,metalness:.72,envMapIntensity:.62});
   const snowMaterial=new THREE.MeshPhysicalMaterial({
     color:0xffffff,roughness:.94,metalness:0,clearcoat:.015,clearcoatRoughness:.90,
@@ -220,8 +238,8 @@ export function createStartGateScene({world,terrainHeight=()=>0}={}){
       }
     }
 
-    addSnowCluster(root,snowMaterial,x,ground+4.77,z,1.16,1.04);
-    addSnowCluster(root,snowMaterial,x,ground+.50,z+.05,1.15,1.12);
+  
+  
 
     const beaconBaseY=ground+5.03;
     addMesh(root,new THREE.CylinderGeometry(.21,.25,.15,16),frameDarkMaterial,{position:[x,beaconBaseY,z],cast:true});
@@ -242,11 +260,11 @@ export function createStartGateScene({world,terrainHeight=()=>0}={}){
   for(const x of [-3.70,-2.45,-1.20,1.20,2.45,3.70]){
     addMesh(root,new RoundedBoxGeometry(.64,.20,.18,3,.045),whiteLed,{position:[x,crossbarY+.04,z-.39],name:'start-overhead-lamp'});
   }
-  addSnowCluster(root,snowMaterial,0,crossbarY+.39,z,5.6,1.0);
-  addSnowCluster(root,snowMaterial,-2.60,crossbarY+.39,z+.02,2.2,1.0);
-  addSnowCluster(root,snowMaterial,2.75,crossbarY+.39,z-.03,2.0,1.0);
+  
+  
+  
 
-  const bannerTexture=createBannerTexture();
+  const bannerTexture=createBannerTexture({urban:urbanMode});
   const bannerMaterial=new THREE.MeshBasicMaterial({map:bannerTexture,side:THREE.DoubleSide,toneMapped:false,fog:false});
   addMesh(root,new RoundedBoxGeometry(7.58,1.58,.12,4,.06),frameDarkMaterial,{
     position:[0,centerGround+4.03,z-.28],cast:true,name:'start-banner-backplate'

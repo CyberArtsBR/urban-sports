@@ -136,19 +136,21 @@ export function createUrbanRoadSurfaceDetails(options={}){
       repairs.setColorAt(repairCount,_color);
       repairCount++;
 
-      for(let branch=0;branch<2;branch++){
-        setTransform(cracks,crackCount,{
-          x:entry.crackX+(branch?entry.crackLength*.16:-entry.crackLength*.14),
-          y:.024,
-          z:entry.z+(branch?1.3:-.8),
-          sx:.035+(branch*.015),
-          sy:entry.crackLength*(branch?.56:1),
-          ry:entry.crackYaw+(branch?.48:0)
-        });
-        crackCount++;
+      if(activeQuality!=='low'){
+        for(let branch=0;branch<2;branch++){
+          setTransform(cracks,crackCount,{
+            x:entry.crackX+(branch?entry.crackLength*.16:-entry.crackLength*.14),
+            y:.024,
+            z:entry.z+(branch?1.3:-.8),
+            sx:.035+(branch*.015),
+            sy:entry.crackLength*(branch?.56:1),
+            ry:entry.crackYaw+(branch?.48:0)
+          });
+          crackCount++;
+        }
       }
 
-      if(i%2===0||activeQuality==='max'){
+      if(activeQuality!=='low'&&(i%2===0||activeQuality==='max')){
         for(let track=0;track<2;track++){
           setTransform(skids,skidCount,{
             x:entry.skidX+(track?-.18:.18),
@@ -239,13 +241,17 @@ export function createUrbanRoadSurfaceDetails(options={}){
   function getDiagnostics(){
     const counts=group.userData.activeCounts||{};
     const instances=Object.values(counts).reduce((sum,value)=>sum+(Number(value)||0),0);
+    const drawCalls=[
+      counts.repairCount,counts.crackCount,counts.skidCount,counts.dampCount,
+      counts.puddleCount,counts.drainCount,counts.grimeCount
+    ].filter(value=>Number(value)>0).length;
     return {
       name:'road-details',
       profile:activeQuality,
       logical:Math.max(5,Math.min(capacity,Math.round(capacity*density))),
       instances,
       allocatedInstances:capacity*9+Math.ceil(capacity*.58),
-      drawCalls:7,
+      drawCalls,
       bounded:true,
       localizedWetZones:(counts.dampCount||0)+(counts.puddleCount||0),
       drains:counts.drainCount||0

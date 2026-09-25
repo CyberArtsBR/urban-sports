@@ -26,13 +26,28 @@ export const RIDE_AUDIO_PROFILES=Object.freeze({
     carveFrequencyScale:.78,
     carveQ:.58,
     snowboardScrapeGain:1
+  }),
+  skateboard:Object.freeze({
+    mode:'skateboard',
+    minSpeedKmh:150,
+    maxSpeedKmh:300,
+    feelFloor:.62,
+    contactGain:0,
+    carveGain:0,
+    windGain:1.12,
+    contactFrequencyScale:1,
+    carveFrequencyScale:1,
+    carveQ:.72,
+    snowboardScrapeGain:0
   })
 });
 
 export const DEFAULT_RIDE_MODE='ski';
 
 export function normalizeRideMode(mode){
-  return mode==='snowboard'?'snowboard':'ski';
+  const value=String(mode||'').toLowerCase();
+  if(value==='snowboard'||value==='skateboard')return value;
+  return 'ski';
 }
 
 export function getRideAudioProfile(mode=DEFAULT_RIDE_MODE){

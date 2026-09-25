@@ -123,6 +123,43 @@ function makeAsphaltTextures(renderer,quality){
   return {map,roughnessMap,bumpMap};
 }
 
+function makeFacadeTextures(renderer,quality){
+  const size=128;
+  const colorData=new Uint8Array(size*size*4);
+  const roughnessData=new Uint8Array(size*size*4);
+  const bumpData=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const i=(y*size+x)*4;
+    const broad=periodicNoise(x,y,31,size,211);
+    const fine=periodicNoise(x,y,7,size,223);
+    const vertical=(x%32<2)?-.10:0;
+    const floor=(y%24<2)?-.08:0;
+    const brick=((y%16<2)||((x+((y>>4)&1)*8)%24<2))?-.065:0;
+    const water=Math.max(0,.55-periodicNoise(x,y,19,size,251))*(y/size)*.10;
+    const grime=Math.pow(1-y/(size-1),3)*.14;
+    const neutral=Math.max(.56,Math.min(.98,.84+(broad-.5)*.12+(fine-.5)*.045+vertical+floor+brick-water-grime));
+    const value=Math.round(neutral*255);
+    colorData[i]=colorData[i+1]=colorData[i+2]=value;colorData[i+3]=255;
+    const rough=Math.round(Math.max(.66,Math.min(.98,.86+(fine-.5)*.12+grime))*255);
+    roughnessData[i]=roughnessData[i+1]=roughnessData[i+2]=rough;roughnessData[i+3]=255;
+    const height=Math.round(Math.max(.28,Math.min(.76,.52+(fine-.5)*.18-vertical*.65-floor*.55-brick*.45))*255);
+    bumpData[i]=bumpData[i+1]=bumpData[i+2]=height;bumpData[i+3]=255;
+  }
+  const setup=(texture,{srgb=false}={})=>{
+    texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+    texture.repeat.set(2.2,4.8);
+    texture.magFilter=THREE.LinearFilter;texture.minFilter=THREE.LinearMipmapLinearFilter;
+    texture.anisotropy=textureAnisotropy(renderer,quality);texture.needsUpdate=true;
+    if(srgb)texture.colorSpace=THREE.SRGBColorSpace;
+    return texture;
+  };
+  return {
+    map:setup(new THREE.DataTexture(colorData,size,size,THREE.RGBAFormat),{srgb:true}),
+    roughnessMap:setup(new THREE.DataTexture(roughnessData,size,size,THREE.RGBAFormat)),
+    bumpMap:setup(new THREE.DataTexture(bumpData,size,size,THREE.RGBAFormat))
+  };
+}
+
 function makeLightPoolTexture(){
   const size=64;
   const data=new Uint8Array(size*size*4);
@@ -169,7 +206,9 @@ function makeSidewalkTexture(renderer,quality){
 export function createUrbanMaterials({renderer=null,quality='high'}={}){
   const {map:asphaltMap,roughnessMap:asphaltRoughnessMap,bumpMap:asphaltBumpMap}=makeAsphaltTextures(renderer,quality);
   const sidewalkMap=makeSidewalkTexture(renderer,quality);
+  const {map:facadeMap,roughnessMap:facadeRoughnessMap,bumpMap:facadeBumpMap}=makeFacadeTextures(renderer,quality);
   const lightPoolMap=makeLightPoolTexture();
+  const facadeBase={map:facadeMap,roughnessMap:facadeRoughnessMap,bumpMap:facadeBumpMap,vertexColors:true};
 
   const materials={
     asphalt:new THREE.MeshPhysicalMaterial({
@@ -221,7 +260,28 @@ export function createUrbanMaterials({renderer=null,quality='high'}={}){
       polygonOffsetFactor:-2,polygonOffsetUnits:-2
     }),
     building:new THREE.MeshStandardMaterial({
-      color:0xffffff,roughness:.80,metalness:.05,vertexColors:true
+      ...facadeBase,color:0xffffff,roughness:.82,metalness:.04,bumpScale:.018
+    }),
+    facadeConcrete:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xf0f1ef,roughness:.88,metalness:.02,bumpScale:.022
+    }),
+    facadeBrick:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xe1c5b5,roughness:.92,metalness:0,bumpScale:.030
+    }),
+    facadeGlass:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xd7e6ed,roughness:.38,metalness:.18,bumpScale:.008,envMapIntensity:.42
+    }),
+    facadeCommercial:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xf0e3d7,roughness:.72,metalness:.05,bumpScale:.018
+    }),
+    facadeIndustrial:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xcfd0ca,roughness:.86,metalness:.10,bumpScale:.025
+    }),
+    facadeResidential:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xe5e0da,roughness:.80,metalness:.03,bumpScale:.018
+    }),
+    facadeEntertainment:new THREE.MeshStandardMaterial({
+      ...facadeBase,color:0xd8dce3,roughness:.60,metalness:.10,bumpScale:.012,envMapIntensity:.30
     }),
     rooftop:new THREE.MeshStandardMaterial({color:0x333b45,roughness:.78,metalness:.12}),
     windows:new THREE.MeshBasicMaterial({
@@ -253,12 +313,12 @@ export function createUrbanMaterials({renderer=null,quality='high'}={}){
     streetDetail:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.82,metalness:.16})
   };
 
-  const textures=[asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap,lightPoolMap];
+  const textures=[asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap,facadeMap,facadeRoughnessMap,facadeBumpMap,lightPoolMap];
   let activeQuality=qualityName(quality);
   function setQuality(next=activeQuality){
     activeQuality=qualityName(next);
     const anisotropy=textureAnisotropy(renderer,next);
-    for(const texture of [asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap]){
+    for(const texture of [asphaltMap,asphaltRoughnessMap,asphaltBumpMap,sidewalkMap,facadeMap,facadeRoughnessMap,facadeBumpMap]){
       texture.anisotropy=anisotropy;
       texture.needsUpdate=true;
     }
@@ -269,6 +329,7 @@ export function createUrbanMaterials({renderer=null,quality='high'}={}){
     return {
       profile:activeQuality,
       asphaltTextureSize:ASPHALT_TEXTURE_SIZE,
+      facadeTextureSize:128,
       effectiveDetailClass:'2k-4k-equivalent tiled procedural microdetail',
       anisotropy:asphaltMap.anisotropy,
       localizedWetMaterials:true,

@@ -4,6 +4,9 @@ import {createUrbanMaterials} from './urbanMaterials.js';
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
 const PROFILE_DENSITY=Object.freeze({max:1,high:1,medium:.72,low:.46});
+// These close-range accents cost five scene batches even when no instances are
+// rendered. Keep the pools allocated for quality changes, but detach them on LOW.
+const LOW_OMITTED_BATCHES=new Set(['vehicleTrim','vehicleArches','foliage','glass','flats']);
 const ZONES=Object.freeze(['parking','storefront','downtown','transit','construction','utility','clean']);
 
 export const URBAN_STREET_DRESSING_DEFAULTS=Object.freeze({
@@ -169,10 +172,12 @@ export function createUrbanStreetDressing(options={}){
 
   const counts={vehiclePaint:0,vehicleWindows:0,vehicleTires:0,vehicleTrim:0,vehicleLights:0,vehicleArches:0,streetBoxes:0,streetCylinders:0,foliage:0,glass:0,flats:0};
   let density=config.density;
+  let lowDetail=String(options.quality?.profile??options.quality??'').toLowerCase()==='low';
   const entries=Array.from({length:slotCapacity},(_,i)=>({side:i%2===0?-1:1,z:0,generation:0}));
   const customEntries=(options.placements??[]).map((item,index)=>({descriptor:item,z:Number(item?.position?.z??item?.z??0)||0,index,generation:0}));
 
   function push(name,transform,color=null){
+    if(lowDetail&&LOW_OMITTED_BATCHES.has(name))return false;
     const mesh=meshes[name],index=counts[name];
     if(!mesh||index>=mesh.instanceMatrix.count)return false;
     setMatrix(mesh,index,transform);if(color!=null)setColor(mesh,index,color);counts[name]=index+1;return true;
@@ -448,20 +453,30 @@ export function createUrbanStreetDressing(options={}){
     for(const e of customEntries)advance(e,dz,config.recycleNear,config.farZ);
     refresh();
   }
-  function setDensity(value){density=densityFromQuality(value);refresh();return getDiagnostics();}
+  function setDensity(value){
+    density=densityFromQuality(value);
+    lowDetail=String(value?.profile??value??'').toLowerCase()==='low';
+    for(const name of LOW_OMITTED_BATCHES){
+      const mesh=meshes[name];
+      if(lowDetail)mesh.removeFromParent();
+      else if(mesh.parent!==group)group.add(mesh);
+    }
+    refresh();
+    return getDiagnostics();
+  }
   function getDiagnostics(){
     const active=Object.values(counts).reduce((sum,value)=>sum+value,0);
     const allocated=Object.values(meshes).reduce((sum,mesh)=>sum+(mesh.instanceMatrix?.count||0),0);
     const activeSlots=entries.reduce((sum,e)=>sum+(e.densityGate<=density?1:0),0);
     const zoneCounts=Object.fromEntries(ZONES.map(zone=>[zone,0]));
     for(const e of entries)if(e.densityGate<=density)zoneCounts[e.zone]=(zoneCounts[e.zone]||0)+1;
-    return {name:'street-dressing',logical:activeSlots+customEntries.length,instances:active,allocatedInstances:allocated,drawCalls:Object.keys(meshes).length,realtimeLights:0,customPlacements:customEntries.length,zones:zoneCounts};
+    return {name:'street-dressing',logical:activeSlots+customEntries.length,instances:active,allocatedInstances:allocated,drawCalls:group.children.length,realtimeLights:0,customPlacements:customEntries.length,zones:zoneCounts};
   }
   function dispose(){
     group.removeFromParent();for(const mesh of Object.values(meshes))mesh.removeFromParent();
     for(const geometry of [boxGeometry,cylinderGeometry,wheelGeometry,foliageGeometry,archGeometry,planeGeometry])geometry.dispose();
     if(owned)materials.dispose?.();
   }
-  reset();options.parent?.add?.(group);
+  reset();setDensity(options.quality??options.density??'high');options.parent?.add?.(group);
   return {group,meshes,materials,update,reset,setDensity,getDiagnostics,dispose};
 }

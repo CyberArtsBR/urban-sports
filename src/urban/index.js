@@ -53,3 +53,5 @@ export {
 export {
   createUrbanBuildingSkyline
 } from './urbanBuildings.js';
+
+export {createUrbanAtmosphere} from './urbanAtmosphere.js';

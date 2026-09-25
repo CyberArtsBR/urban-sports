@@ -53,6 +53,8 @@ import {createGlobalListenerScope} from './globalListeners.js';
 import {createRiderController} from './riderController.js';
 import {createRuntimeDiagnostics} from './runtimeDiagnostics.js';
 import {createImpactVfx} from './impactVfx.js';
+import {createSkateVfx} from './skateVfx.js';
+import {createBananaPowerVfxState} from './bananaPowerVfx.js';
 
 const userPreferences=loadUserPreferences();
 
@@ -430,6 +432,16 @@ let trailTimer=0;
 const player=new THREE.Group();scene.add(player);
 player.position.set(0,.12,2.2);
 const impactVfx=createImpactVfx({scene,capacity:224});
+const skateVfx=createSkateVfx({
+  scene,
+  capacity:256,
+  quality:quality.active,
+  reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
+});
+const bananaPowerVfx=createBananaPowerVfxState({
+  reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
+});
+let skateContactVfxTimer=0;
 
 // Banana Power is displayed directly on the rider equipment as emissive LED light.
 const trickVisualPivot=new THREE.Group();
@@ -460,7 +472,7 @@ const runtimeListeners=createGlobalListenerScope();
 
 const audio=createSkiAudio();
 const mountainWeather=createMountainWeather({app,scene,camera,renderer,environment,audio});
-audio.setRideMode?.(selectedRideMode);
+audio.setRideMode?.(selectedSportMode);
 const haptics=createHaptics({enabled:userPreferences.haptics});
 const ui=createGameUI({
   audio,
@@ -503,6 +515,9 @@ function cycleCameraView(){
 function setCameraMotion(mode,{persist=true,announce=false}={}){
   cameraMotionMode=CAMERA_MOTION_ORDER.includes(mode)?mode:CAMERA_MOTION.FULL;
   applyCameraMotionPreference(cameraMotionMode);
+  const reduceVfx=cameraMotionMode===CAMERA_MOTION.REDUCED;
+  skateVfx.setReducedMotion?.(reduceVfx);
+  bananaPowerVfx.setReducedMotion?.(reduceVfx);
   ui.setCameraMotionMode?.(cameraMotionMode);
   if(persist)saveCameraMotionPreference(cameraMotionMode);
   if(announce)ui.showCameraMotion?.(cameraMotionMode);
@@ -520,18 +535,28 @@ const bananaPower=createBananaPowerSystem({
   bulletTimeScale:BANANA_BULLET_TIME_SCALE,
   canActivate:()=>state.mode==='playing',
   onReady:()=>{
+    bananaPowerVfx.markReady();
     audio.playBananaReady?.();
     haptics.bananaReady?.();
     ui.showBananaPowerReady?.();
   },
   onActivated:()=>{
     state.bananaPowerUses=(state.bananaPowerUses||0)+1;
+    bananaPowerVfx.start();
+    skateVfx.emitBananaPower({
+      x:state.x,
+      y:player.position.y+.12,
+      z:player.position.z,
+      intensity:1,
+      speed:state.speed
+    });
     document.body.classList.add('banana-power-active','bullet-time-active');
     audio.playBananaPowerActivate?.();
     haptics.bananaPowerActivate?.();
     ui.showBananaPowerActivated?.();
   },
   onDeactivated:({silent=false}={})=>{
+    bananaPowerVfx.end();
     document.body.classList.remove('banana-power-active','bullet-time-active');
     if(!silent&&state.mode==='playing'){
       audio.playBananaPowerEnd?.();
@@ -549,7 +574,9 @@ const getRuntimeDiagnostics=createRuntimeDiagnostics({
 });
 function updateBananaPowerVisual(time=0){
   const charged=state.specialReady||state.specialActiveTime>0;
-  riderController.rider?.userData?.setPowerGlow?.(charged?1:0,time);
+  const bananaStyle=bananaPowerVfx.getStyle();
+  const glow=Math.max(charged?.16:0,bananaStyle.emission||0);
+  riderController.rider?.userData?.setPowerGlow?.(glow,time);
 }
 
 // Integration bridge: one authoritative quality profile drives every scalable subsystem.
@@ -578,6 +605,8 @@ ui.configureSettings?.({
 function applyRuntimeQuality(settings=quality.getSettings()){
   environment.applyQuality?.(settings);
   urbanEnvironment.setQualityProfile?.(settings);
+  skateVfx.setQuality?.(quality.active);
+  audio.setAudioQualityProfile?.(quality.active);
 }
 const unsubscribeRuntimeQuality=quality.subscribe(applyRuntimeQuality,{immediate:true});
 
@@ -749,7 +778,7 @@ async function setAvatar(entry,rideMode=selectedRideMode){
     selectedRideMode=nextRideMode;
     saveRideModePreference(selectedRideMode);
     if(!entry.localOnly)saveAvatarPreference(entry.name);
-    audio.setRideMode?.(selectedRideMode);
+    audio.setRideMode?.(selectedSportMode);
     riderController.setRideMode(selectedRideMode);
     applyRideProfileToState(selectedRideMode,{resetSpeed:state.mode==='menu'});
     syncRideModePresentation();
@@ -782,7 +811,7 @@ async function setAvatar(entry,rideMode=selectedRideMode){
     selectedRideMode=nextRideMode;
     saveRideModePreference(selectedRideMode);
     if(!entry.localOnly)saveAvatarPreference(entry.name);
-    audio.setRideMode?.(selectedRideMode);
+    audio.setRideMode?.(selectedSportMode);
     riderController.setRideMode(selectedRideMode);
     applyRideProfileToState(selectedRideMode,{resetSpeed:state.mode==='menu'});
     ui.setAvatar(entry);
@@ -877,7 +906,7 @@ function resetRunState(){
   state.runSeed=createRunSeed();
   bananaPower.reset();
   riderController.setRideMode(state.rideMode);
-  audio.setRideMode?.(state.rideMode);
+  audio.setRideMode?.(selectedSportMode);
   resetAirborneScoring(state);
   resetTrickScoring(state);
   tricks.reset();
@@ -885,6 +914,9 @@ function resetRunState(){
   haptics.reset?.();
   player.position.set(0,.12,2.2);resetPlayerOrientation(player);
   state.crashActive=false;state.crashMotion=null;state.crashTime=0;pendingCrashResults=null;impactVfx.reset();
+  skateVfx.reset();
+  bananaPowerVfx.reset();
+  skateContactVfxTimer=0;
   startCountdownStarted=false;
   startCrowd.reset();startGate.reset();
   trailTimer=0;skiTrails.reset();
@@ -1243,6 +1275,14 @@ function update(dt,frameMs=dt*1000){
         if(landingFeedback?.quality==='clean')state.cleanLandings=(state.cleanLandings||0)+1;
         if(landingFeedback?.dramatic&&landingFeedback?.quality!=='hard')state.strongLandings=(state.strongLandings||0)+1;
         haptics.land(landingFeedback?.hapticStrength??Math.min(1,(Number(landing.impact)||0)/18),landing.quality);
+        skateVfx.emitLanding({
+          x:state.x,
+          y:groundY+.03,
+          z:player.position.z,
+          force:Math.min(1,(Number(landing.impact)||0)/18),
+          speed:state.speed,
+          powered:bananaPower.active
+        });
       }
     }
 
@@ -1275,7 +1315,8 @@ function update(dt,frameMs=dt*1000){
           edge:state.edge,
           spacing:riderController.trackSpacing??.245,
           skis:riderController.trailContacts,
-          rideMode:state.rideMode
+          rideMode:state.rideMode,
+          powered:bananaPower.active
         });
         const trailQualityScale=quality.active==='low'?1.65:quality.active==='medium'?1.28:1;
         trailTimer=Math.max(.012,.027-state.speed*.00018)*trailQualityScale;
@@ -1472,6 +1513,29 @@ function update(dt,frameMs=dt*1000){
     asphalt.clearcoatRoughness=THREE.MathUtils.lerp(.28,.12,wet);
     asphalt.envMapIntensity=THREE.MathUtils.lerp(.20,.65,wet);
   }
+  audio.updateSkateState?.({
+    wetness:wet,
+    surface:wet>.08?'wet_asphalt':'dry_asphalt'
+  });
+  skateVfx.update(environmentDt,worldSpeed);
+  bananaPowerVfx.update(environmentDt);
+  if(state.mode==='playing'&&!state.air){
+    skateContactVfxTimer-=environmentDt;
+    if(skateContactVfxTimer<=0){
+      skateVfx.emitWheelContact({
+        x:state.x,
+        y:.12+state.centerGround+.025,
+        z:player.position.z,
+        wetness:wet,
+        edge:state.edge,
+        speed:state.speed,
+        powered:bananaPower.active
+      });
+      skateContactVfxTimer=quality.active==='low'?.18:quality.active==='medium'?.12:.075;
+    }
+  }else{
+    skateContactVfxTimer=0;
+  }
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 
@@ -1507,6 +1571,8 @@ function update(dt,frameMs=dt*1000){
     groundRoll:state.groundRoll,
     groundPitch:state.groundPitch,
     landingGripLoss:state.landingGripLoss,
+    wetness:wet,
+    surface:wet>.08?'wet_asphalt':'dry_asphalt',
     air:state.air,
     intensity:state.difficulty,
     jumpSource:state.jumpSource,

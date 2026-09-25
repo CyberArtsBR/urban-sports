@@ -4,14 +4,16 @@ import {chromium} from '@playwright/test';
 import {analyzeGraphicsStability,evaluateGraphicsBudget,normalizeGraphicsBudgetProfile} from '../src/graphicsDiagnostics.js';
 
 const BASE_URL=process.env.BASE_URL||'http://127.0.0.1:4173';
-const QUALITY_PROFILE=normalizeGraphicsBudgetProfile(process.env.QUALITY_PROFILE||'high');
+const REQUESTED_QUALITY_PROFILE=String(process.env.QUALITY_PROFILE||'high').trim().toLowerCase();
+assert(['low','medium','high','max'].includes(REQUESTED_QUALITY_PROFILE),'QUALITY_PROFILE must be low, medium, high or max');
+const BUDGET_PROFILE=normalizeGraphicsBudgetProfile(REQUESTED_QUALITY_PROFILE);
 const SAMPLE_SECONDS=Math.max(6,Math.min(120,Number(process.env.GRAPHICS_SAMPLE_SECONDS)||18));
 const SAMPLE_INTERVAL_MS=Math.max(250,Math.min(5000,Number(process.env.GRAPHICS_SAMPLE_INTERVAL_MS)||1000));
 
 function targetUrl(){
   const url=new URL(BASE_URL);
   url.searchParams.set('test','1');
-  url.searchParams.set('quality',QUALITY_PROFILE);
+  url.searchParams.set('quality',REQUESTED_QUALITY_PROFILE);
   return url.toString();
 }
 
@@ -125,8 +127,8 @@ try{
   while(Date.now()<deadline){
     const sample=await diagnostics(page);
     assert(sample,'runtime diagnostics unavailable during graphics audit');
-    const budget=evaluateGraphicsBudget(sample,QUALITY_PROFILE);
-    assert(budget.ok,`${QUALITY_PROFILE} graphics budget exceeded: ${JSON.stringify(budget.violations)}`);
+    const budget=evaluateGraphicsBudget(sample,BUDGET_PROFILE);
+    assert(budget.ok,`${REQUESTED_QUALITY_PROFILE} graphics budget exceeded: ${JSON.stringify(budget.violations)}`);
     samples.push({...sample,t:Date.now()});
     await page.waitForTimeout(Math.min(SAMPLE_INTERVAL_MS,Math.max(0,deadline-Date.now())));
   }
@@ -155,8 +157,8 @@ try{
 
     await page.waitForTimeout(1500);
     const afterRestart=await diagnostics(page);
-    const afterRestartBudget=evaluateGraphicsBudget(afterRestart,QUALITY_PROFILE);
-    assert(afterRestartBudget.ok,`restart ${cycle} exceeded ${QUALITY_PROFILE} graphics budget: ${JSON.stringify(afterRestartBudget.violations)}`);
+    const afterRestartBudget=evaluateGraphicsBudget(afterRestart,BUDGET_PROFILE);
+    assert(afterRestartBudget.ok,`restart ${cycle} exceeded ${REQUESTED_QUALITY_PROFILE} graphics budget: ${JSON.stringify(afterRestartBudget.violations)}`);
     restartSamples.push({...afterRestart,t:Date.now(),restartCycle:cycle});
   }
 
@@ -175,7 +177,8 @@ try{
 
   console.log(JSON.stringify({
     check:'aaa-urban-graphics-browser',
-    profile:QUALITY_PROFILE,
+    profile:REQUESTED_QUALITY_PROFILE,
+    budgetProfile:BUDGET_PROFILE,
     sampleSeconds:SAMPLE_SECONDS,
     selection,
     sampleCount:samples.length,

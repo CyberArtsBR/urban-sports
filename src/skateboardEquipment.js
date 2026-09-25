@@ -152,9 +152,9 @@ function createTruck({z,front,materials,track=DEFAULTS.truckTrack,wheelRadius=DE
   riser.position.y=-.033;
   pivot.add(riser);
 
-  const kingpin=makeCylinder(.027,.18,materials.hardware,14);
-  kingpin.rotation.z=0;
-  kingpin.rotation.x=Math.PI*.5;
+  const kingpin=new THREE.Mesh(new THREE.CylinderGeometry(.027,.027,.18,14),materials.hardware);
+  kingpin.name='truck-kingpin';
+  kingpin.rotation.x=(front?-1:1)*.18;
   kingpin.position.set(0,-.105,.014*(front?-1:1));
   pivot.add(kingpin);
 

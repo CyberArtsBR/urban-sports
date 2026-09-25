@@ -3,6 +3,8 @@ import {readFileSync} from 'node:fs';
 
 const source=readFileSync(new URL('../scripts/smoke-ski-production.mjs',import.meta.url),'utf8');
 const urlContract=readFileSync(new URL('../scripts/production-url.mjs',import.meta.url),'utf8');
+const productionBrowser=readFileSync(new URL('./production-browser.mjs',import.meta.url),'utf8');
+const productionWorkflow=readFileSync(new URL('../.github/workflows/production-audit.yml',import.meta.url),'utf8');
 const has=(text,message)=>assert(source.includes(text),message);
 
 has('resolveProductionUrl','smoke runner must use shared production URL resolver');
@@ -35,6 +37,13 @@ has('activeRamp','restart stale-ramp coverage is missing');
 has('CLEAN LANDING','legacy landing presentation guard is missing');
 has('NETWORK ERROR SUMMARY','network summary is missing');
 
+assert(productionBrowser.includes('CHIMPIONS_URBAN_SPORTS_EXPECTED_COMMIT'),'production browser audit must verify the Urban Sports deploy revision');
+assert(productionBrowser.includes('chimpionsUrbanSports'),'production browser audit must prefer the Urban Sports diagnostics alias');
+assert(productionBrowser.includes("state.sportMode,'skateboard'"),'production browser audit must guard Skateboard as the production sport');
+assert(productionWorkflow.includes('name: Chimpions Urban Sports production desktop audit'),'production audit workflow must carry Urban Sports identity');
+assert(productionWorkflow.includes('workflows: ["Chimpions Urban Sports build and checks"]'),'production audit workflow must trigger from the actual Urban Sports build workflow');
+assert(productionWorkflow.includes('CHIMPIONS_URBAN_SPORTS_EXPECTED_COMMIT'),'production audit workflow must pass the expected deployed revision');
+
 assert(!/gh[pousr]_[A-Za-z0-9_]{20,}/.test(source),'hardcoded GitHub-like credential detected');
 assert(!/AKIA[0-9A-Z]{16}/.test(source),'hardcoded AWS access key pattern detected');
 assert(!/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(source),'hardcoded private key detected');
@@ -46,6 +55,6 @@ assert(!/mcp__GitHub__merge_pull_request/.test(source),'smoke runner must not me
 console.log(JSON.stringify({
   check:'public-smoke-harness-invariants',
   supports:{productionUrl:true,baseUrl:true,strict:true,json:true,screenshot:true},
-  coverage:{page:true,startScreen:true,selector:true,rideModes:true,tricks:true,audio:true,course:true,restart:true},
+  coverage:{page:true,startScreen:true,selector:true,rideModes:true,tricks:true,audio:true,course:true,restart:true,productionRevision:true},
   safe:{credentials:false,repoMutation:false,deploy:false,merge:false}
 }));

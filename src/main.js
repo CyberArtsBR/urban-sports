@@ -37,7 +37,8 @@ import {createTrickSystem} from './trickSystem.js';
 import {announceTrickStart,resetTrickScoring,scoreTrickCompletion,scoreTrickFailure} from './trickScoring.js';
 import {createHaptics} from './haptics.js';
 import {RIDE_MODE,getRideProfile,normalizeRideMode,speedToKmh} from './rideMode.js';
-import {SPORT_MODE,getSportProfile,getLegacyRideModeForSport} from './sportMode.js';
+import {SPORT_MODE,getSportProfile,getLegacyRideModeForSport,normalizeSportMode} from './sportMode.js';
+import {GAME_IDENTITY} from './gameIdentity.js';
 import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} from './playerOrientation.js';
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
@@ -171,7 +172,7 @@ composer.addPass(new OutputPass());
 applyBloomQuality();
 
 const world=new THREE.Group();scene.add(world);
-const environment=createSkiEnvironment({scene,world,renderer,camera,mode:'urban'});
+const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
 const urbanEnvironment=createUrbanEnvironment({
   parent:world,
   renderer,
@@ -437,7 +438,7 @@ let startCountdownStarted=false;
 let catalog=[],selectedAvatar=null,selector=null,ready=false;
 let selectorReady=false;
 let avatarCommitted=false;
-let selectedSportMode=SPORT_MODE.SKATEBOARD;
+let selectedSportMode=normalizeSportMode(GAME_IDENTITY.defaultSport||SPORT_MODE.SKATEBOARD);
 let selectedRideMode=getLegacyRideModeForSport(selectedSportMode);
 let initialSelectionFlow=false;
 const initialRideProfile=getRideProfile(selectedRideMode);

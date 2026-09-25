@@ -48,12 +48,12 @@ const environment=createUrbanEnvironment({
   quality:'max',
   district:'downtown',
   seed:'final-aaa-city-assets',
-  roadWidth:27.5,
-  sidewalkWidth:3.2,
+  roadWidth:13.5,
+  sidewalkWidth:3.1,
   segmentLength:28,
-  segmentCount:20,
-  recycleNear:36,
-  farZ:-520
+  segmentCount:18,
+  recycleNear:34,
+  farZ:-470
 });
 
 const initial=inventory(environment.group);

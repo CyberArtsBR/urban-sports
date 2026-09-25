@@ -7,9 +7,9 @@ const QUALITY_FACTORS=Object.freeze({
   low:Object.freeze({realLights:0,pools:.42,emissive:.62})
 });
 
-const DAY_ROAD=new THREE.Color(0x43494f);
-const NIGHT_ROAD=new THREE.Color(0x242c34);
-const WET_ROAD=new THREE.Color(0x172630);
+const DAY_ROAD=new THREE.Color(0xc2c5c7);
+const NIGHT_ROAD=new THREE.Color(0x777f86);
+const WET_ROAD=new THREE.Color(0x8a9094);
 const DAY_SIDEWALK=new THREE.Color(0xaaa9a5);
 const NIGHT_SIDEWALK=new THREE.Color(0x69747f);
 const DAY_BUILDING=new THREE.Color(0x6e7984);
@@ -116,13 +116,14 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
     }
 
     renderer.toneMappingExposure=1.01+night*.025-wet*.012+flash*.012;
-    scene.environmentIntensity=.48+wet*.62-night*.12;
+    scene.environmentIntensity=.46+wet*.24-night*.10;
 
     if(materials.asphalt){
-      _roadColor.copy(DAY_ROAD).lerp(NIGHT_ROAD,night).lerp(WET_ROAD,wet*.18);
+      _roadColor.copy(DAY_ROAD).lerp(NIGHT_ROAD,night).lerp(WET_ROAD,wet*.26);
       setStandardColor(materials.asphalt,_roadColor);
-      materials.asphalt.metalness=.025+wet*.035;
-      materials.asphalt.envMapIntensity=.28+wet*.92+night*.10;
+      materials.asphalt.roughness=.96-wet*.08;
+      materials.asphalt.metalness=0;
+      materials.asphalt.envMapIntensity=.10+wet*.24+night*.04;
     }
     if(materials.sidewalk){
       _sidewalkColor.copy(DAY_SIDEWALK).lerp(NIGHT_SIDEWALK,night*.88);
@@ -153,7 +154,7 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
     }
     if(materials.pool){
       materials.pool.color.copy(LAMP_COLOR);
-      materials.pool.opacity=(night*.12+wet*.065)*qualityFactors.pools;
+      materials.pool.opacity=(night*.032+wet*.012)*qualityFactors.pools;
       materials.pool.visible=materials.pool.opacity>.004;
     }
 

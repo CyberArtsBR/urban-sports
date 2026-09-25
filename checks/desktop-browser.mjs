@@ -26,6 +26,17 @@ async function assertElementWithinViewport(locator,label){
   assert(box.bottom<=box.viewportHeight+1,label+' clips past viewport height');
 }
 
+async function waitForPageState(targetPage,label,read,accept,{timeout=30000,interval=150}={}){
+  const deadline=Date.now()+timeout;
+  let lastValue;
+  while(Date.now()<deadline){
+    lastValue=await targetPage.evaluate(read);
+    if(accept(lastValue))return lastValue;
+    await new Promise(resolve=>setTimeout(resolve,interval));
+  }
+  throw new Error(label+' timed out; last='+JSON.stringify(lastValue));
+}
+
 const browserErrors=[];
 page.on('pageerror',error=>{
   const message='PAGEERROR '+(error?.stack||error?.message||String(error));
@@ -93,7 +104,7 @@ try{
   assert.equal(still?.distance??0,before?.distance??0,'Gameplay advanced behind start artwork');
   assert.equal(still?.travel??0,before?.travel??0,'World travel advanced behind start artwork');
 
-  await page.waitForFunction(()=>window.chimpionsSki?.().ready,null,{timeout:30000});
+  await waitForPageState(page,'desktop runtime ready',()=>window.chimpionsSki?.().ready===true,Boolean,{timeout:30000});
   const state=await page.evaluate(()=>window.chimpionsSki());
   assert.equal(state.catalogSize,10,'Desktop build must expose exactly 10 built-in Chimpions');
   assert.equal(state.mode,'menu');
@@ -136,29 +147,57 @@ try{
 
   const skiChoice=selector.locator('.ride-mode-card[data-ride-mode="ski"]');
   await skiChoice.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
+  await waitForPageState(page,'ride-mode focus',()=>document.activeElement?.classList?.contains('ride-mode-card')===true,Boolean,{timeout:5000});
   await assertElementWithinViewport(selector,'ride selector');
   await assertElementWithinViewport(skiChoice,'ski choice');
   await assertElementWithinViewport(selector.locator('.ride-mode-back'),'ride back');
 
   await page.keyboard.press('Escape');
-  await page.waitForFunction(()=>document.activeElement?.classList?.contains('chimpion-card'));
+  await waitForPageState(page,'Chimpion-card focus',()=>document.activeElement?.classList?.contains('chimpion-card')===true,Boolean,{timeout:5000});
   assert.equal(await selector.locator('#ride-mode-step').isHidden(),true,'Escape/B-style cancel did not return ride selection to avatars');
   await page.keyboard.press('Enter');
   await skiChoice.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
+  await waitForPageState(page,'ride-mode focus',()=>document.activeElement?.classList?.contains('ride-mode-card')===true,Boolean,{timeout:5000});
   // Focus/navigation semantics were already verified above. Trigger the actual
   // button handler through DOM click so headless SwiftShader does not make this
   // release smoke depend on pointer hit-testing or transition stability.
   await skiChoice.evaluate(button=>button.click());
 
-  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
+  await waitForPageState(page,'selector close',()=>!document.querySelector('#chimpion-selector')?.open,Boolean,{timeout:60000});
   const sessionTutorial=page.locator('.session-tutorial:not([hidden])');
+  // beginRun() is scheduled after the selector closes, so the first-session
+  // tutorial may become visible a tick after the dialog-close condition. Wait
+  // for the run flow to declare its next state before deciding whether to
+  // dismiss the tutorial; a one-shot isVisible() here is racy in headless CI.
+  await waitForPageState(page,'post-selection run flow',()=>({
+    tutorialVisible:!!document.querySelector('.session-tutorial:not([hidden])'),
+    mode:window.chimpionsSki?.().mode||''
+  }),value=>value.tutorialVisible||value.mode==='countdown'||value.mode==='playing',{timeout:15000});
   if(await sessionTutorial.isVisible().catch(()=>false)){
     await page.keyboard.press('Enter');
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:15000});
+  try{
+    await waitForPageState(page,'desktop run playing',()=>window.chimpionsSki?.().mode||'',value=>value==='playing',{timeout:30000});
+  }catch(error){
+    const flowDiagnostic=await page.evaluate(()=>({
+      runtime:window.chimpionsSki?.()||null,
+      tutorialVisible:!!document.querySelector('.session-tutorial:not([hidden])'),
+      selectorOpen:!!document.querySelector('#chimpion-selector')?.open,
+      startScreenVisible:!!document.querySelector('.start-screen')&&!document.querySelector('.start-screen')?.hidden
+    }));
+    throw new Error('Run did not reach playing state: '+JSON.stringify({
+      mode:flowDiagnostic.runtime?.mode,
+      gameFlow:flowDiagnostic.runtime?.gameFlow,
+      ready:flowDiagnostic.runtime?.ready,
+      avatarCommitted:flowDiagnostic.runtime?.avatarCommitted,
+      startCameraPhase:flowDiagnostic.runtime?.startCameraPhase,
+      startCountdownStarted:flowDiagnostic.runtime?.startCountdownStarted,
+      tutorialVisible:flowDiagnostic.tutorialVisible,
+      selectorOpen:flowDiagnostic.selectorOpen,
+      startScreenVisible:flowDiagnostic.startScreenVisible
+    }),{cause:error});
+  }
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 
@@ -177,7 +216,7 @@ try{
   await page.keyboard.press('Escape');
   const pauseOverlay=page.locator('#pause-overlay');
   await pauseOverlay.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.id==='resume-game');
+  await waitForPageState(page,'pause default focus',()=>document.activeElement?.id||'',value=>value==='resume-game',{timeout:5000});
   assert.equal(await page.locator('#resume-game.is-menu-selected').count(),1,'Pause default focus is not visibly selected');
 
   for(const viewport of responsiveViewports){
@@ -232,7 +271,7 @@ try{
 
   const settingsOverlay=page.locator('#settings-overlay');
   await settingsOverlay.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.id==='settings-close');
+  await waitForPageState(page,'settings default focus',()=>document.activeElement?.id||'',value=>value==='settings-close',{timeout:5000});
   assert.equal(await page.locator('#settings-close.is-menu-selected').count(),1,'Settings default focus is not visibly selected');
 
   for(const viewport of responsiveViewports){
@@ -259,7 +298,7 @@ try{
   const cameraMotionButton=page.locator('#camera-motion');
   await cameraMotionButton.evaluate(button=>button.click()); // AUTO -> FULL
   await cameraMotionButton.evaluate(button=>button.click()); // FULL -> REDUCED
-  await page.waitForFunction(()=>document.documentElement.dataset.cameraMotion==='reduced');
+  await waitForPageState(page,'reduced camera-motion state',()=>document.documentElement.dataset.cameraMotion||'',value=>value==='reduced',{timeout:5000});
   const explicitReduced=await settingsOverlay.locator('.settings-card').evaluate(element=>({
     animation:getComputedStyle(element).animationName,
     transition:getComputedStyle(element).transitionDuration
@@ -300,7 +339,7 @@ try{
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'give-up-pause','NO did not restore pause focus');
 
   await page.keyboard.press('Escape');
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:5000});
+  await waitForPageState(page,'desktop resume playing',()=>window.chimpionsSki?.().mode||'',value=>value==='playing',{timeout:5000});
 
   // Release the active desktop WebGL page before creating a second mobile
   // renderer. Running both Three.js scenes concurrently under SwiftShader can
@@ -318,7 +357,7 @@ try{
   const touchPage=await touchContext.newPage();
   try{
     await touchPage.goto('http://127.0.0.1:4173/?test=1',{waitUntil:'domcontentloaded'});
-    await touchPage.waitForFunction(()=>window.chimpionsSki?.().ready===true,null,{timeout:30000});
+    await waitForPageState(touchPage,'touch runtime ready',()=>window.chimpionsSki?.().ready===true,Boolean,{timeout:30000});
     await touchPage.getByRole('button',{name:'Start Game'}).evaluate(button=>button.click());
     const touchSelector=touchPage.locator('#chimpion-selector');
     await touchSelector.waitFor({state:'visible',timeout:10000});
@@ -336,7 +375,7 @@ try{
       await touchPage.keyboard.press('Enter');
       await touchTutorial.waitFor({state:'hidden',timeout:5000});
     }
-    await touchPage.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:15000});
+    await waitForPageState(touchPage,'touch run playing',()=>window.chimpionsSki?.().mode||'',value=>value==='playing',{timeout:20000});
 
     const touchRoot=touchPage.locator('#touch-controls');
     assert.equal(await touchRoot.isVisible(),true,'Touch controls are not visible in coarse-pointer gameplay');
@@ -351,9 +390,9 @@ try{
     };
     await steerZone.dispatchEvent('pointerdown',steerDown);
     await steerZone.dispatchEvent('pointermove',{...steerDown,clientX:steerBox.x+steerBox.width*.88});
-    await touchPage.waitForFunction(()=>Math.abs(window.chimpionsSki?.().inputState?.touchSteer||0)>.25);
+    await waitForPageState(touchPage,'touch steer engage',()=>Math.abs(window.chimpionsSki?.().inputState?.touchSteer||0),value=>value>.25,{timeout:5000});
     await steerZone.dispatchEvent('pointercancel',{...steerDown,buttons:0});
-    await touchPage.waitForFunction(()=>Math.abs(window.chimpionsSki?.().inputState?.touchSteer||0)<.001);
+    await waitForPageState(touchPage,'touch steer release',()=>Math.abs(window.chimpionsSki?.().inputState?.touchSteer||0),value=>value<.001,{timeout:5000});
 
     const jumpButton=touchPage.locator('#touch-jump');
     assert.equal(await jumpButton.isVisible(),true,'Touch Jump button is not visible during mobile gameplay');
@@ -365,7 +404,7 @@ try{
     await touchPage.setViewportSize({width:896,height:414});
 
     await touchPage.locator('#touch-pause').dispatchEvent('pointerdown',{pointerId:43,pointerType:'touch',isPrimary:true,buttons:1});
-    await touchPage.waitForFunction(()=>window.chimpionsSki?.().mode==='paused',null,{timeout:5000});
+    await waitForPageState(touchPage,'touch pause mode',()=>window.chimpionsSki?.().mode||'',value=>value==='paused',{timeout:5000});
     const pausedTouch=await touchPage.evaluate(()=>window.chimpionsSki());
     assert(Math.abs(pausedTouch.inputState.touchSteer)<.001,'Pause left touch steering stuck');
     assert.equal(pausedTouch.inputState.touchJump,false,'Pause left touch jump stuck');

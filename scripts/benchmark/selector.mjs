@@ -2,24 +2,43 @@ import {frameMark,frameSummarySince,pending,round} from './core.mjs';
 
 export async function openSelector(page){
   const mark=await frameMark(page);
-  const opened=await page.evaluate(async()=>{
-    const button=document.querySelector('#choose');
-    if(!button||button.disabled)return {ok:false,reason:'Choose Chimpion control unavailable or disabled'};
-    const started=performance.now();
-    button.click();
-    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    return {ok:true,openTimeMs:performance.now()-started};
+  const started=Date.now();
+  const opened=await page.evaluate(()=>{
+    const dialog=document.querySelector('#chimpion-selector');
+    if(dialog?.open)return {ok:true,action:'already-open'};
+
+    const startScreen=document.querySelector('.start-screen');
+    const startPlay=startScreen?.querySelector('.start-screen-play');
+    const startVisible=!!startScreen&&!startScreen.hidden&&getComputedStyle(startScreen).display!=='none'&&getComputedStyle(startScreen).visibility!=='hidden';
+    if(startVisible&&startPlay&&!startPlay.disabled){
+      startPlay.click();
+      return {ok:true,action:'start-screen'};
+    }
+
+    const choose=document.querySelector('#choose');
+    if(choose&&!choose.disabled){
+      choose.click();
+      return {ok:true,action:'choose'};
+    }
+
+    return {ok:false,reason:'No enabled selector entry control is available'};
   });
   if(!opened.ok)return {status:'PENDING',reason:opened.reason};
+
   try{
-    await page.waitForFunction(()=>document.querySelector('#chimpion-selector')?.open===true,undefined,{timeout:5000});
+    await page.waitForFunction(()=>{
+      const dialog=document.querySelector('#chimpion-selector');
+      return !!dialog?.open&&!!dialog.querySelector('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])');
+    },undefined,{timeout:15000});
   }catch{
-    return pending('Choose control did not open #chimpion-selector');
+    return pending((opened.action||'selector entry')+' did not open a ready #chimpion-selector');
   }
+
   const dom=await selectorDomMetrics(page);
   const frames=await frameSummarySince(page,mark);
-  return {status:'PASS',openTimeMs:round(opened.openTimeMs,3),frames,...dom};
+  return {status:'PASS',action:opened.action,openTimeMs:round(Date.now()-started,3),frames,...dom};
 }
+
 export async function selectorDomMetrics(page){
   return page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
@@ -27,25 +46,28 @@ export async function selectorDomMetrics(page){
       selectorOpen:!!dialog?.open,
       selectorDomNodes:dialog?dialog.getElementsByTagName('*').length:0,
       cards:dialog?.querySelectorAll('.chimpion-card').length??0,
+      enabledBuiltInCards:dialog?.querySelectorAll('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])').length??0,
       images:dialog?.querySelectorAll('img').length??0,
       totalDomNodes:document.getElementsByTagName('*').length,
       imageUrls:dialog?Array.from(dialog.querySelectorAll('img')).map(img=>img.currentSrc||img.src).filter(Boolean):[]
     };
   });
 }
+
 export async function closeSelector(page){
   const state=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
     if(!dialog?.open)return {closed:true};
     const close=dialog.querySelector('.selector-close');
-    if(close){close.click();return {closed:true};}
+    if(close&&!close.disabled){close.click();return {closed:true};}
     dialog.close();
     return {closed:true};
   });
-  try{await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,undefined,{timeout:3000});}catch{}
+  try{await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,undefined,{timeout:5000});}catch{}
   const after=await selectorDomMetrics(page);
   return {...state,after};
 }
+
 export async function benchmarkSearch(page,terms){
   const results=[];
   for(const term of terms){
@@ -62,6 +84,7 @@ export async function benchmarkSearch(page,terms){
         term:searchTerm,
         updateTimeMs:performance.now()-started,
         cards:dialog?.querySelectorAll('.chimpion-card').length??0,
+        enabledBuiltInCards:dialog?.querySelectorAll('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])').length??0,
         images:dialog?.querySelectorAll('img').length??0,
         totalDomNodes:document.getElementsByTagName('*').length
       };
@@ -75,6 +98,7 @@ export async function benchmarkSearch(page,terms){
   });
   return results;
 }
+
 export async function benchmarkRepeatedSelector(page,iterations,portraitUrls){
   if(iterations<=0)return pending('SELECTOR_ITERATIONS=0');
   const cycles=[];
@@ -84,7 +108,17 @@ export async function benchmarkRepeatedSelector(page,iterations,portraitUrls){
     if(opened.status!=='PASS')return opened;
     for(const url of opened.imageUrls||[])portraitUrls.add(url);
     const closed=await closeSelector(page);
-    cycles.push({iteration:i+1,openTimeMs:opened.openTimeMs,cardsOpen:opened.cards,imagesOpen:opened.images,cardsClosed:closed.after.cards,imagesClosed:closed.after.images,totalDomNodesClosed:closed.after.totalDomNodes});
+    cycles.push({
+      iteration:i+1,
+      entryAction:opened.action,
+      openTimeMs:opened.openTimeMs,
+      cardsOpen:opened.cards,
+      enabledBuiltInCardsOpen:opened.enabledBuiltInCards,
+      imagesOpen:opened.images,
+      cardsClosed:closed.after.cards,
+      imagesClosed:closed.after.images,
+      totalDomNodesClosed:closed.after.totalDomNodes
+    });
   }
   return {
     status:'PASS',
@@ -94,4 +128,3 @@ export async function benchmarkRepeatedSelector(page,iterations,portraitUrls){
     maxClosedImages:Math.max(...cycles.map(item=>item.imagesClosed))
   };
 }
-

@@ -16,7 +16,7 @@
     "smoke:production": "node checks/production-smoke.mjs",
     "check:release": "npm run check && npm run build",
     "check:roster": "node checks/roster-bandwidth-invariants.mjs",
-    "check:urban": "node --check src/skateboardEquipment.js && node --check src/sportMode.js && node --check src/urban/urbanEnvironment.js && node --check src/urban/urbanMaterials.js && node --check src/urban/urbanObstacles.js && node checks/skateboard-equipment-invariants.mjs && node checks/sport-mode-invariants.mjs && node checks/urban-environment-invariants.mjs && node checks/urban-obstacles-invariants.mjs && node checks/urban-sports-regression-invariants.mjs"
+    "check:urban": "node --check src/skateboardEquipment.js && node --check src/sportMode.js && node --check src/urban/urbanEnvironment.js && node --check src/urban/urbanMaterials.js && node --check src/urban/urbanAtmosphere.js && node --check src/urban/urbanObstacles.js && node checks/skateboard-equipment-invariants.mjs && node checks/sport-mode-invariants.mjs && node checks/urban-environment-invariants.mjs && node checks/urban-atmosphere-invariants.mjs && node checks/urban-obstacles-invariants.mjs && node checks/urban-sports-regression-invariants.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

@@ -167,7 +167,27 @@ try{
     await page.keyboard.press('Enter');
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
+  try{
+    await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
+  }catch(error){
+    const flowDiagnostic=await page.evaluate(()=>({
+      runtime:window.chimpionsSki?.()||null,
+      tutorialVisible:!!document.querySelector('.session-tutorial:not([hidden])'),
+      selectorOpen:!!document.querySelector('#chimpion-selector')?.open,
+      startScreenVisible:!!document.querySelector('.start-screen')&&!document.querySelector('.start-screen')?.hidden
+    }));
+    throw new Error('Run did not reach playing state: '+JSON.stringify({
+      mode:flowDiagnostic.runtime?.mode,
+      gameFlow:flowDiagnostic.runtime?.gameFlow,
+      ready:flowDiagnostic.runtime?.ready,
+      avatarCommitted:flowDiagnostic.runtime?.avatarCommitted,
+      startCameraPhase:flowDiagnostic.runtime?.startCameraPhase,
+      startCountdownStarted:flowDiagnostic.runtime?.startCountdownStarted,
+      tutorialVisible:flowDiagnostic.tutorialVisible,
+      selectorOpen:flowDiagnostic.selectorOpen,
+      startScreenVisible:flowDiagnostic.startScreenVisible
+    }),{cause:error});
+  }
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 

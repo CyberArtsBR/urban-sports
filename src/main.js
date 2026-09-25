@@ -17,7 +17,7 @@ import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
 import {progressSpeed,stepCarving,updateJumpAssist,tryManualJump,stepAir,launchRamp} from './skiPhysics.js';
-import {createGrindSystem,getSkateboardDisplaySpeedRange,getSkateboardGameplaySnapshot,launchSkateboardRamp,resetSkateboardState,skateboardDisplaySpeed,skateboardDisplaySpeedKmh,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
+import {consumeSkateboardEvents,createGrindSystem,emitSkateboardEvent,getSkateboardDisplaySpeedRange,getSkateboardGameplaySnapshot,launchSkateboardRamp,resetSkateboardState,skateboardDisplaySpeed,skateboardDisplaySpeedKmh,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
 import {createCourseDirector,getCourseDifficulty} from './course.js';
 import {terrainHeight,sampleSkiGround,displaceTerrainChunk,dampTerrainContact} from './terrainContact.js';
 import {createSkiCamera} from './skiCamera.js';
@@ -740,6 +740,7 @@ function audioTrickType(type){
 }
 
 function announceTrickAudio(event){
+  if(event&&selectedSportMode===SPORT_MODE.SKATEBOARD)emitSkateboardEvent(state,'trickStart',{trick:event.type,source:event.source||state.jumpSource||'air'});
   const type=audioTrickType(event?.type);
   if(!type||!event)return;
   audio.playTrickStart?.(type,event.id);
@@ -747,6 +748,7 @@ function announceTrickAudio(event){
 }
 
 function resolveTrickAudio(event){
+  if(event&&selectedSportMode===SPORT_MODE.SKATEBOARD)emitSkateboardEvent(state,event.success?'trickLand':'trickFail',{trick:event.type,points:event.points||0,combo:state.combo||0});
   const type=audioTrickType(event?.type);
   if(!type||!event)return;
   if(event.success){
@@ -967,7 +969,7 @@ async function beginRun(){
     audio.play('menu',.38);
     if(!gameFlow.enter(GAME_FLOW.COUNTDOWN,{reason:'begin-run'}))return false;
     resetRunState();
-    ui.prepareRun({best:state.best,speed:state.speed});
+    ui.prepareRun({best:state.best,speed:selectedSportMode===SPORT_MODE.SKATEBOARD?skateboardDisplaySpeed(state.speed,state.rideMode):state.speed});
     if(runtimeTestMode){
       // CI / browser audits use ?test=1. Keep production presentation intact
       // while making automated release gates deterministic and independent of
@@ -1264,12 +1266,20 @@ function update(dt,frameMs=dt*1000){
     }
 
     if(nativeSkateboard&&state.air&&!state.grinding&&tricks.getSnapshot().state==='NONE'){
-      const preferredGrind=actions.verticalIntent<-.5?'NOSEGRIND':actions.verticalIntent>.5?'5-0':Math.abs(steer)>.62?'BOARDSLIDE':'50-50';
+      const preferredGrind=actions.verticalIntent<-.5&&Math.abs(steer)>.62?'LIPSLIDE':actions.verticalIntent<-.5?'NOSEGRIND':actions.verticalIntent>.5?'5-0':Math.abs(steer)>.62?'BOARDSLIDE':'50-50';
       grindSystem.tryEnter(state,{playerZ:player.position.z,preferredTrick:preferredGrind,powered:bananaPower.active});
     }
 
     const landingSource=state.jumpSource;
     tricks.step(dt);
+    if(nativeSkateboard&&state.skate){
+      const activeTrick=tricks.getSnapshot();
+      if(activeTrick.state==='TRICK'){
+        if(activeTrick.type==='KICKFLIP')state.skate.animationState='kickflip';
+        else if(activeTrick.type==='HEELFLIP')state.skate.animationState='heelflip';
+        else if(activeTrick.type==='POP SHOVE-IT'||activeTrick.type==='FRONTSIDE SHOVE-IT'||activeTrick.type==='VARIAL FLIP'||activeTrick.type==='360 FLIP')state.skate.animationState='shoveit';
+      }
+    }
     const completedTrick=tricks.consumeCompletion();
     if(completedTrick){
       state.successfulTricks=(state.successfulTricks||0)+1;
@@ -1744,6 +1754,7 @@ window.chimpionsUrbanSports=window.chimpionsSki;
 window.chimpionsUrbanSports.registerGrindTarget=target=>grindSystem.register(target);
 window.chimpionsUrbanSports.unregisterGrindTarget=id=>grindSystem.unregister(id);
 window.chimpionsUrbanSports.getSkateboardGameplay=()=>getSkateboardGameplaySnapshot(state,grindSystem);
+window.chimpionsUrbanSports.pollSkateboardEvents=()=>consumeSkateboardEvents(state);
 
 
 if(import.meta.hot){

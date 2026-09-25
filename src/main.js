@@ -137,7 +137,7 @@ applyCameraMotionPreference();
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
-let composer=null,bloomPass=null,ssaoPass=null,composerPixelRatio=0;
+let composer=null,renderPass=null,bloomPass=null,ssaoPass=null,composerPixelRatio=0;
 
 function applyBloomQuality(){
   if(!bloomPass)return;
@@ -176,7 +176,8 @@ composer=new EffectComposer(renderer,postTarget);
 composerPixelRatio=renderer.getPixelRatio();
 composer.setPixelRatio(composerPixelRatio);
 composer.setSize(innerWidth,innerHeight);
-composer.addPass(new RenderPass(scene,camera));
+renderPass=new RenderPass(scene,camera);
+composer.addPass(renderPass);
 ssaoPass=new SSAOPass(scene,camera,innerWidth,innerHeight);
 ssaoPass.enabled=false;
 ssaoPass.kernelRadius=18;
@@ -658,10 +659,12 @@ function applyRenderingQuality(settings=quality.getSettings()){
   applyRiderShadowPolicy();
 
   if(ssaoPass){
-    ssaoPass.enabled=profile==='max'&&settings.contactAO!==false;
+    const aoEnabled=profile==='max'&&settings.contactAO!==false;
+    ssaoPass.enabled=aoEnabled;
     ssaoPass.kernelRadius=Math.max(8,Number(settings.aoKernelRadius)||18);
     ssaoPass.minDistance=.0025;
     ssaoPass.maxDistance=.12;
+    if(renderPass)renderPass.enabled=!aoEnabled;
   }
   applyBloomQuality();
 }

@@ -59,7 +59,13 @@ for(const seed of seeds){
     totalMeters+=section.length;
 
     assert(COURSE_TYPES.includes(section.type),'unknown course section type');
-    const maxJumpLength=Math.ceil(62+estimateRampFlightEnvelope(T.MAX_SPEED).protectedEndDistance);
+    // Jump sections now include the protected flight envelope plus two readable
+    // post-landing decisions. Keep a hard streaming/safety ceiling, but derive
+    // it from the current authored geometry instead of the old Ski-only jump tail:
+    // 34m ramp lead-in + 18m first follow-up + up to 24m*1.22 reaction-scaled
+    // second gap + 14m tail, then the max-speed protected landing envelope.
+    const maxJumpFollowUp=34+18+24*1.22+14;
+    const maxJumpLength=Math.ceil(maxJumpFollowUp+estimateRampFlightEnvelope(T.MAX_SPEED).protectedEndDistance);
     const lengthBounds=getCourseSectionLengthBounds(section.type,{maxJumpLength});
     assert(
       section.length>=lengthBounds.min&&section.length<=lengthBounds.max,

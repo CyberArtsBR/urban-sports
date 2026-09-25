@@ -28,3 +28,20 @@ jobs:
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
           CHIMPIONS_URBAN_SPORTS_EXPECTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
         run: node checks/production-browser.mjs
+
+      - name: Run deployed gameplay release smoke
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        shell: bash
+        run: |
+          BASE_URL="${PRODUCTION_URL:-https://chimpions-urban-sports.onrender.com}" npm run smoke:production
+
+      - name: Audit deployed MAX graphics profile
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          QUALITY_PROFILE: max
+          GRAPHICS_SAMPLE_SECONDS: "18"
+          GRAPHICS_SAMPLE_INTERVAL_MS: "1000"
+        shell: bash
+        run: |
+          BASE_URL="${PRODUCTION_URL:-https://chimpions-urban-sports.onrender.com}" npm run audit:graphics

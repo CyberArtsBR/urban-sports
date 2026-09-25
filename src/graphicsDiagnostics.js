@@ -1,7 +1,9 @@
 const PROFILE_NAMES=Object.freeze(['low','medium','auto','high']);
 
 const LOW=Object.freeze({
-  rendererCalls:180,
+  // Full EffectComposer-frame telemetry is ~214 calls after LOW restarts.
+  // Keep meaningful headroom below MEDIUM while guarding against regressions.
+  rendererCalls:230,
   rendererTriangles:500000,
   rendererGeometries:256,
   rendererTextures:96,

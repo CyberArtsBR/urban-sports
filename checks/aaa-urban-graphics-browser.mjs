@@ -14,6 +14,7 @@ function targetUrl(){
   const url=new URL(BASE_URL);
   url.searchParams.set('test','1');
   url.searchParams.set('quality',REQUESTED_QUALITY_PROFILE);
+  url.searchParams.set('seed','aaa-graphics-'+REQUESTED_QUALITY_PROFILE);
   return url.toString();
 }
 

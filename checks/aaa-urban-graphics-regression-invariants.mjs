@@ -25,6 +25,8 @@ for(const metric of GRAPHICS_BUDGET_METRICS){
   }
 }
 assert.deepEqual(GRAPHICS_QUALITY_BUDGETS.auto,GRAPHICS_QUALITY_BUDGETS.medium,'AUTO/MEDIUM resource envelope must remain aligned');
+assert(GRAPHICS_QUALITY_BUDGETS.low.rendererCalls<GRAPHICS_QUALITY_BUDGETS.medium.rendererCalls,
+  'LOW must retain stricter composed-frame draw-call headroom than MEDIUM');
 
 const syntheticScene=new THREE.Scene();
 const box=new THREE.BoxGeometry(1,1,1);
@@ -188,7 +190,9 @@ for(const contract of optionalContracts){
 }
 
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
-assert(main.includes("captureGraphicsDiagnostics({renderer,scene,urbanEnvironment})"),'runtime diagnostics must expose graphics resource counts without touching the render loop');
+assert(main.includes("captureGraphicsDiagnostics({renderer,scene,urbanEnvironment})"),'runtime diagnostics must expose graphics resource counts');
+assert(main.includes('renderer.info.autoReset=false'),'EffectComposer diagnostics must aggregate all render passes');
+assert(main.includes('renderer.info.reset();\n  composer.render(dt);'),'renderer.info must reset once per frame immediately before composed rendering');
 
 console.log(JSON.stringify({
   check:'aaa-urban-graphics-regression-invariants',

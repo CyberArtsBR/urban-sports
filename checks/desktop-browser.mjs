@@ -156,19 +156,22 @@ try{
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   // beginRun is scheduled immediately after the async rider selection closes.
-  // Synchronize with either the one-time tutorial or the run state so this
-  // audit cannot race the tutorial being mounted one task after dialog.close().
+  // Synchronize with tutorial/countdown/playing and dismiss the tutorial through
+  // its real pointer capture path to avoid headless focus races.
   await page.waitForFunction(()=>{
     const tutorial=document.querySelector('.session-tutorial:not([hidden])');
-    const mode=window.chimpionsSki?.().mode;
-    return !!tutorial||mode==='countdown'||mode==='playing';
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return !!tutorial||d?.mode==='countdown'||d?.mode==='playing';
   },null,{timeout:20000});
   const sessionTutorial=page.locator('.session-tutorial:not([hidden])');
   if(await sessionTutorial.isVisible().catch(()=>false)){
-    await page.keyboard.press('Enter');
+    await page.mouse.click(24,24);
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
+  await page.waitForFunction(()=>{
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return d?.mode==='playing';
+  },null,{timeout:30000});
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 

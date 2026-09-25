@@ -3,7 +3,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {disposeAvatarObject} from './avatar-system.js';
 import {SKI_TUNING} from './gameplayTuning.js';
 import {RIDE_MODE,getRideSpeedFeel,normalizeRideMode} from './rideMode.js';
-import {createSnowboardEquipment} from './snowboardEquipment.js';
+import {createSkateboardEquipment} from './skateboardEquipment.js';
 import {AvatarCompatibilityError,assertAvatarPlayable,isCatalogAvatarUrl,resolveAvatarRig} from './avatarCompatibility.js';
 import {validateParsedLocalGlb} from './localAvatarUpload.js';
 
@@ -270,7 +270,7 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
     const ski=createStyledSki(fallbackSkiAssets);ski.position.set(side*.22,.12,.05);ski.rotation.y=side*.035;ski.userData.restPosition=ski.position.clone();equipmentRoot.add(ski);skis.push(ski);
     const pole=mesh(new THREE.CylinderGeometry(.018,.018,1.65,8),dark,equipmentRoot);pole.position.set(side*.58,.86,.15);pole.rotation.z=side*.18;pole.rotation.x=.18;poles.push(pole);
   }
-  const snowboard=createSnowboardEquipment({centerX:0,z:.04,boardY:.040,topColor:0x7a3ec5,stanceHalfLength:.24});
+  const snowboard=createSkateboardEquipment({centerX:0,z:.04,boardY:.185,deckColor:0x151a22,undersideColor:0x2b1464,accentColor:0xffd23f});
   riderVisual.add(snowboard.root);
   const setPowerGlow=createEquipmentPowerGlow(skis,snowboard);
 
@@ -283,8 +283,8 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
     equipmentRoot.visible=!snowboardMode;
     snowboard.root.visible=snowboardMode;
     root.userData.rideMode=currentRideMode;
-    root.userData.equipmentType=snowboardMode?'snowboard':'skis';
-    root.userData.poseMode=snowboardMode?'snowboard-side-stance':'ski-a-pose';
+    root.userData.equipmentType=snowboardMode?'skateboard':'skis';
+    root.userData.poseMode=snowboardMode?'skateboard-side-stance':'ski-a-pose';
     root.userData.trailContacts=snowboardMode?snowboard.trailContacts:skis;
     // Procedural fallback has no imported-model 180° carrier. Use the
     // opposite side rotation so its left leg is still the downhill/front foot.
@@ -349,6 +349,7 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
       board.rotation.z=mix(board.rotation.z,-pose.carve*.08+groundRoll*.16,.18);
       board.rotation.x=mix(board.rotation.x,ascent*.09*airScale+apex*.02-descent*.07*airScale-pose.landing*.025+groundPitch*.28,.18);
       board.position.y=mix(board.position.y,rest.y+pose.air*.025-pose.landing*.012,.18);
+      snowboard.updateMotion?.({dt,speed,lean:pose.carve*.52,steer:pose.carve,air,time});
     }else{
       skis.forEach((ski,index)=>{
         const side=index===0?-1:1;
@@ -757,16 +758,13 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
     skiEquipmentRoot.name='ski-equipment';
     riderVisual.add(skiEquipmentRoot);
     const skis=addSkiEquipment(skiEquipmentRoot,updateRig?.rig,placement);
-    const snowboard=createSnowboardEquipment({
+    const snowboard=createSkateboardEquipment({
       centerX:snowboardStance.placement.centerX,
       z:snowboardStance.placement.z,
-      boardY:snowboardStance.placement.y,
-      topColor:0x7b3fc7,
-      stanceHalfLength:snowboardStance.placement.stanceHalfLength,
-      leftBindingX:snowboardStance.placement.leftBindingX,
-      rightBindingX:snowboardStance.placement.rightBindingX,
-      leftBindingZ:snowboardStance.placement.leftBindingZ,
-      rightBindingZ:snowboardStance.placement.rightBindingZ
+      boardY:snowboardStance.placement.y+.145,
+      deckColor:0x151a22,
+      undersideColor:0x2b1464,
+      accentColor:0xffd23f
     });
     riderVisual.add(snowboard.root);
     const setPowerGlow=createEquipmentPowerGlow(skis,snowboard);
@@ -833,6 +831,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
         board.position.x=mix(board.position.x,rest.x,.18);
         board.position.y=mix(board.position.y,rest.y+air*.026-landing*.012-speed*.004,.18);
         board.position.z=mix(board.position.z,rest.z+air*.012,.18);
+        snowboard.updateMotion?.({dt,speed:state.speed??0,lean:carve*.52,steer:carve,air:!!state.air,time:state.time??0});
       }else{
         skis.forEach((ski,index)=>{
           const side=index===0?-1:1;

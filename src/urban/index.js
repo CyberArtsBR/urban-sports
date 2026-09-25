@@ -25,3 +25,5 @@ export {
   createUrbanRampObstacle,
   createUrbanOilHazard
 } from './urbanObstacles.js';
+
+export {createUrbanAtmosphere} from './urbanAtmosphere.js';

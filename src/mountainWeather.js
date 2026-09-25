@@ -5,6 +5,7 @@ import {createAlpineWeather} from './alpineWeather.js';
 import {createStaticEnvironment} from './weatherAssets.js';
 import {quality} from './renderQuality.js';
 import {saveQualityPreference} from './userPreferences.js';
+import {createUrbanAtmosphere} from './urban/urbanAtmosphere.js';
 const budgets={
   high:{snowCount:850,rainCount:1400,splashCount:64,mistCount:18,glow:1},
   max:{snowCount:1200,rainCount:2000,splashCount:96,mistCount:24,glow:1},
@@ -21,6 +22,7 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
   if(!sun.target.parent)scene.add(sun.target);
   scene.environment??=createStaticEnvironment(renderer);
   const rendererWeather=createAlpineWeather({scene,camera,renderer,sun,ambient,rim,settings:budgets[quality.active]||budgets.high});
+  const urbanAtmosphere=createUrbanAtmosphere({scene,renderer,ambient,rim,fill,quality:quality.active});
   const sceneMaterials=new Set();atmosphere.traverse(o=>{for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m?.color)sceneMaterials.add(m);});
   app.insertAdjacentHTML('beforeend',`<details class="graphics-panel" id="mountain-atmosphere"><summary aria-label="City atmosphere settings"><span aria-hidden="true">🌆</span> City atmosphere</summary><div class="graphics-content"><div class="graphics-heading">MAKE IT YOUR CITY</div><label>Graphics<select id="atmosphere-quality"><option value="auto">Auto</option><option value="high">High</option><option value="max">Max</option><option value="medium">Balanced</option><option value="low">Low</option></select></label><label>Atmosphere<select id="atmosphere-mode"><option value="auto">Changing skies</option><option value="day">City daylight</option><option value="sunset">Golden hour</option><option value="night">City night</option><option value="snow">Cold haze</option><option value="rain">Night rain</option><option value="storm">Thunderstorm</option></select></label><label class="graphics-toggle"><input type="checkbox" id="atmosphere-flashes"> Gentle lightning</label><p>Skies change gradually. Audio follows your sound settings. Riding physics stay the same.</p></div></details>`);
   const panel=document.getElementById('mountain-atmosphere'),mode=document.getElementById('atmosphere-mode'),qualitySelect=document.getElementById('atmosphere-quality'),flashes=document.getElementById('atmosphere-flashes');
@@ -30,7 +32,11 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
   mode.addEventListener('change',()=>{preferences.weather=weatherName(mode.value);controller.setMode(preferences.weather);persist();});
   flashes.addEventListener('change',()=>{preferences.reducedFlashes=flashes.checked;controller.setReducedFlashes(flashes.checked);persist();});
   qualitySelect.addEventListener('change',()=>{quality.setProfile(qualitySelect.value);saveQualityPreference(qualitySelect.value);});
-  quality.subscribe(settings=>{rendererWeather.setQuality(budgets[settings.profile]||budgets.high);qualitySelect.value=quality.current;},{immediate:true});
+  quality.subscribe(settings=>{
+    rendererWeather.setQuality(budgets[settings.profile]||budgets.high);
+    urbanAtmosphere.setQuality(settings.profile);
+    qualitySelect.value=quality.current;
+  },{immediate:true});
   const dryRoughness=new Map(),wetMaterials=new Set();
   for(const [name,m] of Object.entries(environment.courseMaterials))if(['rock','trunk','log','logEnd'].includes(name)){wetMaterials.add(m);dryRoughness.set(m,m.roughness);}
   const equipment=new Set();
@@ -47,7 +53,13 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
     for(const m of sceneMaterials)m.color.copy(w.snow).lerp(w.fog,.25);
     for(const m of wetMaterials){m.roughness=Math.max(.35,dryRoughness.get(m)-w.wet*.25);m.envMapIntensity=.35+w.wet*.25;}
     for(const m of equipment){m.roughness=Math.max(.16,m.userData.atmosphereDryRoughness-w.wet*.13);m.envMapIntensity=.65+w.wet*.2;}
+    urbanAtmosphere.update(dt,state,w);
     audio.updateWeather?.(w,state.mode);if(w.thunder)audio.playWeatherThunder?.();
   }
-  return {update,setRider,getState:()=>({mode:preferences.weather,preset:controller.values.preset,rain:controller.values.rain,reducedFlashes:preferences.reducedFlashes})};
+  return {
+    update,
+    setRider,
+    getState:()=>({mode:preferences.weather,preset:controller.values.preset,rain:controller.values.rain,reducedFlashes:preferences.reducedFlashes}),
+    getLightingDiagnostics:()=>urbanAtmosphere.getDiagnostics()
+  };
 }

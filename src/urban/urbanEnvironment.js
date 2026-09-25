@@ -195,11 +195,14 @@ export function createStreetlights(options={}){
   const poleGeometry=new THREE.CylinderGeometry(.065,.08,1,7);
   const boxGeometry=new THREE.BoxGeometry(1,1,1);
   const bulbGeometry=new THREE.SphereGeometry(.12,6,4);
+  const poolGeometry=new THREE.PlaneGeometry(1,1);
   const poles=createMesh(poleGeometry,materials.metal,capacity,'urban-streetlight-poles');
   const arms=createMesh(boxGeometry,materials.metal,capacity,'urban-streetlight-arms');
   const heads=createMesh(boxGeometry,materials.darkMetal,capacity,'urban-streetlight-heads');
   const bulbs=createMesh(bulbGeometry,materials.lamp,capacity,'urban-streetlight-bulbs');
-  group.add(poles,arms,heads,bulbs);
+  const pools=createMesh(poolGeometry,materials.streetlightPool,capacity,'urban-streetlight-pools');
+  pools.renderOrder=1;
+  group.add(poles,arms,heads,bulbs,pools);
   const entries=Array.from({length:capacity},(_,i)=>({side:i%2===0?-1:1,z:config.recycleNear-Math.floor(i/2)*config.streetlightSpacing-(i%2)*4.2,generation:0}));
   let density=config.density;
   function refresh(){
@@ -211,14 +214,15 @@ export function createStreetlights(options={}){
       setMatrix(arms,i,{x:x-side*.48,y:4.38,z:entry.z,sx:1.05,sy:.09,sz:.09});
       setMatrix(heads,i,{x:x-side*.98,y:4.29,z:entry.z,sx:.52,sy:.18,sz:.34});
       setMatrix(bulbs,i,{x:x-side*.98,y:4.18,z:entry.z,sx:1.15,sy:.55,sz:1.15});
+      setMatrix(pools,i,{x:x-side*.82,y:.022,z:entry.z,sx:3.4,sy:7.2,rx:-Math.PI/2});
     }
-    for(const mesh of [poles,arms,heads,bulbs])finish(mesh,count);
+    for(const mesh of [poles,arms,heads,bulbs,pools])finish(mesh,count);
   }
   function reset(){entries.forEach((entry,i)=>{entry.z=config.recycleNear-Math.floor(i/2)*config.streetlightSpacing-(i%2)*4.2;entry.generation=0;});refresh();}
   function update(dt,worldSpeed){const dz=(Number(worldSpeed)||0)*(Number(dt)||0);if(!Number.isFinite(dz)||Math.abs(dz)<1e-8)return;for(const entry of entries)advance(entry,dz,config.recycleNear,config.farZ);refresh();}
   function setDensity(value){density=densityFromQuality(value);refresh();}
   reset();group.userData.urbanComponent='streetlights';group.userData.usesRealtimeLights=false;
-  return makeController({group,meshes:[poles,arms,heads,bulbs],geometries:[poleGeometry,boxGeometry,bulbGeometry],materialsRef:materials,ownedMaterials:owned,update,reset,setDensity,getDiagnostics(){const count=activeCount(capacity,density,4,true);return {name:'streetlights',logical:count,instances:count*4,drawCalls:4,realtimeLights:0};}});
+  return makeController({group,meshes:[poles,arms,heads,bulbs,pools],geometries:[poleGeometry,boxGeometry,bulbGeometry,poolGeometry],materialsRef:materials,ownedMaterials:owned,update,reset,setDensity,getDiagnostics(){const count=activeCount(capacity,density,4,true);return {name:'streetlights',logical:count,instances:count*5,drawCalls:5,realtimeLights:0};}});
 }
 
 export function createBuildingSkyline(options={}){

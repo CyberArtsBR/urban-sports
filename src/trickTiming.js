@@ -3,8 +3,18 @@ import {SKI_TUNING} from './gameplayTuning.js';
 export const TRICK_LANDING_SAFETY_MARGIN=.11;
 
 export const TRICK_TIMING=Object.freeze({
-  '360':Object.freeze({degreesPerSecond:760,duration:360/760}),
-  BACKFLIP:Object.freeze({degreesPerSecond:800,duration:360/800})
+  '180':Object.freeze({degreesPerSecond:900,targetDegrees:180,duration:180/900}),
+  '360':Object.freeze({degreesPerSecond:760,targetDegrees:360,duration:360/760}),
+  BACKFLIP:Object.freeze({degreesPerSecond:800,targetDegrees:360,duration:360/800}),
+  KICKFLIP:Object.freeze({degreesPerSecond:1120,targetDegrees:360,duration:360/1120}),
+  HEELFLIP:Object.freeze({degreesPerSecond:1080,targetDegrees:360,duration:360/1080}),
+  'POP SHOVE-IT':Object.freeze({degreesPerSecond:1000,targetDegrees:180,duration:180/1000}),
+  'FRONTSIDE SHOVE-IT':Object.freeze({degreesPerSecond:1000,targetDegrees:180,duration:180/1000}),
+  INDY:Object.freeze({degreesPerSecond:0,targetDegrees:0,duration:.24}),
+  MELON:Object.freeze({degreesPerSecond:0,targetDegrees:0,duration:.26}),
+  NOSEGRAB:Object.freeze({degreesPerSecond:0,targetDegrees:0,duration:.28}),
+  'VARIAL FLIP':Object.freeze({degreesPerSecond:1020,targetDegrees:360,duration:.41}),
+  '360 FLIP':Object.freeze({degreesPerSecond:980,targetDegrees:360,duration:.48})
 });
 
 export function getTrickDuration(type){

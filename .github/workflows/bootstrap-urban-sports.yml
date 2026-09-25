@@ -1,15 +1,15 @@
 name: Bootstrap Urban Sports
 
 on:
-  push:
-    branches: [main]
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   import-ski-baseline:
-    if: github.event.head_commit.message == 'Bootstrap Urban Sports import'
+    if: github.event.issue.title == 'BOOTSTRAP_URBAN_SPORTS'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Urban Sports

@@ -690,3 +690,49 @@ body{
 @media(prefers-reduced-motion:reduce){
   .start-screen-art{transform:none}
 }
+
+
+/* Urban Sports artwork-first start screen.
+   The supplied artwork already contains the logo and both button graphics,
+   so only transparent accessible hit areas are drawn on top. */
+.start-screen-stage{background:#05070b;overflow:hidden}
+.start-screen-stage::before,.start-screen-stage::after,.start-screen-city-grid,.start-screen-content{display:none!important}
+.start-screen-art{
+  inset:0!important;width:100%!important;height:100%!important;
+  object-fit:cover!important;opacity:1!important;filter:none!important;transform:none!important;
+}
+.start-screen-actions{
+  position:absolute!important;z-index:6!important;inset:0!important;
+  display:block!important;width:100%!important;height:100%!important;
+  pointer-events:none;
+}
+.start-screen-hit{
+  position:absolute!important;display:block!important;
+  margin:0!important;padding:0!important;min-height:0!important;
+  border:0!important;border-radius:0!important;background:transparent!important;
+  box-shadow:none!important;color:transparent!important;text-shadow:none!important;
+  overflow:hidden!important;pointer-events:auto;cursor:pointer;
+}
+.start-screen-hit span{
+  position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
+}
+.start-screen-play{left:34.0%!important;top:57.2%!important;width:31.5%!important;height:13.7%!important}
+.start-screen-back{left:35.5%!important;top:72.0%!important;width:28.8%!important;height:11.8%!important}
+.start-screen-hit:focus-visible{
+  outline:3px solid rgba(255,255,255,.96)!important;outline-offset:3px!important;
+  border-radius:12px!important;box-shadow:0 0 0 5px rgba(255,174,0,.34),0 0 28px rgba(255,174,0,.55)!important;
+}
+.start-screen-play:disabled{cursor:wait;opacity:1!important}
+.start-screen-status{
+  z-index:7!important;right:1.6%!important;bottom:1.6%!important;
+  padding:7px 10px!important;border-radius:7px!important;
+  background:rgba(0,0,0,.52)!important;color:#fff!important;
+  font-size:clamp(9px,.72vw,12px)!important;
+}
+.start-screen.is-art-ready:not(.is-loading) .start-screen-status{opacity:.72}
+@media(max-width:700px){
+  .start-screen-play{left:33.5%!important;width:32.5%!important}
+  .start-screen-back{left:35%!important;width:30%!important}
+}

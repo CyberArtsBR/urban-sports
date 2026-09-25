@@ -30,6 +30,10 @@ async function boot(context){
   page.on('response',response=>{if(response.status()>=400)badResponses.push(response.status()+' '+response.url());});
   await page.goto(base+'/',{waitUntil:'domcontentloaded',timeout:60000});
   await page.waitForFunction(()=>window.chimpionsSki?.().ready===true,null,{timeout:60000});
+  await page.waitForFunction(()=>{
+    const button=document.querySelector('.start-screen-play');
+    return !!button&&!button.disabled;
+  },null,{timeout:30000});
   return {page,runtimeErrors,badResponses,glbs};
 }
 

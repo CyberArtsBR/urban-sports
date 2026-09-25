@@ -123,6 +123,23 @@ try{
   const selection=await completeStartFlow(page);
 
   await page.waitForTimeout(3000);
+  const tierProbe=await diagnostics(page);
+  const rendering=tierProbe?.renderingQuality||{};
+  assert.equal(rendering.profile,REQUESTED_QUALITY_PROFILE,'runtime rendering profile did not match requested graphics tier');
+  if(REQUESTED_QUALITY_PROFILE==='max'){
+    assert.equal(rendering.shadowMapsEnabled,true,'MAX must enable real shadow maps');
+    assert(rendering.shadowMapSize>=2048,'MAX must use the premium directional shadow resolution');
+    assert.equal(rendering.ssaoEnabled,true,'MAX must enable contact AO');
+    assert((rendering.materialQuality?.anisotropy??0)>=16,'MAX must use premium road anisotropy when supported');
+  }else if(REQUESTED_QUALITY_PROFILE==='high'){
+    assert.equal(rendering.shadowMapsEnabled,true,'HIGH must retain budgeted real shadows');
+    assert(rendering.shadowMapSize>=1024&&rendering.shadowMapSize<2048,'HIGH shadow resolution must remain below MAX');
+    assert.equal(rendering.ssaoEnabled,false,'HIGH must not pay the MAX SSAO render cost');
+  }else{
+    assert.equal(rendering.ssaoEnabled,false,REQUESTED_QUALITY_PROFILE+' must not enable MAX SSAO');
+    assert.equal(rendering.shadowMapsEnabled,false,REQUESTED_QUALITY_PROFILE+' must use lightweight contact grounding instead of real shadow maps');
+  }
+
   const samples=[];
   const deadline=Date.now()+SAMPLE_SECONDS*1000;
   while(Date.now()<deadline){
@@ -205,7 +222,8 @@ try{
       urbanPropPopulation:afterRestart?.urbanPropPopulation,
       skylinePopulation:afterRestart?.skylinePopulation,
       urbanDrawCalls:afterRestart?.urbanDrawCalls,
-      urbanInstances:afterRestart?.urbanInstances
+      urbanInstances:afterRestart?.urbanInstances,
+      renderingQuality:afterRestart?.renderingQuality
     }
   }));
 }finally{

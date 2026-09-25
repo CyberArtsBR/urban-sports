@@ -195,8 +195,9 @@ for(const contract of optionalContracts){
 
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 assert(main.includes("captureGraphicsDiagnostics({renderer,scene,urbanEnvironment})"),'runtime diagnostics must expose graphics resource counts');
-assert(main.includes('renderer.info.autoReset=false'),'EffectComposer diagnostics must aggregate all render passes');
-assert(main.includes('renderer.info.reset();\n  composer.render(dt);'),'renderer.info must reset once per frame immediately before composed rendering');
+assert(main.includes('renderer.info.autoReset=false'),'Renderer diagnostics must use explicit per-frame reset');
+assert(main.includes('renderer.info.reset();'),'renderer.info must reset once per frame before rendering');
+assert(main.includes('renderer.render(scene,camera);'),'Production stability path must render the scene directly without the black-frame composer path');
 
 console.log(JSON.stringify({
   check:'aaa-urban-graphics-regression-invariants',

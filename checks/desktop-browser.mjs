@@ -153,12 +153,20 @@ try{
   await skiChoice.evaluate(button=>button.click());
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
+  // beginRun is scheduled immediately after the async rider selection closes.
+  // Synchronize with either the one-time tutorial or the run state so this
+  // audit cannot race the tutorial being mounted one task after dialog.close().
+  await page.waitForFunction(()=>{
+    const tutorial=document.querySelector('.session-tutorial:not([hidden])');
+    const mode=window.chimpionsSki?.().mode;
+    return !!tutorial||mode==='countdown'||mode==='playing';
+  },null,{timeout:20000});
   const sessionTutorial=page.locator('.session-tutorial:not([hidden])');
   if(await sessionTutorial.isVisible().catch(()=>false)){
     await page.keyboard.press('Enter');
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:15000});
+  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 

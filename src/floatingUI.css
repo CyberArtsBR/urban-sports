@@ -341,3 +341,352 @@ body.session-tutorial-active{cursor:pointer}
   .session-tutorial-start{animation:none}
 }
 
+
+
+/* Chimpions Urban Sports presentation pass
+   Presentation-only: city/night styling, no gameplay geometry or asset replacement. */
+:root{
+  --urban-night:#050711;
+  --urban-panel:#0a1020;
+  --urban-panel-2:#10192b;
+  --urban-cyan:#52e7ff;
+  --urban-blue:#477dff;
+  --urban-lime:#c8ff58;
+  --urban-magenta:#ff4fcf;
+  --urban-text:#f5fbff;
+  --urban-muted:#9eb2c7;
+  --urban-line:rgba(82,231,255,.38);
+}
+
+body{
+  background:var(--urban-night);
+}
+
+.overlay{
+  background:
+    linear-gradient(180deg,rgba(3,5,12,.90),rgba(3,5,12,.97)),
+    repeating-linear-gradient(90deg,transparent 0 74px,rgba(82,231,255,.055) 75px 76px),
+    repeating-linear-gradient(0deg,transparent 0 74px,rgba(71,125,255,.045) 75px 76px),
+    linear-gradient(135deg,#0b1222,#050711 58%,#101225);
+  backdrop-filter:blur(7px) saturate(1.15);
+}
+.overlay::before{
+  content:"";position:absolute;inset:auto 0 0;height:31%;pointer-events:none;opacity:.74;
+  background:
+    linear-gradient(115deg,transparent 0 8%,rgba(82,231,255,.17) 8.2% 8.5%,transparent 8.7% 100%),
+    repeating-linear-gradient(90deg,#07101d 0 6%,#0d1726 6% 11%,#091320 11% 17%);
+  clip-path:polygon(0 48%,7% 48%,7% 28%,12% 28%,12% 58%,18% 58%,18% 15%,24% 15%,24% 52%,31% 52%,31% 33%,38% 33%,38% 63%,45% 63%,45% 20%,53% 20%,53% 46%,60% 46%,60% 8%,68% 8%,68% 55%,75% 55%,75% 26%,82% 26%,82% 49%,89% 49%,89% 17%,96% 17%,96% 61%,100% 61%,100% 100%,0 100%);
+}
+
+.card{
+  position:relative;
+  width:min(650px,calc(100vw - 40px));
+  padding:30px 34px 28px;
+  border:1px solid var(--urban-line);
+  border-radius:20px;
+  background:
+    linear-gradient(135deg,rgba(18,28,47,.97),rgba(7,11,22,.985)),
+    var(--urban-panel);
+  box-shadow:0 26px 80px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.06),0 0 38px rgba(82,231,255,.08);
+  color:var(--urban-text);
+}
+.card::before{
+  display:block;
+  width:118px;height:3px;margin:-16px auto 18px;
+  background:linear-gradient(90deg,var(--urban-cyan),var(--urban-lime),var(--urban-magenta));
+  box-shadow:0 0 18px rgba(82,231,255,.38);
+}
+.card::after{
+  content:"";position:absolute;inset:9px;pointer-events:none;border:1px solid rgba(255,255,255,.025);border-radius:14px;
+}
+.card .badge{
+  background:rgba(82,231,255,.08);
+  border:1px solid rgba(82,231,255,.28);
+  color:var(--urban-cyan);
+  box-shadow:0 0 18px rgba(82,231,255,.09);
+}
+.card .logo{
+  color:var(--urban-text);
+  font-size:clamp(43px,6vw,70px);
+  letter-spacing:-.045em;
+  line-height:.88;
+}
+.card .logo span{
+  display:block;
+  margin-top:.08em;
+  color:var(--urban-lime);
+  text-shadow:1px 2px #597a21,2px 4px #30480e,0 0 22px rgba(200,255,88,.23);
+}
+.card .tagline{color:#c5d5e4;max-width:500px;margin:17px auto 18px}
+.card .tip{color:#8fa8bd;line-height:1.45}
+
+.selected-avatar{
+  width:min(100%,500px);
+  margin-bottom:13px;
+  background:linear-gradient(135deg,rgba(14,24,40,.96),rgba(8,14,25,.96));
+  border:1px solid rgba(82,231,255,.22);
+  box-shadow:inset 3px 0 0 var(--urban-cyan),0 12px 28px rgba(0,0,0,.20);
+}
+.selected-avatar-image{background:#111b2a;box-shadow:0 0 0 1px rgba(82,231,255,.25),0 6px 18px rgba(0,0,0,.30)}
+.selected-avatar small{color:#8298ad}
+.selected-avatar strong{color:var(--urban-text)}
+.selected-ride-mode{
+  color:var(--urban-lime)!important;
+  letter-spacing:.08em;
+  font-weight:800;
+}
+
+.urban-sport-selector{
+  width:min(100%,500px);
+  margin:0 auto 16px;
+  padding:11px 12px 12px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  background:rgba(3,7,14,.62);
+}
+.urban-sport-selector-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px}
+.urban-sport-selector-head small{color:var(--urban-cyan);font-size:9px;font-weight:800;letter-spacing:.18em}
+.urban-sport-selector-head strong{color:#dce8f3;font-size:10px;letter-spacing:.10em}
+.urban-sport-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.urban-sport-option{
+  min-width:0;min-height:48px;padding:8px 7px;
+  border:1px solid rgba(255,255,255,.07)!important;
+  border-radius:9px!important;
+  background:#0a1321!important;
+  color:#72869a!important;
+  box-shadow:none!important;
+  text-shadow:none!important;
+  pointer-events:none;
+}
+.urban-sport-option strong,.urban-sport-option span{display:block}
+.urban-sport-option strong{font:800 italic 12px/1 var(--ui-display);letter-spacing:.035em}
+.urban-sport-option span{margin-top:4px;font:600 8px/1 var(--ui-display);letter-spacing:.09em}
+.urban-sport-option.is-current{
+  border-color:rgba(200,255,88,.42)!important;
+  background:linear-gradient(135deg,rgba(200,255,88,.13),rgba(82,231,255,.06))!important;
+  color:var(--urban-lime)!important;
+  box-shadow:inset 0 0 0 1px rgba(200,255,88,.08),0 0 18px rgba(200,255,88,.06)!important;
+}
+
+.menu-actions button,.presentation-actions button,.ride-mode-back,.selector-close{
+  border:1px solid rgba(82,231,255,.20);
+  border-radius:10px;
+  background:#0b1423;
+  color:#d9e8f5;
+  box-shadow:0 8px 20px rgba(0,0,0,.25);
+}
+.menu-actions .primary,.presentation-actions .primary{
+  background:linear-gradient(135deg,#b9ef4a,#78c82f);
+  border-color:#dfff88;
+  color:#071008;
+  text-shadow:none;
+  box-shadow:0 10px 24px rgba(127,205,48,.20),0 0 18px rgba(200,255,88,.13);
+}
+.menu-actions .secondary,.presentation-actions .secondary,.presentation-actions .toggle-button{
+  background:linear-gradient(135deg,#0e1b2c,#0a1220);
+  border-color:rgba(82,231,255,.20);
+}
+.menu-actions button:is(:hover,:focus-visible):not(:disabled),
+.presentation-actions button:is(:hover,:focus-visible):not(:disabled){
+  border-color:var(--urban-cyan);
+  color:#fff;
+  box-shadow:0 0 0 1px rgba(82,231,255,.18),0 0 20px rgba(82,231,255,.13);
+}
+
+.presentation-overlay{
+  background:
+    linear-gradient(180deg,rgba(3,5,12,.72),rgba(3,5,12,.90)),
+    repeating-linear-gradient(90deg,transparent 0 88px,rgba(82,231,255,.035) 89px 90px);
+  backdrop-filter:blur(10px) saturate(1.08);
+}
+.presentation-card{
+  padding:28px;
+  border:1px solid rgba(82,231,255,.28);
+  border-radius:18px;
+  background:linear-gradient(145deg,rgba(16,25,43,.985),rgba(6,10,19,.985));
+  box-shadow:0 26px 80px rgba(0,0,0,.52),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.presentation-card h2{color:#fff}
+.presentation-card .eyebrow{color:var(--urban-cyan)}
+.result-grid>div{
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:9px;
+  background:rgba(255,255,255,.025);
+}
+.result-grid strong{color:var(--urban-lime)}
+.new-best-banner{color:var(--urban-lime)}
+
+.selector-dialog{
+  background:transparent;
+}
+.selector-dialog::backdrop{
+  background:rgba(2,4,10,.88);
+  backdrop-filter:blur(11px);
+}
+.selector-shell{
+  border:1px solid rgba(82,231,255,.30);
+  background:linear-gradient(145deg,#101a2b,#070b13 72%);
+  color:var(--urban-text);
+  box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 42px rgba(82,231,255,.08);
+}
+.selector-head{border-bottom-color:rgba(82,231,255,.16)}
+.selector-head h2,.selector-featured strong{color:#f5fbff}
+.selector-featured,.chimpion-card,.selector-search{
+  background:#0a1321;
+  border-color:rgba(82,231,255,.13);
+}
+.chimpion-card:hover,.chimpion-card.is-selected{
+  background:linear-gradient(135deg,rgba(82,231,255,.10),rgba(200,255,88,.04));
+  border-color:rgba(200,255,88,.55);
+}
+.ride-mode-copy strong{color:#fff}
+.ride-mode-copy span{color:#96aabd}
+.ride-mode-options{gap:12px}
+.ride-mode-card{
+  min-height:154px;
+  background:linear-gradient(145deg,#101a2a,#09101c);
+  border:1px solid rgba(82,231,255,.20);
+  color:#eaf6ff;
+  box-shadow:0 12px 28px rgba(0,0,0,.24);
+}
+.ride-mode-card strong{color:var(--urban-text)}
+.ride-mode-card span{color:#9eb2c7}
+.ride-mode-card:hover,.ride-mode-card:focus-visible,.ride-mode-card.is-selected{
+  border-color:var(--urban-lime);
+  background:linear-gradient(145deg,rgba(200,255,88,.11),rgba(82,231,255,.06));
+  box-shadow:0 0 22px rgba(200,255,88,.08);
+}
+
+/* Start screen: preserve the existing image only as a faint texture beneath CSS-built urban branding. */
+.start-screen{
+  background:#03050b;
+}
+.start-screen-stage{
+  background:
+    radial-gradient(circle at 70% 28%,rgba(71,125,255,.18),transparent 30%),
+    linear-gradient(145deg,#0c1322,#03050b 70%);
+  box-shadow:0 0 110px rgba(0,0,0,.72);
+}
+.start-screen-art{
+  object-fit:cover;
+  opacity:.075;
+  filter:grayscale(1) contrast(1.45) brightness(.42);
+  transform:scale(1.03);
+}
+.start-screen-stage::before{
+  content:"";position:absolute;z-index:1;inset:0;pointer-events:none;
+  background:
+    linear-gradient(90deg,rgba(2,4,10,.98) 0 7%,rgba(2,4,10,.76) 42%,rgba(2,4,10,.45) 68%,rgba(2,4,10,.88)),
+    repeating-linear-gradient(0deg,transparent 0 55px,rgba(82,231,255,.035) 56px 57px);
+}
+.start-screen-stage::after{
+  content:"";position:absolute;z-index:2;left:0;right:0;bottom:0;height:38%;pointer-events:none;
+  background:repeating-linear-gradient(90deg,#07101b 0 7%,#0d1726 7% 12%,#08111e 12% 18%);
+  clip-path:polygon(0 50%,5% 50%,5% 24%,11% 24%,11% 57%,17% 57%,17% 17%,24% 17%,24% 60%,31% 60%,31% 34%,38% 34%,38% 65%,46% 65%,46% 11%,53% 11%,53% 48%,61% 48%,61% 26%,68% 26%,68% 59%,76% 59%,76% 19%,83% 19%,83% 52%,90% 52%,90% 31%,96% 31%,96% 61%,100% 61%,100% 100%,0 100%);
+  opacity:.95;
+}
+.start-screen-city-grid{
+  position:absolute;z-index:3;inset:0;pointer-events:none;
+  background:linear-gradient(117deg,transparent 0 65%,rgba(82,231,255,.11) 65.2% 65.35%,transparent 65.55%);
+}
+.start-screen-content{
+  position:absolute;z-index:4;left:8%;top:50%;transform:translateY(-50%);
+  width:min(690px,60%);text-align:left;color:var(--urban-text);
+  font-family:var(--ui-display);
+}
+.start-screen-kicker{
+  color:var(--urban-cyan);font:800 italic clamp(11px,1vw,16px)/1 var(--ui-display);
+  letter-spacing:.20em;text-shadow:0 0 16px rgba(82,231,255,.26);
+}
+.start-screen-title{
+  margin:.13em 0 .26em;
+  max-width:650px;
+  color:#fff;font:800 italic clamp(48px,6.3vw,106px)/.79 var(--ui-display);
+  letter-spacing:-.035em;text-transform:uppercase;
+  text-shadow:2px 4px #15233a,4px 7px #08101d,0 18px 38px rgba(0,0,0,.62);
+}
+.start-screen-title span{display:block;color:var(--urban-lime);font-size:.62em;letter-spacing:.015em}
+.start-screen-current{
+  margin:0;color:#9eb2c7;font:700 clamp(12px,1.25vw,20px)/1.1 var(--ui-display);letter-spacing:.12em;
+}
+.start-screen-current strong{color:#fff;margin-left:.45em;font-size:1.35em}
+.start-screen-roadmap{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0 11px}
+.start-screen-roadmap span{
+  padding:6px 9px;border:1px solid rgba(255,255,255,.10);border-radius:7px;background:rgba(5,10,18,.72);
+  color:#7f93a7;font:700 clamp(8px,.8vw,12px)/1 var(--ui-display);letter-spacing:.08em;
+}
+.start-screen-roadmap .is-live{color:var(--urban-lime);border-color:rgba(200,255,88,.38)}
+.start-screen-tagline{margin:0 0 18px;color:#bccbd8;font:600 clamp(12px,1.05vw,17px)/1.4 var(--ui-display);letter-spacing:.025em}
+.start-screen-actions{display:flex;gap:10px;flex-wrap:wrap}
+.start-screen-hit{
+  position:relative;left:auto;top:auto;width:auto;height:auto;
+  min-height:48px;padding:0 20px;display:inline-grid;place-items:center;
+  border:1px solid rgba(82,231,255,.22);border-radius:8px;
+  background:#0a1423;color:#eaf7ff;text-decoration:none;
+  font:800 italic clamp(12px,1vw,15px)/1 var(--ui-display);letter-spacing:.07em;
+}
+.start-screen-play{
+  background:linear-gradient(135deg,#c7f75d,#79cb31);
+  color:#071008;border-color:#e0ff94;
+}
+.start-screen-hit:hover,.start-screen-hit:focus-visible{
+  background:#12243a;box-shadow:0 0 0 2px rgba(82,231,255,.40),0 0 24px rgba(82,231,255,.20);filter:none;
+}
+.start-screen-play:hover,.start-screen-play:focus-visible{
+  background:linear-gradient(135deg,#d8ff78,#8bdc3c);
+  box-shadow:0 0 0 2px rgba(200,255,88,.40),0 0 24px rgba(200,255,88,.18);
+}
+.start-screen-hit:disabled{opacity:.5;background:#111923;color:#7e8c99}
+.start-screen-status{
+  z-index:5;right:2%;bottom:2%;
+  background:#07101bcc;border-color:rgba(82,231,255,.24);color:#c9d9e6;
+}
+
+/* Tutorial uses a CSS city backdrop instead of displaying the legacy ski artwork. */
+.session-tutorial-stage{background:linear-gradient(145deg,#0d1626,#03050b)}
+.session-tutorial-bg{
+  background:
+    linear-gradient(90deg,rgba(3,5,11,.20),rgba(3,5,11,.52) 55%,rgba(3,5,11,.76)),
+    repeating-linear-gradient(90deg,#07101b 0 7%,#0e1827 7% 12%,#08111e 12% 18%);
+  filter:none;transform:none;
+  clip-path:polygon(0 38%,5% 38%,5% 20%,11% 20%,11% 47%,18% 47%,18% 10%,25% 10%,25% 50%,33% 50%,33% 28%,41% 28%,41% 55%,49% 55%,49% 16%,57% 16%,57% 44%,65% 44%,65% 24%,74% 24%,74% 52%,83% 52%,83% 17%,91% 17%,91% 48%,100% 48%,100% 100%,0 100%);
+  opacity:.84;
+}
+.session-tutorial-stage::before{
+  background:
+    radial-gradient(circle at 50% 28%,rgba(71,125,255,.15),transparent 28%),
+    repeating-linear-gradient(0deg,transparent 0 58px,rgba(82,231,255,.035) 59px 60px);
+}
+.session-tutorial-grid{left:3%;right:3%;top:23%;bottom:13%}
+.session-tutorial-grid section{
+  border-color:rgba(82,231,255,.28);
+  background:linear-gradient(155deg,rgba(14,24,41,.95),rgba(6,10,19,.92));
+  box-shadow:0 10px 26px rgba(0,0,0,.28),inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.session-tutorial-title strong span{color:var(--urban-lime);-webkit-text-stroke:1px #efffc9;text-shadow:1px 2px #6c8d27,2px 4px #34470f,0 8px 18px #001627aa}
+.session-tutorial-title em{color:var(--urban-cyan)}
+.session-tutorial-start{color:var(--urban-lime);border-color:rgba(200,255,88,.45);background:linear-gradient(90deg,transparent,rgba(8,14,23,.92) 12%,rgba(8,14,23,.92) 88%,transparent)}
+
+@media(max-width:700px){
+  .card{width:min(94vw,650px);padding:24px 18px 22px}
+  .card .logo{font-size:clamp(38px,12vw,58px)}
+  .urban-sport-options{grid-template-columns:1fr}
+  .urban-sport-option{min-height:38px}
+  .start-screen-content{left:7%;width:86%;top:48%}
+  .start-screen-title{font-size:clamp(42px,13vw,78px)}
+  .start-screen-roadmap{max-width:92%}
+  .start-screen-actions{flex-direction:column;align-items:stretch;width:min(360px,92%)}
+  .start-screen-hit{width:100%}
+}
+@media(max-height:620px){
+  .card{padding-top:19px;padding-bottom:18px}
+  .card .tagline{margin:10px auto 11px}
+  .selected-avatar{margin-bottom:9px}
+  .urban-sport-selector{margin-bottom:10px;padding-block:8px}
+  .start-screen-content{top:47%}
+  .start-screen-title{font-size:clamp(42px,9.5vh,72px)}
+  .start-screen-tagline{margin-bottom:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .start-screen-art{transform:none}
+}

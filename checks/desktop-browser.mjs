@@ -154,11 +154,20 @@ try{
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   const sessionTutorial=page.locator('.session-tutorial:not([hidden])');
+  // beginRun() is scheduled after the selector closes, so the first-session
+  // tutorial may become visible a tick after the dialog-close condition. Wait
+  // for the run flow to declare its next state before deciding whether to
+  // dismiss the tutorial; a one-shot isVisible() here is racy in headless CI.
+  await page.waitForFunction(()=>{
+    const tutorial=document.querySelector('.session-tutorial');
+    const mode=window.chimpionsSki?.().mode;
+    return (!!tutorial&&!tutorial.hidden)||mode==='countdown'||mode==='playing';
+  },null,{timeout:15000});
   if(await sessionTutorial.isVisible().catch(()=>false)){
     await page.keyboard.press('Enter');
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:15000});
+  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 

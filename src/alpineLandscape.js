@@ -82,7 +82,7 @@ export function createAlpineLandscape({world,atmosphere,terrainHeight}){
   const forestChunkCounts=new Uint16Array(forestChunkCount);
   const forestEntries=Array.from({length:forestCapacity},(_,i)=>({x:(i%2?-1:1)*(COURSE_FLAG_X+20+hash(i+19)*65),z:-55-hash(i+23)*240,s:.8+hash(i+45)*2.1,ry:hash(i+77)*Math.PI*2}));
   let activeForestCount=forestCapacity;
-  let travel=0,detail=1;
+  let travel=0,detail=1,visible=true;
   function refresh(){
     for(const e of entries){
       const z=((e.z+travel*(.26+e.layer*.17)+310)%330+330)%330-310;
@@ -108,7 +108,7 @@ export function createAlpineLandscape({world,atmosphere,terrainHeight}){
     for(let i=0;i<forestChunks.length;i++){
       const mesh=forestChunks[i];
       mesh.count=forestChunkCounts[i];
-      mesh.visible=mesh.count>0;
+      mesh.visible=visible&&mesh.count>0;
       mesh.instanceMatrix.needsUpdate=true;
       if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
       if(mesh.visible)mesh.computeBoundingSphere();
@@ -117,18 +117,29 @@ export function createAlpineLandscape({world,atmosphere,terrainHeight}){
   function setDetail(value){
     detail=THREE.MathUtils.clamp(value,0,1);
     activeForestCount=Math.round(80+200*detail);
-    bands[2].visible=detail>.75;
+    bands[0].visible=visible;
+    bands[1].visible=visible;
+    bands[2].visible=visible&&detail>.75;
     refresh();
   }
+  function setVisible(value=true){
+    visible=!!value;
+    bands[0].visible=visible;
+    bands[1].visible=visible;
+    bands[2].visible=visible&&detail>.75;
+    for(const mesh of forestChunks)mesh.visible=visible&&mesh.count>0;
+    return visible;
+  }
   function reset(){travel=0;refresh();}
-  function update(dt,speed){if(!speed)return;travel+=dt*speed;refresh();}
+  function update(dt,speed){if(!visible||!speed)return;travel+=dt*speed;refresh();}
   reset();return {
-    update,reset,setDetail,
+    update,reset,setDetail,setVisible,
     getDiagnostics:()=>({
       forestActive:activeForestCount,
       forestChunks:forestChunks.length,
       forestVisibleChunks:forestChunks.reduce((sum,mesh)=>sum+Number(mesh.visible),0),
-      mountainBandsVisible:bands.reduce((sum,mesh)=>sum+Number(mesh.visible),0)
+      mountainBandsVisible:bands.reduce((sum,mesh)=>sum+Number(mesh.visible),0),
+      visible
     })
   };
 }

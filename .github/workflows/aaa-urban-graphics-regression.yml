@@ -1,0 +1,79 @@
+name: AAA urban graphics regression
+
+on:
+  push:
+    branches:
+      - test/aaa-urban-graphics-regression
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aaa-urban-graphics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run check:graphics
+      - run: npm run build
+
+  browser-audit:
+    needs: static-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        quality: [low, medium, high]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          (exec ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173) >/tmp/aaa-urban-preview.log 2>&1 &
+          echo $! > /tmp/aaa-urban-preview.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            if [ "$i" = 90 ]; then
+              cat /tmp/aaa-urban-preview.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Audit ${{ matrix.quality }} graphics profile
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          QUALITY_PROFILE: ${{ matrix.quality }}
+          GRAPHICS_SAMPLE_SECONDS: "18"
+          GRAPHICS_SAMPLE_INTERVAL_MS: "1000"
+        run: npm run audit:graphics
+
+      - name: Stop preview
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/aaa-urban-preview.pid ]; then
+            kill "$(cat /tmp/aaa-urban-preview.pid)" 2>/dev/null || true
+          fi
+          cat /tmp/aaa-urban-preview.log || true

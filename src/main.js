@@ -1513,10 +1513,6 @@ function update(dt,frameMs=dt*1000){
     asphalt.clearcoatRoughness=THREE.MathUtils.lerp(.28,.12,wet);
     asphalt.envMapIntensity=THREE.MathUtils.lerp(.20,.65,wet);
   }
-  audio.updateSkateState?.({
-    wetness:wet,
-    surface:wet>.08?'wet_asphalt':'dry_asphalt'
-  });
   skateVfx.update(environmentDt,worldSpeed);
   bananaPowerVfx.update(environmentDt);
   if(state.mode==='playing'&&!state.air){

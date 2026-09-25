@@ -29,7 +29,7 @@ function ensureUrbanSportSelector(overlay){
   selector.innerHTML=`
     <div class="urban-sport-selector-head"><small>SPORT</small><strong>CHOOSE YOUR LINE</strong></div>
     <div class="urban-sport-options" role="list">
-      ${URBAN_SPORTS.map(sport=>`<button type="button" class="urban-sport-option${sport.current?' is-current':''}" data-sport="${sport.id}" aria-disabled="true" tabindex="-1" role="listitem"${sport.current?' aria-current="true"':''}><strong>${sport.label}</strong><span>${sport.status}</span></button>`).join('')}
+      ${URBAN_SPORTS.map(sport=>`<div class="urban-sport-option${sport.current?' is-current':''}" data-sport="${sport.id}" aria-disabled="true" role="listitem"${sport.current?' aria-current="true"':''}><strong>${sport.label}</strong><span>${sport.status}</span></div>`).join('')}
     </div>
   `;
   const avatar=card.querySelector('.selected-avatar');

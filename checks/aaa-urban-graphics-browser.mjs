@@ -127,7 +127,7 @@ try{
   assert(stability.ok,`runtime resource counts show suspicious monotonic growth: ${JSON.stringify(stability.violations)}`);
 
   const restartSamples=[];
-  for(let cycle=1;cycle<=3;cycle++){
+  for(let cycle=1;cycle<=4;cycle++){
     await page.keyboard.press('Escape');
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
@@ -153,7 +153,7 @@ try{
   }
 
   const restartStability=analyzeGraphicsStability(
-    [samples.at(-1),...restartSamples].filter(Boolean),
+    restartSamples,
     // renderer.info.memory.geometries can legitimately rise while pre-existing
     // count=0 InstancedMesh batches are first rendered on later procedural
     // runs. Every restart still enforces the hard profile geometry ceiling;

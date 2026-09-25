@@ -54,12 +54,13 @@ assert(scene.fog.near>=68&&scene.fog.near<100,'storm fog should preserve a high-
 assert(scene.fog.far>=370,'storm fog collapsed into a white-wall distance');
 assert(scene.fog.far>scene.fog.near*3,'urban fog lacks near/mid/far separation');
 assert(renderer.toneMappingExposure>=.98&&renderer.toneMappingExposure<=1.08,'urban exposure should stay restrained');
-assert(asphalt.envMapIntensity>1,'wet asphalt lacks environment response');
-assert(asphalt.metalness<.08,'wet asphalt became mirror-like metal');
+assert(asphalt.envMapIntensity>.20&&asphalt.envMapIntensity<.50,'wet asphalt environment response is outside matte-road range');
+assert.equal(asphalt.metalness,0,'wet asphalt must never become metallic');
+assert(asphalt.roughness>=.86,'wet asphalt became too glossy');
 assert(windows.emissiveIntensity>1.5&&windows.emissiveIntensity<2.5,'night windows are outside selective bloom range');
 assert(lamp.emissiveIntensity>1.7&&lamp.emissiveIntensity<2.8,'street lamps are outside selective bloom range');
 assert(lamp.emissive.r>lamp.emissive.g&&lamp.emissive.g>lamp.emissive.b,'street lamp emissive lost warm color identity');
-assert(pool.opacity>0&&pool.opacity<.25,'streetlight pool should be visible but restrained');
+assert(pool.opacity>0&&pool.opacity<.06,'streetlight pool should be a subtle warm cue, not a bloom decal');
 assert(building.color.getHex()!==0x59616b,'building depth tint did not respond to night');
 assert(sidewalk.color.getHex()!==0xa8aaab,'sidewalk value did not respond to atmosphere');
 
@@ -74,7 +75,10 @@ assert(pool.opacity<highPoolOpacity,'LOW should reduce fake streetlight pool int
 const shared=createUrbanMaterials();
 assert(shared.asphalt.isMeshPhysicalMaterial,'urban asphalt must retain physical wet-surface controls');
 assert(shared.asphalt.roughnessMap?.isTexture,'asphalt roughness breakup map is missing');
+assert(shared.asphalt.bumpMap?.isTexture,'asphalt aggregate bump map is missing');
+assert(shared.asphalt.bumpScale>0&&shared.asphalt.bumpScale<.05,'asphalt bump scale is outside restrained microdetail range');
 assert(shared.streetlightPool?.transparent===true,'streetlight pool material is missing');
+assert.equal(shared.streetlightPool.blending,THREE.NormalBlending,'streetlight pools must not use additive whiteout blending');
 assert.equal(shared.lamp.toneMapped,true,'lamp must be tone mapped so bloom retains color');
 assert.equal(shared.windows.toneMapped,true,'window emissive must be tone mapped so bloom retains color');
 shared.dispose();

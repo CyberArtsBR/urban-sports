@@ -13,13 +13,24 @@ export const TRICK_STATE=Object.freeze({
   NONE:'NONE',
   SPIN_360:'SPIN_360',
   BACKFLIP:'BACKFLIP',
+  TRICK:'TRICK',
   COMPLETED:'COMPLETED',
   FAILED:'FAILED'
 });
 
 export const TRICK_TYPE=Object.freeze({
+  SPIN_180:'180',
   SPIN_360:'360',
-  BACKFLIP:'BACKFLIP'
+  BACKFLIP:'BACKFLIP',
+  KICKFLIP:'KICKFLIP',
+  HEELFLIP:'HEELFLIP',
+  POP_SHOVE_IT:'POP SHOVE-IT',
+  FRONTSIDE_SHOVE_IT:'FRONTSIDE SHOVE-IT',
+  INDY:'INDY',
+  MELON:'MELON',
+  NOSEGRAB:'NOSEGRAB',
+  VARIAL_FLIP:'VARIAL FLIP',
+  TRE_FLIP:'360 FLIP'
 });
 
 export const TRICK_TUNING=Object.freeze({
@@ -29,13 +40,16 @@ export const TRICK_TUNING=Object.freeze({
   COMPLETE_EPSILON_DEGREES:8
 });
 
-const SPEED={
-  [TRICK_TYPE.SPIN_360]:THREE.MathUtils.degToRad(TRICK_TUNING.SPIN_360_DEGREES_PER_SECOND),
-  [TRICK_TYPE.BACKFLIP]:THREE.MathUtils.degToRad(TRICK_TUNING.BACKFLIP_DEGREES_PER_SECOND)
-};
+const TARGET_ROTATION=Object.freeze(Object.fromEntries(
+  Object.values(TRICK_TYPE).map(type=>[type,THREE.MathUtils.degToRad(TRICK_TIMING[type]?.targetDegrees||0)])
+));
+const FLIP_TRICKS=new Set([TRICK_TYPE.KICKFLIP,TRICK_TYPE.HEELFLIP,TRICK_TYPE.VARIAL_FLIP,TRICK_TYPE.TRE_FLIP]);
+const SHOVE_TRICKS=new Set([TRICK_TYPE.POP_SHOVE_IT,TRICK_TYPE.FRONTSIDE_SHOVE_IT]);
 
 function activeState(type){
-  return type===TRICK_TYPE.BACKFLIP?TRICK_STATE.BACKFLIP:TRICK_STATE.SPIN_360;
+  if(type===TRICK_TYPE.BACKFLIP)return TRICK_STATE.BACKFLIP;
+  if(type===TRICK_TYPE.SPIN_360)return TRICK_STATE.SPIN_360;
+  return TRICK_STATE.TRICK;
 }
 
 export function createTrickSystem({visualTarget=null}={}){
@@ -48,6 +62,7 @@ export function createTrickSystem({visualTarget=null}={}){
     type:'',
     progress:0,
     rotation:0,
+    elapsed:0,
     startTime:0,
     source:'',
     completed:false,
@@ -67,7 +82,7 @@ export function createTrickSystem({visualTarget=null}={}){
   let previousAir=false;
 
   function isActive(){
-    return snapshot.state===TRICK_STATE.SPIN_360||snapshot.state===TRICK_STATE.BACKFLIP;
+    return snapshot.state===TRICK_STATE.SPIN_360||snapshot.state===TRICK_STATE.BACKFLIP||snapshot.state===TRICK_STATE.TRICK;
   }
 
   function normalizeVisual(){
@@ -84,10 +99,14 @@ export function createTrickSystem({visualTarget=null}={}){
 
   function applyVisual(){
     if(!visualPivot?.quaternion||!isActive())return;
-    const axis=snapshot.type===TRICK_TYPE.BACKFLIP?axisX:axisY;
-    // In this rider/camera coordinate frame positive X is the backward somersault
-    // direction. The old negative sign made BACKFLIP render as a front flip.
-    const angle=snapshot.rotation;
+    let axis=null;
+    if(snapshot.type===TRICK_TYPE.BACKFLIP)axis=axisX;
+    else if(FLIP_TRICKS.has(snapshot.type))axis=new THREE.Vector3(0,0,1);
+    else if(snapshot.type===TRICK_TYPE.SPIN_360||snapshot.type===TRICK_TYPE.SPIN_180||SHOVE_TRICKS.has(snapshot.type))axis=axisY;
+    if(!axis)return;
+    // Positive X remains the backward somersault direction for BACKFLIP.
+    const reverse=snapshot.type===TRICK_TYPE.HEELFLIP||snapshot.type===TRICK_TYPE.FRONTSIDE_SHOVE_IT;
+    const angle=snapshot.rotation*(reverse?-1:1);
     trickQuaternion.setFromAxisAngle(axis,angle);
     visualPivot.quaternion.copy(baseQuaternion).multiply(trickQuaternion);
   }
@@ -139,7 +158,7 @@ export function createTrickSystem({visualTarget=null}={}){
     gravity,
     landingSafetyMargin=TRICK_LANDING_SAFETY_MARGIN
   }={}){
-    if(!SPEED[type]){
+    if(!TRICK_TIMING[type]){
       snapshot.trickAllowed=false;
       snapshot.lastRejectedType=type||'';
       snapshot.rejectionReason='unknown-trick';
@@ -152,6 +171,7 @@ export function createTrickSystem({visualTarget=null}={}){
     snapshot.type=type;
     snapshot.progress=0;
     snapshot.rotation=0;
+    snapshot.elapsed=0;
     snapshot.startTime=Number(startTime)||0;
     snapshot.source=source||'manual';
     snapshot.completed=false;
@@ -180,7 +200,7 @@ export function createTrickSystem({visualTarget=null}={}){
   }
 
   function armRamp(type){
-    if(isActive()||!SPEED[type])return false;
+    if(isActive()||!TRICK_TIMING[type])return false;
     pendingRampType=type;
     snapshot.pendingTrick=type;
     return true;
@@ -202,7 +222,7 @@ export function createTrickSystem({visualTarget=null}={}){
     const completedType=snapshot.type;
     const completedSource=snapshot.source;
     const completedStartTime=snapshot.startTime;
-    snapshot.rotation=TAU;
+    snapshot.rotation=TARGET_ROTATION[completedType]||TAU;
     snapshot.progress=1;
     snapshot.completed=true;
     snapshot.state=TRICK_STATE.COMPLETED;
@@ -224,6 +244,7 @@ export function createTrickSystem({visualTarget=null}={}){
     snapshot.type='';
     snapshot.progress=0;
     snapshot.rotation=0;
+    snapshot.elapsed=0;
     snapshot.startTime=0;
     snapshot.source='';
     snapshot.completed=false;
@@ -233,9 +254,13 @@ export function createTrickSystem({visualTarget=null}={}){
 
   function step(dt){
     if(!isActive())return snapshot;
-    snapshot.rotation=Math.min(TAU,snapshot.rotation+SPEED[snapshot.type]*Math.max(0,Number(dt)||0));
-    snapshot.progress=Math.min(1,snapshot.rotation/TAU);
-    if(snapshot.rotation>=TAU-COMPLETE_EPSILON)completeActive();
+    const frameDt=Math.max(0,Number(dt)||0);
+    const timing=TRICK_TIMING[snapshot.type];
+    const duration=Math.max(.001,Number(timing?.duration)||Infinity);
+    snapshot.elapsed+=frameDt;
+    snapshot.progress=Math.min(1,snapshot.elapsed/duration);
+    snapshot.rotation=(TARGET_ROTATION[snapshot.type]||0)*snapshot.progress;
+    if(snapshot.progress>=1-COMPLETE_EPSILON/TAU)completeActive();
     else applyVisual();
     return snapshot;
   }
@@ -292,6 +317,7 @@ export function createTrickSystem({visualTarget=null}={}){
     snapshot.type='';
     snapshot.progress=0;
     snapshot.rotation=0;
+    snapshot.elapsed=0;
     snapshot.startTime=0;
     snapshot.source='';
     snapshot.completed=false;
@@ -341,6 +367,7 @@ export function createTrickSystem({visualTarget=null}={}){
     snapshot.type='';
     snapshot.progress=0;
     snapshot.rotation=0;
+    snapshot.elapsed=0;
     snapshot.startTime=0;
     snapshot.source='';
     snapshot.completed=false;

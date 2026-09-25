@@ -1,0 +1,54 @@
+name: Bootstrap Urban Sports
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  import-ski-baseline:
+    if: github.event.head_commit.message == 'Bootstrap Urban Sports import'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Urban Sports
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import current Chimpions Ski main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/CyberArtsBR/Chimpions-Ski.git /tmp/chimpions-ski
+          rsync -a --delete --exclude='.git/' --exclude='.github/' /tmp/chimpions-ski/ ./
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const pkgPath = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          pkg.name = 'chimpions-urban-sports';
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+
+          const renderPath = 'render.yaml';
+          let render = fs.readFileSync(renderPath, 'utf8');
+          render = render.replace('name: chimpions-ski', 'name: chimpions-urban-sports');
+          fs.writeFileSync(renderPath, render);
+          NODE
+
+      - name: Verify production build
+        run: |
+          npm install
+          npm run build
+
+      - name: Commit Urban Sports baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Import Chimpions Ski baseline for Urban Sports"
+          git push origin main

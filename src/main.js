@@ -1145,7 +1145,7 @@ function update(dt,frameMs=dt*1000){
   const steer=actions.steer;
   const jumpPressed=wasPlaying&&state.mode==='playing'&&actions.jumpPressed;
   const jumpHeld=actions.jumpHeld;
-  const trickIntent=jumpPressed?actions.trickIntent:null;
+  const rawTrickIntent=jumpPressed?actions.trickIntent:null;
   const nativeSkateboard=selectedSportMode===SPORT_MODE.SKATEBOARD;
   let worldDistance=0;
   const realFrameDt=dt;
@@ -1231,16 +1231,16 @@ function update(dt,frameMs=dt*1000){
       })){
         announceTrickAudio(announceTrickStart(state,airborneTrick,state.jumpSource||'manual'));
       }
-    }else if(pressedThisStep&&ridingRamp&&trickIntent){
-      if(tricks.armRamp(trickIntent)){
+    }else if(pressedThisStep&&ridingRamp&&rawTrickIntent){
+      if(tricks.armRamp(rawTrickIntent)){
         state.jumpBufferTime=0;
         state.jumpBuffered=false;
       }
     }
 
-    const takeoffTrickIntent=nativeSkateboard&&state.skate?.manualMode&&!actions.trickModifier
+    const trickIntent=nativeSkateboard&&state.skate?.manualMode&&!actions.trickModifier
       ?null
-      :trickIntent;
+      :rawTrickIntent;
     const flatGroundTakeoff=!jumpedOffGrind&&!state.grinding&&!ridingRamp&&(
       nativeSkateboard
         ?trySkateboardOllie(state,groundY,{powered:bananaPower.active})
@@ -1249,7 +1249,7 @@ function update(dt,frameMs=dt*1000){
     if(flatGroundTakeoff){
       feedback.onManualTakeoff();
       ui.showTrickHint?.();
-      if(takeoffTrickIntent==='BACKFLIP'){
+      if(trickIntent==='BACKFLIP'){
         // Ground backflips get a dedicated vertical launch. Keep the full arc
         // even if the player releases Jump quickly so the rotation happens in air.
         state.vy=Math.max(state.vy,SKI_TUNING.BACKFLIP_MANUAL_JUMP_VELOCITY);
@@ -1257,14 +1257,14 @@ function update(dt,frameMs=dt*1000){
         state.jumpProfile='backflip';
         state.jumpCutApplied=true;
       }
-      if(takeoffTrickIntent&&tricks.start(takeoffTrickIntent,{
+      if(trickIntent&&tricks.start(trickIntent,{
         source:'manual',
         startTime:state.time,
         physicsState:state,
         landingHeight:groundY,
         gravity:SKI_TUNING.GRAVITY
       })){
-        announceTrickAudio(announceTrickStart(state,takeoffTrickIntent,'manual'));
+        announceTrickAudio(announceTrickStart(state,trickIntent,'manual'));
       }
     }
 

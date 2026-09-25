@@ -126,27 +126,35 @@ try{
   const stability=analyzeGraphicsStability(samples);
   assert(stability.ok,`runtime resource counts show suspicious monotonic growth: ${JSON.stringify(stability.violations)}`);
 
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(()=>{
-    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-    return d?.mode==='paused';
-  },null,{timeout:5000});
-  const restarted=await page.evaluate(()=>{
-    const button=document.querySelector('#restart-pause');
-    if(!button||button.disabled)return false;
-    button.click();
-    return true;
-  });
-  assert(restarted,'pause restart control unavailable');
-  await page.waitForFunction(()=>{
-    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-    return d?.mode==='playing';
-  },null,{timeout:45000});
+  const restartSamples=[];
+  for(let cycle=1;cycle<=3;cycle++){
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      return d?.mode==='paused';
+    },null,{timeout:5000});
+    const restarted=await page.evaluate(()=>{
+      const button=document.querySelector('#restart-pause');
+      if(!button||button.disabled)return false;
+      button.click();
+      return true;
+    });
+    assert(restarted,`pause restart control unavailable on cycle ${cycle}`);
+    await page.waitForFunction(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      return d?.mode==='playing';
+    },null,{timeout:45000});
 
-  await page.waitForTimeout(1500);
-  const afterRestart=await diagnostics(page);
-  const afterRestartBudget=evaluateGraphicsBudget(afterRestart,QUALITY_PROFILE);
-  assert(afterRestartBudget.ok,`restart exceeded ${QUALITY_PROFILE} graphics budget: ${JSON.stringify(afterRestartBudget.violations)}`);
+    await page.waitForTimeout(1500);
+    const afterRestart=await diagnostics(page);
+    const afterRestartBudget=evaluateGraphicsBudget(afterRestart,QUALITY_PROFILE);
+    assert(afterRestartBudget.ok,`restart ${cycle} exceeded ${QUALITY_PROFILE} graphics budget: ${JSON.stringify(afterRestartBudget.violations)}`);
+    restartSamples.push({...afterRestart,t:Date.now(),restartCycle:cycle});
+  }
+
+  const restartStability=analyzeGraphicsStability([samples.at(-1),...restartSamples].filter(Boolean));
+  assert(restartStability.ok,`repeated restarts show suspicious resource growth: ${JSON.stringify(restartStability.violations)}`);
+  const afterRestart=restartSamples.at(-1);
 
   assert.deepEqual(jsErrors,[],'Browser emitted JavaScript errors during Start → Chimpion → Skateboard → gameplay → restart');
 
@@ -156,7 +164,11 @@ try{
     sampleSeconds:SAMPLE_SECONDS,
     selection,
     sampleCount:samples.length,
+    restartCycles:restartSamples.length,
     stability,
+    restartStability,
+    restartGeometries:restartSamples.map(sample=>sample.rendererGeometries),
+    restartTextures:restartSamples.map(sample=>sample.rendererTextures),
     final:{
       rendererCalls:afterRestart?.rendererCalls,
       rendererTriangles:afterRestart?.rendererTriangles,

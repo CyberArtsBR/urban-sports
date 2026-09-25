@@ -178,7 +178,7 @@ export function analyzeCourse(samples){
 export function analyzeGraphics(samples){
   const metrics=[
     'rendererCalls','rendererTriangles','rendererGeometries','rendererTextures',
-    'sceneObjectCount','instancedMeshCount','materialCount','lightCount',
+    'sceneGeometryCount','sceneTextureCount','sceneObjectCount','instancedMeshCount','materialCount','lightCount',
     'streamingSegmentCount','urbanPropPopulation','skylinePopulation',
     'urbanDrawCalls','urbanInstances'
   ];
@@ -451,6 +451,8 @@ export async function sampleRuntime(page){
       rendererTriangles:d?.rendererTriangles??null,
       rendererGeometries:d?.rendererGeometries??null,
       rendererTextures:d?.rendererTextures??null,
+      sceneGeometryCount:d?.sceneGeometryCount??null,
+      sceneTextureCount:d?.sceneTextureCount??null,
       sceneObjectCount:d?.sceneObjectCount??null,
       instancedMeshCount:d?.instancedMeshCount??null,
       materialCount:d?.materialCount??null,

@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import {createUrbanMaterials} from './urbanMaterials.js';
-import {createUrbanFacadeGeometrySet,URBAN_BUILDING_ARCHETYPES} from './urbanFacadeSystem.js';
+import {createUrbanFacadeGeometrySet,URBAN_BUILDING_ARCHETYPES,URBAN_ARCHETYPE_MATERIAL_KEYS,URBAN_FACADE_FAMILIES} from './urbanFacadeSystem.js';
 import {resolveUrbanDistrict} from './urbanDistricts.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:1,medium:.72,low:.48});
+const PROFILE_DENSITY=Object.freeze({max:1,high:.90,medium:.66,low:.44});
+const PROFILE_LIGHT_DENSITY=Object.freeze({max:1,high:.92,medium:.68,low:.42});
+const PROFILE_LED_DENSITY=Object.freeze({max:1,high:.72,medium:.34,low:0});
 const ARCHETYPE_HEIGHT=Object.freeze([1,1.18,.58,1.02,1.28,.82,1.08]);
 const ARCHETYPE_WIDTH=Object.freeze([1,.88,1.16,.92,.82,1.08,.90]);
 const ARCHETYPE_DEPTH=Object.freeze([1,.92,1.18,.94,.84,1.02,.94]);
@@ -28,6 +30,11 @@ function random01(seed,index,salt=0){
   return fract(n);
 }
 function rangeValue(range,t){return range[0]+(range[1]-range[0])*t;}
+function profileName(value){
+  const raw=typeof value==='string'?value:value?.profile;
+  const key=String(raw??'high').toLowerCase();
+  return PROFILE_DENSITY[key]!=null?key:'high';
+}
 function densityFromQuality(value){
   if(typeof value==='number')return clamp(value,0,1);
   if(typeof value==='string')return PROFILE_DENSITY[value.toLowerCase()]??1;
@@ -111,15 +118,16 @@ export function createUrbanBuildingSkyline(options={}){
   const capacity=pairs*2;
   const geometrySet=createUrbanFacadeGeometrySet();
   const archetypeCount=geometrySet.archetypes.length;
-  const archetypeCapacity=Math.ceil(capacity/archetypeCount);
+  const archetypeCapacity=Math.ceil(capacity/3)+2;
   const ownedMaterials=!options.materials;
   const materials=options.materials||createUrbanMaterials({renderer:options.renderer});
   const group=new THREE.Group();
   group.name='UrbanBuildingSkyline';
 
-  const bodyMeshes=geometrySet.archetypes.map((geometry,index)=>
-    makeMesh(geometry,materials.building,archetypeCapacity,'urban-building-'+URBAN_BUILDING_ARCHETYPES[index])
-  );
+  const bodyMeshes=geometrySet.archetypes.map((geometry,index)=>{
+    const material=materials[URBAN_ARCHETYPE_MATERIAL_KEYS[index]]||materials.building;
+    return makeMesh(geometry,material,archetypeCapacity,'urban-building-'+URBAN_BUILDING_ARCHETYPES[index]);
+  });
   const lights=makeMesh(geometrySet.lights,materials.windows,capacity,'urban-building-facade-lights');
   const leds=makeMesh(geometrySet.leds,materials.buildingLed,capacity,'urban-building-led-accents');
   lights.castShadow=false;leds.castShadow=false;leds.receiveShadow=false;
@@ -132,6 +140,7 @@ export function createUrbanBuildingSkyline(options={}){
     generation:0
   }));
 
+  let qualityProfile=profileName(options.quality??options.density??'high');
   let density=densityFromQuality(options.quality??options.density??'high');
   let district=resolveUrbanDistrict(options.district??'mixed');
 
@@ -139,7 +148,11 @@ export function createUrbanBuildingSkyline(options={}){
     const generation=entry.generation||0;
     const r=index+generation*capacity;
     const layer=chooseLayer(district,random01(seed,r,101));
-    const archetype=entry.archetype;
+    const cycle=district.architectureCycle?.length?district.architectureCycle:URBAN_BUILDING_ARCHETYPES;
+    const archetypeName=cycle[(index+generation)%cycle.length];
+    const matched=URBAN_BUILDING_ARCHETYPES.indexOf(archetypeName);
+    const archetype=matched>=0?matched:index%archetypeCount;
+    entry.archetype=archetype;
     const hBase=rangeValue(district.height,Math.pow(random01(seed,r,102),.72));
     const wBase=rangeValue(district.width,random01(seed,r,103));
     const dBase=rangeValue(district.depth,random01(seed,r,104));
@@ -163,6 +176,8 @@ export function createUrbanBuildingSkyline(options={}){
     const edge=roadWidth*.5+sidewalkWidth;
     const bodyCounts=new Array(archetypeCount).fill(0);
     const layerCounts={near:0,mid:0,far:0};
+    const lightCount=Math.max(0,Math.min(count,Math.round(count*(PROFILE_LIGHT_DENSITY[qualityProfile]??.92))));
+    const ledCount=Math.max(0,Math.min(count,Math.round(count*(PROFILE_LED_DENSITY[qualityProfile]??.72))));
 
     for(let i=0;i<count;i++){
       const entry=entries[i];
@@ -193,8 +208,9 @@ export function createUrbanBuildingSkyline(options={}){
     }
 
     for(let i=0;i<bodyMeshes.length;i++)finish(bodyMeshes[i],bodyCounts[i]);
-    finish(lights,count);finish(leds,count);
+    finish(lights,lightCount);finish(leds,ledCount);
     group.userData.layerCounts=layerCounts;
+    group.userData.qualityProfile=qualityProfile;
   }
 
   function reset(){
@@ -217,6 +233,7 @@ export function createUrbanBuildingSkyline(options={}){
   }
 
   function setDensity(value){
+    qualityProfile=profileName(value);
     density=densityFromQuality(value);
     refresh();
   }
@@ -230,15 +247,20 @@ export function createUrbanBuildingSkyline(options={}){
 
   function getDiagnostics(){
     const count=activeCount(capacity,density,10,true);
+    const lightCount=Math.max(0,Math.min(count,Math.round(count*(PROFILE_LIGHT_DENSITY[qualityProfile]??.92))));
+    const ledCount=Math.max(0,Math.min(count,Math.round(count*(PROFILE_LED_DENSITY[qualityProfile]??.72))));
     const allocated=archetypeCapacity*archetypeCount+capacity*2;
     return {
       name:'skyline',
       district:district.id,
+      quality:qualityProfile,
       logical:count,
-      instances:count*3,
+      instances:count+lightCount+ledCount,
       allocatedInstances:allocated,
       drawCalls:archetypeCount+2,
       archetypes:URBAN_BUILDING_ARCHETYPES.length,
+      facadeFamilies:URBAN_FACADE_FAMILIES.length,
+      heroFacadeDetail:qualityProfile==='max'?'full':qualityProfile==='high'?'enhanced':qualityProfile==='medium'?'standard':'baseline',
       layers:{...(group.userData.layerCounts||{})},
       realtimeLights:0
     };
@@ -255,7 +277,7 @@ export function createUrbanBuildingSkyline(options={}){
 
   group.userData.urbanComponent='skyline';
   group.userData.streaming=true;
-  group.userData.cityArchitecture='aaa-instanced-v2';
+  group.userData.cityArchitecture='aaa-instanced-v3';
   group.userData.realtimeLights=0;
 
   reset();

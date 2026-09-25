@@ -11,7 +11,7 @@ has('process.env.SMOKE_JSON','smoke runner must support SMOKE_JSON');
 has('process.env.SMOKE_SCREENSHOT','smoke runner must support optional screenshots');
 assert(urlContract.includes('env.PRODUCTION_URL'),'shared production resolver must support PRODUCTION_URL');
 assert(urlContract.includes('allowBaseUrl&&env.BASE_URL'),'shared production resolver must preserve BASE_URL for local/preview smoke');
-assert(urlContract.includes("DEFAULT_PRODUCTION_URL='https://chimpions-ski.onrender.com'"),'documented fallback public target is missing');
+assert(urlContract.includes("DEFAULT_PRODUCTION_URL='https://chimpions-urban-sports.onrender.com'"),'documented Urban Sports fallback public target is missing');
 has('https://chimp-jump.onrender.com/','game-selection URL invariant is missing');
 has('music-full.mp3','local music network check is missing');
 assert(

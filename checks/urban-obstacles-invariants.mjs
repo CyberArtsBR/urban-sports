@@ -70,7 +70,8 @@ for(const kind of Object.keys(EXPECTED)){
     assert.equal(firstMeshes[i].material,secondMeshes[i].material,kind+' material must be shared');
     const materials=Array.isArray(firstMeshes[i].material)?firstMeshes[i].material:[firstMeshes[i].material];
     for(const material of materials){
-      const emissive=Number(material.emissiveIntensity)||0;
+      const emissiveActive=material.emissive?.getHex?.()!==0;
+      const emissive=emissiveActive?(Number(material.emissiveIntensity)||0):0;
       assert.ok(emissive<=.5,kind+' emissive intensity is too high for obstacle safety accents');
     }
   }

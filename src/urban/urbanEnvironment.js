@@ -15,7 +15,7 @@ export const URBAN_ENVIRONMENT_DEFAULTS=Object.freeze({
   recycleNear:34,
   farZ:-470,
   streetlightSpacing:28,
-  buildingSpacing:13.5,
+  buildingSpacing:10.5,
   coneSpacing:34,
   barrierSpacing:52,
   signSpacing:72

@@ -79,6 +79,8 @@ const core=readFileSync(new URL('../scripts/benchmark/core.mjs',import.meta.url)
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const workflow=readFileSync(new URL('../.github/workflows/performance-quality-profiles.yml',import.meta.url),'utf8');
 assert((runner+core).includes('QUALITY_PROFILE'),'benchmark must support explicit quality profiles');
+assert(core.includes("'max'"),'benchmark quality parser must accept MAX');
+assert(core.includes('chimpionsUrbanSports'),'benchmark must prefer the Urban Sports diagnostics alias');
 assert(core.includes('longTasks'),'benchmark must capture long main-thread tasks');
 assert(core.includes('p50FrameMs'),'benchmark must expose p50 frame time');
 assert(core.includes('collisionCandidates'),'benchmark must sample collision broadphase workload');

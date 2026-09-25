@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 
 const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 const ci=readFileSync(new URL('../.github/workflows/check.yml',import.meta.url),'utf8');
+const performanceCi=readFileSync(new URL('../.github/workflows/performance-quality-profiles.yml',import.meta.url),'utf8');
 
 assert(String(pkg.scripts?.check||'').includes('npm run check:urban'),'full repository check must execute Urban Sports regressions');
 assert(String(pkg.scripts?.['check:release']||'').includes('npm run check'),'release check must execute the full invariant suite');

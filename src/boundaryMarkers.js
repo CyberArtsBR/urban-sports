@@ -44,7 +44,7 @@ export function createBoundaryMarkers({world,terrainHeight,limit=COURSE_FLAG_X,c
   ledTint.setRGB(.55,.80,1);
   for(let i=0;i<n;i++){const shade=.88+hash(i+14)*.12;tint.setRGB(shade,shade,shade);for(const mesh of [posts,caps,feet])mesh.setColorAt(i,tint);rails.setColorAt(i*2,tint);rails.setColorAt(i*2+1,tint);postLeds.setColorAt(i,ledTint);postGlows.setColorAt(i,ledTint);for(const mesh of [ledRails,ledGlows]){mesh.setColorAt(i*2,strapTint);mesh.setColorAt(i*2+1,strapTint);}}
   for(const mesh of [posts,caps,feet,rails,ledRails,ledGlows,postLeds,postGlows])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
-  const positions=new Float32Array(countPerSide);let travel=0,pulseTime=0;
+  const positions=new Float32Array(countPerSide);let travel=0,pulseTime=0,visible=true;
   function refresh(){for(let i=0;i<countPerSide;i++)for(let sideIndex=0;sideIndex<2;sideIndex++){const side=sideIndex===0?-1:1,idx=sideIndex*countPerSide+i,z=positions[i],x=side*(limit+.28),ground=terrainHeight(x,z-travel),lean=(hash(idx+19)-.5)*.020,scale=.98+hash(idx+61)*.04;
     put(posts,idx,x,ground+.95*scale,z,0,0,lean,1,scale,1);put(caps,idx,x-Math.sin(lean)*1.90*scale,ground+1.94*scale,z,0,0,lean);put(feet,idx,x,ground+.075,z);
     const innerPostX=x-side*.19;put(postGlows,idx,innerPostX,ground+1.06*scale,z-side*.005,0,0,lean,1,scale,1);put(postLeds,idx,innerPostX-side*.008,ground+1.06*scale,z-side*.008,0,0,lean,1,scale,1);put(bloomPosts,idx,innerPostX-side*.045,ground+1.06*scale,z-side*.008,0,0,lean,1,scale,1);
@@ -53,6 +53,7 @@ export function createBoundaryMarkers({world,terrainHeight,limit=COURSE_FLAG_X,c
     for(const mesh of meshes)mesh.instanceMatrix.needsUpdate=true;
   }
   function reset(){travel=0;pulseTime=0;for(let i=0;i<countPerSide;i++)positions[i]=-8-i*spacing;refresh();}
-  function update(dt,speed){pulseTime+=Math.max(0,Number(dt)||0);strapGlowMaterial.opacity=.30+Math.sin(pulseTime*2.1)*.035;if(!speed)return;const dz=speed*dt;travel+=dz;for(let i=0;i<countPerSide;i++){positions[i]+=dz;while(positions[i]>18)positions[i]-=countPerSide*spacing;}refresh();}
-  reset();return {update,reset,limit,postMaterial,railMaterial,ledCoreMaterial,ledGlowMaterial,setDecorativeShadows,setShadowEnabled:setDecorativeShadows,blueMaterial:ledCoreMaterial,redMaterial:ledCoreMaterial};
+  function setVisible(value=true){visible=!!value;for(const mesh of meshes)mesh.visible=visible;return visible;}
+  function update(dt,speed){if(!visible)return;pulseTime+=Math.max(0,Number(dt)||0);strapGlowMaterial.opacity=.30+Math.sin(pulseTime*2.1)*.035;if(!speed)return;const dz=speed*dt;travel+=dz;for(let i=0;i<countPerSide;i++){positions[i]+=dz;while(positions[i]>18)positions[i]-=countPerSide*spacing;}refresh();}
+  reset();return {update,reset,limit,postMaterial,railMaterial,ledCoreMaterial,ledGlowMaterial,setDecorativeShadows,setShadowEnabled:setDecorativeShadows,setVisible,blueMaterial:ledCoreMaterial,redMaterial:ledCoreMaterial};
 }

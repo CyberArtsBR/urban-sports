@@ -10,6 +10,7 @@ const surface=read('../src/snowSurfaceDetail.js');
 const boundary=read('../src/boundaryMarkers.js');
 const flybys=read('../src/ambientFlybys.js');
 const premium=read('../src/premiumObstacles.js');
+const courseSurface=read('../src/courseSurfaceVisuals.js');
 const sky=read('../src/alpineSky.js');
 const landscape=read('../src/alpineLandscape.js');
 
@@ -37,11 +38,16 @@ assert(
   premium.includes("rocks:Array.from({length:4}")&&premium.includes('function makeRock(variant)'),
   'rock prototype polish missing'
 );
-assert(env.includes("visualPrototype='readable-ramp-v2'"),'ramp readability prototype missing');
 assert(
-  premium.includes('log:makeLog(false),wideLog:makeLog(true)')&&
-  premium.includes('return library??='),
-  'shared log prototypes are missing'
+  courseSurface.includes("root.userData.visualPrototype='competition-tech-kicker-v6-hdr'"),
+  'shared ramp readability prototype missing'
+);
+assert(
+  premium.includes('const logs=Array.from({length:3},(_,i)=>makeLog(false,i))')&&
+  premium.includes('const wideLogs=Array.from({length:3},(_,i)=>makeLog(true,i))')&&
+  premium.includes('if(library)return library;')&&
+  premium.includes('log:logs[0],wideLog:wideLogs[0]'),
+  'shared log prototype library is missing'
 );
 assert(!premium.includes('_logKnotGeometry'),'per-log knot component geometry returned');
 assert(!premium.includes('_logBandGeometry'),'per-log band component geometry returned');

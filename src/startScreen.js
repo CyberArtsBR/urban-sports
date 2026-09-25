@@ -1,18 +1,16 @@
 const GAME_SELECTION_URL='https://chimp-jump.onrender.com/';
 
-export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-ski-start.jpg'}={}){
+export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urban-sports-start.webp'}={}){
   const root=document.createElement('section');
   root.className='start-screen is-loading';
-  root.setAttribute('aria-label','Chimpions Ski start screen');
+  root.setAttribute('aria-label','Chimpions Urban Sports start screen');
   root.innerHTML=`
     <div class="start-screen-stage">
-      <img class="start-screen-art" src="${assetUrl}" alt="Chimpions Ski snowy mountain start screen" width="1920" height="1080" decoding="async" fetchpriority="high" draggable="false" />
-      <button class="start-screen-hit start-screen-play" type="button" aria-label="Start Game" disabled>
-        <span class="sr-only">Start Game</span>
-      </button>
-      <a class="start-screen-hit start-screen-back" href="${GAME_SELECTION_URL}" aria-label="Back to the Game selection">
-        <span class="sr-only">Back to the Game selection</span>
-      </a>
+      <img class="start-screen-art" src="${assetUrl}" alt="" aria-hidden="true" width="1600" height="900" decoding="async" fetchpriority="high" draggable="false" />
+      <div class="start-screen-actions" aria-label="Main menu">
+        <button class="start-screen-hit start-screen-play" type="button" aria-label="Start Game" disabled><span>START GAME</span></button>
+        <a class="start-screen-hit start-screen-back" href="${GAME_SELECTION_URL}" aria-label="Back to the Game selection"><span>Back to the Game selection</span></a>
+      </div>
       <div class="start-screen-status" aria-live="polite">Loading start screen…</div>
     </div>
   `;
@@ -37,7 +35,7 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-ski-
     if(artFailed)status.textContent='Start artwork unavailable';
     else if(!artReady)status.textContent='Loading start screen…';
     else if(!chimpionReady)status.textContent='Loading Chimpion…';
-    else status.textContent='ENTER / A · START';
+    else status.textContent='ENTER / A · START GAME';
     if(ready&&root.isConnected&&!root.hidden&&document.activeElement===document.body){
       requestAnimationFrame(()=>{if(!play.disabled&&!root.hidden)play.focus();});
     }
@@ -68,15 +66,20 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-ski-
     audio?.unlock?.();
     root.classList.add('is-leaving');
     setTimeout(()=>{
+      // Retire the artwork layer before opening the modal rider selector.
+      // Keeping the full-screen start surface active while showModal() runs can
+      // leave the selector visually occluded in headless and some browsers.
+      root.hidden=true;
+      document.body.classList.remove('start-screen-active');
       const started=onStart?.();
       if(started===false){
+        root.hidden=false;
+        document.body.classList.add('start-screen-active');
         closing=false;
         root.classList.remove('is-leaving');
         refreshReady();
         return;
       }
-      root.hidden=true;
-      document.body.classList.remove('start-screen-active');
       previousButtons=[];
       axisLatch=0;
     },300);

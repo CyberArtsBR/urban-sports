@@ -42,8 +42,8 @@ page.on('console',message=>{
 try{
   await page.goto('http://127.0.0.1:4173/?test=1',{waitUntil:'domcontentloaded'});
 
-  const start=page.getByRole('button',{name:'Start Game'});
-  const back=page.getByRole('link',{name:'Back to the Game selection'});
+  const start=page.locator('.start-screen-play');
+  const back=page.locator('.start-screen-back');
   const art=page.locator('.start-screen-art');
 
   await start.waitFor({state:'visible'});
@@ -58,8 +58,8 @@ try{
     naturalHeight:image.naturalHeight,
     rect:image.getBoundingClientRect().toJSON()
   }));
-  assert.equal(artMetrics.naturalWidth,1920,'Start artwork width changed unexpectedly');
-  assert.equal(artMetrics.naturalHeight,1080,'Start artwork height changed unexpectedly');
+  assert(artMetrics.naturalWidth>=1400,'Start artwork resolution is unexpectedly low');
+  assert(Math.abs(artMetrics.naturalWidth/artMetrics.naturalHeight-16/9)<.01,'Start artwork source ratio changed');
   assert(Math.abs(artMetrics.rect.width/artMetrics.rect.height-16/9)<.01,'Start artwork was stretched');
 
   assert.equal(await back.getAttribute('href'),'https://chimp-jump.onrender.com/');
@@ -153,12 +153,20 @@ try{
   await skiChoice.evaluate(button=>button.click());
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
+  // beginRun is scheduled immediately after the async rider selection closes.
+  // Synchronize with either the one-time tutorial or the run state so this
+  // audit cannot race the tutorial being mounted one task after dialog.close().
+  await page.waitForFunction(()=>{
+    const tutorial=document.querySelector('.session-tutorial:not([hidden])');
+    const mode=window.chimpionsSki?.().mode;
+    return !!tutorial||mode==='countdown'||mode==='playing';
+  },null,{timeout:20000});
   const sessionTutorial=page.locator('.session-tutorial:not([hidden])');
   if(await sessionTutorial.isVisible().catch(()=>false)){
     await page.keyboard.press('Enter');
     await sessionTutorial.waitFor({state:'hidden',timeout:5000});
   }
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:15000});
+  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:20000});
   assert.equal(await page.locator('.start-screen').isVisible(),false);
   assert.equal(await page.locator('.hud').isVisible(),true,'HUD did not return after selected rider started');
 
@@ -252,6 +260,8 @@ try{
   await page.keyboard.press('ArrowDown');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'quality-profile','Settings navigation missed quality profile');
   await page.keyboard.press('ArrowDown');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'camera-view','Settings navigation missed camera view');
+  await page.keyboard.press('ArrowDown');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'camera-motion','Settings navigation missed camera motion');
   await page.keyboard.press('ArrowDown');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'toggle-haptics','Settings navigation missed haptics');
@@ -319,7 +329,7 @@ try{
   try{
     await touchPage.goto('http://127.0.0.1:4173/?test=1',{waitUntil:'domcontentloaded'});
     await touchPage.waitForFunction(()=>window.chimpionsSki?.().ready===true,null,{timeout:30000});
-    await touchPage.getByRole('button',{name:'Start Game'}).evaluate(button=>button.click());
+    await touchPage.locator('.start-screen-play').evaluate(button=>button.click());
     const touchSelector=touchPage.locator('#chimpion-selector');
     await touchSelector.waitFor({state:'visible',timeout:10000});
     const touchRiderName=await touchPage.evaluate(()=>window.chimpionsSki?.().selectedAvatar||'');
@@ -331,6 +341,7 @@ try{
     const touchSkiChoice=touchSelector.locator('.ride-mode-card[data-ride-mode="ski"]');
     await touchSkiChoice.waitFor({state:'visible',timeout:5000});
     await touchSkiChoice.evaluate(button=>button.click());
+    await touchPage.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
     const touchTutorial=touchPage.locator('.session-tutorial:not([hidden])');
     if(await touchTutorial.isVisible().catch(()=>false)){
       await touchPage.keyboard.press('Enter');

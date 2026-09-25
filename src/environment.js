@@ -170,13 +170,14 @@ export function decorateCourseObject(root,kind){
   return root;
 }
 
-export function createSkiEnvironment({scene,world,renderer,camera,quality={}}){
+export function createSkiEnvironment({scene,world,renderer,camera,quality={},mode='alpine'}){
+  const urbanMode=String(mode).toLowerCase()==='urban';
   let environmentQuality=normalizeEnvironmentQuality(quality);
   let environmentProfileName=String(quality?.profile||'high');
   let distantSceneryUpdateHz=Math.max(0,Number(quality?.distantSceneryUpdateHz)||0);
   let distantSceneryInterval=distantSceneryUpdateHz>0?1/distantSceneryUpdateHz:0;
-  scene.background=new THREE.Color(0xd7e1e6);
-  scene.fog=new THREE.Fog(0xe1e6e8,50,272);
+  scene.background=new THREE.Color(urbanMode?0x98a5af:0xd7e1e6);
+  scene.fog=new THREE.Fog(urbanMode?0x8f9aa3:0xe1e6e8,50,272);
   renderer.toneMappingExposure=1.09;
 
   const snowMaterials=createSnowMaterials(renderer,{detailLevel:environmentQuality.snowDetailLevel});
@@ -277,15 +278,21 @@ export function createSkiEnvironment({scene,world,renderer,camera,quality={}}){
     }
     environmentQuality=normalizeEnvironmentQuality({...environmentQuality,...mapped});
 
-    activeBankCount=Math.max(12,Math.min(banks.entries.length,Math.round(banks.entries.length*environmentQuality.decorativeDensity)));
-    activeWindBankCount=Math.max(8,Math.min(windBanks.entries.length,Math.round(windBanks.entries.length*environmentQuality.decorativeDensity)));
-    activeTreeCount=Math.max(5,Math.min(treeCount,Math.round(treeCount*environmentQuality.decorativeDensity)));
+    activeBankCount=urbanMode?0:Math.max(12,Math.min(banks.entries.length,Math.round(banks.entries.length*environmentQuality.decorativeDensity)));
+    activeWindBankCount=urbanMode?0:Math.max(8,Math.min(windBanks.entries.length,Math.round(windBanks.entries.length*environmentQuality.decorativeDensity)));
+    activeTreeCount=urbanMode?0:Math.max(5,Math.min(treeCount,Math.round(treeCount*environmentQuality.decorativeDensity)));
     bankMesh.count=activeBankCount;
     windMesh.count=activeWindBankCount;
     for(const mesh of decorativeTreeMeshes){
       mesh.castShadow=false;
     }
     bankMesh.castShadow=false;
+    bankMesh.visible=!urbanMode;
+    windMesh.visible=!urbanMode;
+    for(const mesh of decorativeTreeMeshes)mesh.visible=!urbanMode;
+    surfaceDetail.setVisible?.(!urbanMode);
+    boundaryMarkers.setVisible?.(!urbanMode);
+    landscape.setVisible?.(!urbanMode);
     refreshTrees();
 
     for(const layer of snowLayers){
@@ -314,6 +321,7 @@ export function createSkiEnvironment({scene,world,renderer,camera,quality={}}){
   }
   function getQualityDiagnostics(){
     return {
+      environmentMode:urbanMode?'urban':'alpine',
       environmentQualityProfile:environmentProfileName,
       globalShadowMapsEnabled:!!renderer.shadowMap.enabled,
       decorativeShadowCasting:false,
@@ -329,6 +337,11 @@ export function createSkiEnvironment({scene,world,renderer,camera,quality={}}){
     };
   }
   setQualityProfile();
+  if(urbanMode){
+    surfaceDetail.setVisible?.(false);
+    boundaryMarkers.setVisible?.(false);
+    landscape.setVisible?.(false);
+  }
   function refreshBanks(group,activeCount=group.entries.length){
     const {mesh,entries}=group;
     for(let i=0;i<activeCount;i++){
@@ -463,11 +476,12 @@ export function createSkiEnvironment({scene,world,renderer,camera,quality={}}){
       }
     }
 
-    snowParticles.spray(dt,playerX,playerY,playerZ,speed,edge,air,landingPulse,running,rideMode,rideContacts);
-    snowParticles.update(dt,worldSpeed);
-    surfaceDetail.update(dt,worldSpeed);
-
-    boundaryMarkers.update(dt,worldSpeed);
+    if(!urbanMode){
+      snowParticles.spray(dt,playerX,playerY,playerZ,speed,edge,air,landingPulse,running,rideMode,rideContacts);
+      snowParticles.update(dt,worldSpeed);
+      surfaceDetail.update(dt,worldSpeed);
+      boundaryMarkers.update(dt,worldSpeed);
+    }
 
     const jumpHeight=Math.max(0,playerY-groundY);
     const heightFade=THREE.MathUtils.clamp(1-jumpHeight/4.6,0,1);

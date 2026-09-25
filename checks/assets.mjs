@@ -14,3 +14,9 @@ for(const avatar of avatars){
   assert(fs.existsSync('public/'+decodeURIComponent(avatar.url)),'Missing GLB for '+avatar.name);
 }
 console.log('PASS Chimpions Ski canonical roster:',avatars.length);
+
+const urbanStartArt='public/start/chimpions-urban-sports-start.webp';
+assert(fs.existsSync(urbanStartArt),'Missing Chimpions Urban Sports start artwork');
+const urbanStartBytes=fs.statSync(urbanStartArt).size;
+assert(urbanStartBytes>=80000,'Urban start artwork looks truncated');
+console.log('PASS Urban start artwork:',urbanStartBytes,'bytes');

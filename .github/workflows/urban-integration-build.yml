@@ -1,0 +1,31 @@
+name: Urban integration build
+
+on:
+  push:
+    branches: [urban-phase-2-integration]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Syntax check integration modules
+        run: |
+          node --check src/main.js
+          node --check src/skier.js
+          node --check src/environment.js
+          node --check src/terrainContact.js
+          node --check src/boundaryMarkers.js
+          node --check src/snowSurfaceDetail.js
+          node --check src/alpineLandscape.js
+          node --check src/urban/urbanEnvironment.js
+          node --check src/skateboardEquipment.js
+      - run: npm run build

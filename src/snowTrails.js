@@ -18,7 +18,7 @@ void main(){
 }
 `;
 
-const fragmentShader=`
+const snowFragmentShader=`
 varying float vAlpha;
 varying float vSide;
 void main(){
@@ -35,7 +35,26 @@ void main(){
 }
 `;
 
-export function createSkiTrails({world,terrainHeight,capacity=192}){
+const urbanFragmentShader=`
+varying float vAlpha;
+varying float vSide;
+void main(){
+  if(vAlpha<=0.001)discard;
+  float side=clamp(abs(vSide),0.0,1.0);
+  float core=1.0-smoothstep(.05,.46,side);
+  float shoulder=(1.0-smoothstep(.42,.96,side))*.34;
+  // Cool wheel streaks stay readable on asphalt and can feed the existing
+  // bloom pass without becoming a solid neon ribbon.
+  vec3 rubber=vec3(.018,.026,.035);
+  vec3 led=vec3(.34,1.10,3.20);
+  vec3 color=mix(rubber,led,core*.72+shoulder*.18);
+  float feather=1.0-smoothstep(.72,1.0,side);
+  gl_FragColor=vec4(color,vAlpha*feather*.72);
+}
+`;
+
+export function createSkiTrails({world,terrainHeight,capacity=192,surface='snow'}){
+  const urban=String(surface).toLowerCase()==='urban';
   const skiCount=2;
   const segmentCount=capacity*skiCount;
   const positions=new Float32Array(segmentCount*VERTICES_PER_SEGMENT*3);
@@ -74,7 +93,7 @@ export function createSkiTrails({world,terrainHeight,capacity=192}){
 
   const material=new THREE.ShaderMaterial({
     vertexShader,
-    fragmentShader,
+    fragmentShader:urban?urbanFragmentShader:snowFragmentShader,
     transparent:true,
     depthWrite:false,
     side:THREE.DoubleSide,
@@ -111,15 +130,15 @@ export function createSkiTrails({world,terrainHeight,capacity=192}){
     const sideSign=skiIndex===0?-1:1;
     const carve=Math.abs(edge);
     const outside=Math.max(0,-sideSign*edge);
-    const halfWidth=snowboard
-      ?.205+carve*.075
-      :(.047+carve*.010+outside*.008);
+    const halfWidth=urban
+      ?(.030+carve*.010)
+      :(snowboard?.205+carve*.075:(.047+carve*.010+outside*.008));
     const normalX=-dz/length,normalZ=dx/length;
-    const outerWidth=halfWidth*(snowboard?1.8:2.0);
-    const bermHeight=(snowboard?.085:.040)+carve*(snowboard?.080:.045);
-    const strength=snowboard
-      ?.82+carve*.11
-      :.73+carve*.14+outside*.07;
+    const outerWidth=halfWidth*(urban?1.55:(snowboard?1.8:2.0));
+    const bermHeight=urban?0:((snowboard?.085:.040)+carve*(snowboard?.080:.045));
+    const strength=urban
+      ?(.48+carve*.18)
+      :(snowboard?.82+carve*.11:.73+carve*.14+outside*.07);
     const v=index*VERTICES_PER_SEGMENT;
     for(let row=0;row<2;row++){
       const cx=row?x:prevX[skiIndex],cz=row?z:prevZ[skiIndex];
@@ -143,7 +162,7 @@ export function createSkiTrails({world,terrainHeight,capacity=192}){
     const s=Math.sin(heading);
     const snowboard=rideMode==='snowboard';
 
-    if(snowboard){
+    if(snowboard&&!urban){
       const left=skis?.[0];
       const right=skis?.[1];
       let sx=x;
@@ -158,8 +177,6 @@ export function createSkiTrails({world,terrainHeight,capacity=192}){
       }
       if(hasPrev[0])writeSegment(0,sx,sz,edge,travel,true);
       prevX[0]=sx;prevZ[0]=sz;hasPrev[0]=1;
-      // Slot 1 is reserved for the second ski groove and must stay broken
-      // while riding a snowboard.
       hasPrev[1]=0;
     }else{
       for(let skiIndex=0;skiIndex<skiCount;skiIndex++){

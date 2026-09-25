@@ -11,7 +11,8 @@ import {readPad} from './input.js';
 import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
 import {createSkiAudio} from './audio.js';
-import {createSkiEnvironment,decorateCourseObject} from './environment.js';
+import {createSkiEnvironment} from './environment.js';
+import {createUrbanEnvironment,createUrbanObstacle} from './urban/index.js';
 import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
@@ -26,7 +27,6 @@ import {createStartGateScene} from './startGateScene.js';
 import {createSkiTrails} from './snowTrails.js';
 import {SKI_TUNING} from './gameplayTuning.js';
 import {OBSTACLE_TUNING} from './obstacleTuning.js';
-import {createOilVisual,createRampVisual} from './courseSurfaceVisuals.js';
 import {getCourseLookahead} from './courseStreaming.js';
 import {breakSkillCombo,resetAirborneScoring,resetHazardScoring,scoreRiskBanana,tryScoreNearMiss,updateAirborneScoring,tryScoreAirborneClearance} from './airborneScoring.js';
 import {createStartScreen} from './startScreen.js';
@@ -37,6 +37,8 @@ import {createTrickSystem} from './trickSystem.js';
 import {announceTrickStart,resetTrickScoring,scoreTrickCompletion,scoreTrickFailure} from './trickScoring.js';
 import {createHaptics} from './haptics.js';
 import {RIDE_MODE,getRideProfile,normalizeRideMode,speedToKmh} from './rideMode.js';
+import {SPORT_MODE,getSportProfile,getLegacyRideModeForSport,normalizeSportMode} from './sportMode.js';
+import {GAME_IDENTITY} from './gameIdentity.js';
 import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} from './playerOrientation.js';
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
@@ -81,16 +83,16 @@ app.innerHTML=`
   </div>
   <div class="overlay" id="overlay">
     <section class="card" aria-labelledby="game-title">
-      <div class="badge">❄️ ALPINE ARCADE</div>
-      <h1 class="logo" id="game-title">CHIMPIONS <span>SKI</span></h1>
-      <p class="tagline">Carve the endless mountain, chase bananas, clear the jumps and keep your line as the descent gets faster.</p>
+      <div class="badge">🌆 URBAN ARCADE</div>
+      <h1 class="logo" id="game-title">CHIMPIONS <span>URBAN SPORTS</span></h1>
+      <p class="tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
       <div class="selected-avatar" id="selected-avatar">
         <span class="selected-avatar-image" id="selected-avatar-image">🐵</span>
-        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKI · 150–300 KM/H</em></span>
+        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD · 150–300 KM/H</em></span>
       </div>
       <div class="menu-actions">
         <button class="secondary" id="choose" aria-label="Choose Chimpion" disabled>CHOOSE CHIMPION</button>
-        <button class="primary" id="start" aria-label="Start skiing" disabled>LOADING CHIMPION…</button>
+        <button class="primary" id="start" aria-label="Start riding" disabled>LOADING CHIMPION…</button>
       </div>
       <div class="tip">A / D or LEFT STICK / D-PAD · CARVE &nbsp; · &nbsp; SPACE / A · CROSS · JUMP &nbsp; · &nbsp; ESC / START · MENU · PAUSE</div>
     </section>
@@ -170,30 +172,40 @@ composer.addPass(new OutputPass());
 applyBloomQuality();
 
 const world=new THREE.Group();scene.add(world);
-const environment=createSkiEnvironment({scene,world,renderer,camera});
+const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
+const urbanEnvironment=createUrbanEnvironment({
+  parent:world,
+  renderer,
+  quality:quality.getSettings(),
+  seed:'chimpions-urban-main',
+  roadWidth:27.5,
+  sidewalkWidth:3.2,
+  segmentLength:28,
+  segmentCount:20,
+  recycleNear:36,
+  farZ:-520
+});
+// The gameplay heightfield is itself rendered as asphalt so it follows the
+// exact collision/landing surface. Keep the urban module's sidewalks, curbs,
+// markings and city props, but avoid drawing a second flat asphalt plane.
+if(urbanEnvironment.components?.road?.meshes?.[0]){
+  urbanEnvironment.components.road.meshes[0].visible=false;
+}
 const unsubscribeRendererQuality=quality.subscribe(applyRendererResolution);
 const unsubscribeRendererResolution=quality.subscribeResolution(applyRendererResolution);
-const snowMat=environment.terrainMaterial;
-const {
-  trunk:trunkMat,
-  pine:pineMat,
-  rock:rockMat,
-  banana:bananaMat,
-  ramp:rampMat,
-  log:logMat,
-  logEnd:logEndMat
-}=environment.courseMaterials;
+const groundMat=urbanEnvironment.materials.asphalt;
+const {banana:bananaMat}=environment.courseMaterials;
 
 
 const tiles=[];
 for(let i=0;i<9;i++){
-  // Gameplay remains ±11.3, but the rendered mountain surface extends far beyond
-  // the camera frustum so the player never sees a hard left/right snow border.
+  // The rendered street substrate extends far beyond the playable corridor so
+  // the player never sees a hard left/right ground border behind the city.
   const geometry=new THREE.PlaneGeometry(320,28,128,18);
   const uv=geometry.attributes.uv;
   for(let vertex=0;vertex<uv.count;vertex++)uv.setX(vertex,uv.getX(vertex)*10);
   uv.needsUpdate=true;
-  const tile=new THREE.Mesh(geometry,snowMat);
+  const tile=new THREE.Mesh(geometry,groundMat);
   tile.rotation.x=-Math.PI/2;
   tile.position.set(0,0,-i*28+8);
   displaceTerrainChunk(geometry,tile.position.z);
@@ -202,17 +214,8 @@ for(let i=0;i<9;i++){
   tiles.push(tile);
 }
 
-function makeTree(){
-  const g=new THREE.Group();
-  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16,.24,1.6,8),trunkMat);trunk.position.y=.8;trunk.castShadow=true;g.add(trunk);
-  for(let i=0;i<3;i++){const c=new THREE.Mesh(new THREE.ConeGeometry(1.05-i*.12,2.1,10),pineMat);c.position.y=1.35+i*.72;c.castShadow=true;g.add(c);}
-  // Feet above ~3.7 m clear the full tree silhouette; manual jump cannot reach it,
-  // but the upper part of a monster ramp arc can.
-  g.userData.kind='tree';g.userData.radius=.72;g.userData.radiusX=.62;g.userData.radiusZ=.68;g.userData.clearance=3.70;decorateCourseObject(g,'tree');return g;
-}
-function makeRock(){
-  const m=new THREE.Mesh(new THREE.DodecahedronGeometry(.64,0),rockMat);m.scale.set(1.15,.75,.9);m.position.y=.48;m.castShadow=true;m.userData.kind='rock';m.userData.radius=.62;m.userData.radiusX=.55;m.userData.radiusZ=.58;m.userData.clearance=.78;decorateCourseObject(m,'rock');return m;
-}
+function makeTree(){return createUrbanObstacle('tree');}
+function makeRock(){return createUrbanObstacle('rock');}
 function makeBanana(){
   const g=createBananaVisual(bananaMat);
   g.position.y=1.05;
@@ -221,44 +224,12 @@ function makeBanana(){
   g.userData.radiusX=.48;
   g.userData.radiusZ=.58;
   g.userData.yOffset=1.05;
-  decorateCourseObject(g,'banana');
   return g;
 }
-function makeRamp(){
-  const g=createRampVisual();
-  g.userData.kind='ramp';g.userData.radius=1.15;g.userData.radiusX=1.16;g.userData.radiusZ=1.58;
-  return g;
-}
-function makeLog(){
-  const tuning=OBSTACLE_TUNING.log;
-  const g=new THREE.Group();
-  const log=new THREE.Mesh(new THREE.CylinderGeometry(.22,.28,tuning.length,12),logMat);
-  log.rotation.z=Math.PI/2;log.position.y=.28;log.castShadow=log.receiveShadow=true;g.add(log);
-  for(const side of [-1,1]){
-    const cap=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.16,12),logEndMat);
-    cap.rotation.z=Math.PI/2;cap.position.set(side*tuning.capOffset,.28,0);cap.castShadow=true;g.add(cap);
-  }
-  g.userData.kind='log';g.userData.radius=tuning.collisionHalfWidth;g.userData.radiusX=tuning.collisionHalfWidth;g.userData.radiusZ=tuning.radiusZ;g.userData.clearance=tuning.clearance;decorateCourseObject(g,'log');return g;
-}
-function makeWideLog(){
-  const tuning=OBSTACLE_TUNING.wideLog;
-  const g=new THREE.Group();
-  const log=new THREE.Mesh(new THREE.CylinderGeometry(.30,.35,tuning.length,14),logMat);
-  log.rotation.z=Math.PI/2;log.position.y=.35;log.castShadow=log.receiveShadow=true;g.add(log);
-  for(const side of [-1,1]){
-    const cap=new THREE.Mesh(new THREE.CylinderGeometry(.23,.23,.18,14),logEndMat);
-    cap.rotation.z=Math.PI/2;cap.position.set(side*tuning.capOffset,.35,0);cap.castShadow=true;g.add(cap);
-  }
-  g.userData.kind='wideLog';g.userData.radius=tuning.collisionHalfWidth;g.userData.radiusX=tuning.collisionHalfWidth;g.userData.radiusZ=tuning.radiusZ;g.userData.clearance=tuning.clearance;
-  decorateCourseObject(g,'wideLog');
-  return g;
-}
-function makeOil(){
-  const tuning=OBSTACLE_TUNING.oil;
-  const g=createOilVisual();
-  g.userData.kind='oil';g.userData.radius=tuning.collisionHalfWidth;g.userData.radiusX=tuning.collisionHalfWidth;g.userData.radiusZ=tuning.radiusZ;g.userData.clearance=tuning.clearance;g.userData.yOffset=.012;
-  return g;
-}
+function makeRamp(){return createUrbanObstacle('ramp');}
+function makeLog(){return createUrbanObstacle('log');}
+function makeWideLog(){return createUrbanObstacle('wideLog');}
+function makeOil(){return createUrbanObstacle('oil');}
 
 const courseRenderBatches=createCourseRenderBatches({
   world,
@@ -443,7 +414,7 @@ function syncCourseVisuals(){
 }
 
 // Continuous twin grooves use one bounded dynamic mesh instead of disconnected decals.
-const skiTrails=createSkiTrails({world,terrainHeight,capacity:192});
+const skiTrails=createSkiTrails({world,terrainHeight,capacity:192,surface:'urban'});
 let trailTimer=0;
 
 const player=new THREE.Group();scene.add(player);
@@ -458,7 +429,7 @@ const riderController=createRiderController({visualRoot:trickVisualPivot,dispose
 const tricks=createTrickSystem({visualTarget:trickVisualPivot});
 const startCamera=createStartCameraSequence({camera,skiCamera,player});
 const startCrowd=createStartCrowd({world,terrainHeight});
-const startGate=createStartGateScene({world,terrainHeight});
+const startGate=createStartGateScene({world,terrainHeight,theme:'urban'});
 const START_COUNTDOWN_DURATION_MS=2700;
 const BANANA_POWER_GOAL=10;
 const BANANA_POWER_DURATION=3;
@@ -467,7 +438,8 @@ let startCountdownStarted=false;
 let catalog=[],selectedAvatar=null,selector=null,ready=false;
 let selectorReady=false;
 let avatarCommitted=false;
-let selectedRideMode=normalizeRideMode(userPreferences.rideMode||RIDE_MODE.SKI);
+let selectedSportMode=normalizeSportMode(GAME_IDENTITY.defaultSport||SPORT_MODE.SKATEBOARD);
+let selectedRideMode=getLegacyRideModeForSport(selectedSportMode);
 let initialSelectionFlow=false;
 const initialRideProfile=getRideProfile(selectedRideMode);
 const state=createRunState({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:0});
@@ -595,13 +567,14 @@ ui.configureSettings?.({
 });
 function applyRuntimeQuality(settings=quality.getSettings()){
   environment.applyQuality?.(settings);
+  urbanEnvironment.setQualityProfile?.(settings);
 }
 const unsubscribeRuntimeQuality=quality.subscribe(applyRuntimeQuality,{immediate:true});
 
 const feedback=createGameFeedback({audio,ui,haptics});
 const scorePresentation=createScorePresentation({hud:document.querySelector('.hud')});
 
-const SESSION_TUTORIAL_KEY='chimpions-ski-tutorial-seen-v2';
+const SESSION_TUTORIAL_KEY='chimpions-urban-sports-tutorial-seen-v1';
 let sessionTutorialVisible=false;
 let sessionTutorialResolve=null;
 let tutorialPreviousButtons=[];
@@ -612,12 +585,12 @@ sessionTutorialRoot.className='session-tutorial';
 sessionTutorialRoot.hidden=true;
 sessionTutorialRoot.setAttribute('role','dialog');
 sessionTutorialRoot.setAttribute('aria-modal','true');
-sessionTutorialRoot.setAttribute('aria-label','Chimpions Ski how to play tutorial');
+sessionTutorialRoot.setAttribute('aria-label','Chimpions Urban Sports how to play tutorial');
 sessionTutorialRoot.innerHTML=`
   <div class="session-tutorial-stage">
     <div class="session-tutorial-bg" aria-hidden="true"></div>
     <header class="session-tutorial-title">
-      <strong>CHIMPIONS <span>SKI</span></strong>
+      <strong>CHIMPIONS <span>URBAN SPORTS</span></strong>
       <em>HOW TO PLAY</em>
     </header>
     <div class="session-tutorial-grid">
@@ -625,7 +598,7 @@ sessionTutorialRoot.innerHTML=`
       <section><h3><b>2</b> JUMP + TRICKS</h3><div class="tutorial-controls"><kbd>SPACE</kbd><span>or</span><i class="pad-a">A</i></div><p>Jump ramps and clear hazards.</p><strong class="tutorial-highlight">↑ + JUMP · 360° SPIN &nbsp; ↓ + JUMP · BACKFLIP</strong></section>
       <section><h3><b>3</b> 🍌 BANANA POWER</h3><p>Collect 10 bananas to charge 1 Banana Power.</p><div class="tutorial-controls"><kbd>Q</kbd><span>or</span><i class="pad-x">X</i><strong>= BULLET TIME</strong></div><p>Bullet Time lasts 3 seconds.</p></section>
       <section><h3><b>4</b> CAMERA</h3><div class="tutorial-controls"><kbd>E</kbd><span>or</span><i class="pad-y">Y</i><strong>CHANGE VIEW</strong></div><p>Chase · Fixed View · High + Far · First Person</p><div class="tutorial-controls tutorial-motion-row"><kbd>R</kbd><span>or</span><i class="pad-b">B</i><strong>CAMERA MOTION</strong></div><p>Full · Fixed · Reduced</p></section>
-      <section><h3><b>5</b> GOAL</h3><p>🏔️ Ski as far as possible.</p><p>🌲 Avoid trees, rocks, logs and oil.</p><p>🍌 Grab bananas and survive the increasing speed.</p></section>
+      <section><h3><b>5</b> GOAL</h3><p>🌆 Ride as far as possible through the city.</p><p>🚧 Avoid street hazards and construction obstacles.</p><p>🍌 Grab bananas and survive the increasing speed.</p></section>
       <section><h3><b>6</b> PAUSE</h3><div class="tutorial-controls"><kbd>ESC</kbd><span>or</span><i>START</i></div><p>Pause or resume the run.</p></section>
     </div>
     <footer class="session-tutorial-start">PRESS ANY KEY OR BUTTON TO START</footer>
@@ -704,16 +677,18 @@ const startScreen=createStartScreen({
     // The selected rider is interaction-critical and should not compete with crowd parsing.
     return true;
   },
-  assetUrl:'/start/chimpions-ski-start.jpg'
+  assetUrl:'/start/chimpions-urban-sports-start.webp'
 });
 startScreen.setReady(false);
 ui.setAvatarLoading(true);
 
 function syncRideModePresentation(){
-  const profile=getRideProfile(selectedRideMode);
+  const rideProfile=getRideProfile(selectedRideMode);
+  const sportProfile=getSportProfile(selectedSportMode);
   const label=document.getElementById('selected-ride-mode');
-  if(label)label.textContent=profile.label+' · '+speedToKmh(profile.baseSpeed)+'–'+speedToKmh(profile.maxSpeed)+' KM/H';
+  if(label)label.textContent=sportProfile.label+' · '+speedToKmh(rideProfile.baseSpeed)+'–'+speedToKmh(rideProfile.maxSpeed)+' KM/H';
   document.body.dataset.rideMode=selectedRideMode;
+  document.body.dataset.sportMode=selectedSportMode;
 }
 
 function applyRideProfileToState(mode,{resetSpeed=false}={}){
@@ -754,7 +729,9 @@ let avatarRequest=0;
 let avatarLoadController=null;
 async function setAvatar(entry,rideMode=selectedRideMode){
   if(!entry)return;
-  const nextRideMode=normalizeRideMode(rideMode);
+  // Skateboard is the first active Urban Sports discipline. Until sport-specific
+  // physics diverge, it deliberately reuses the proven snowboard handling.
+  const nextRideMode=getLegacyRideModeForSport(selectedSportMode);
 
   if(avatarCommitted&&selectedAvatar?.id===entry.id&&riderController.rider){
     selectedRideMode=nextRideMode;
@@ -826,7 +803,8 @@ function installAvatarSelector(initialAvatar){
     onValidateLocalAvatar:validateLocalAvatarEntry,
     onSelect:async(entry,rideMode)=>{
       await setAvatar(entry,rideMode);
-      // Choosing SKI or SNOWBOARD is the final selection step: launch immediately.
+      // Phase 2: any ride-card confirmation launches the current Urban sport.
+      // The presentation branch will replace the legacy Ski/Snowboard wording.
       initialSelectionFlow=false;
       setTimeout(()=>beginRun(),0);
     },
@@ -904,6 +882,7 @@ function resetRunState(){
     displaceTerrainChunk(tile.geometry,tile.position.z);
   });
   environment.reset();
+  urbanEnvironment.reset?.();
   Object.assign(state,sampleSkiGround(terrainHeight,0,player.position.z,0,riderController.trackSpacing));
   state.y=.12+state.centerGround;player.position.y=state.y;
   courseFrame=0;resetCourse(0);skiCamera.reset();startCamera.reset();feedback.reset();
@@ -1460,8 +1439,19 @@ function update(dt,frameMs=dt*1000){
   startGate.update(worldDistance);
   const worldSpeed=worldDistance/dt;
   const environmentUpdateStarted=performance.now();
-  environment.update(state.mode==='paused'?0:simulationFrameDt,worldSpeed,state.x,state.y,player.position.z,state.speed,state.edge,state.air,state.landingPulse,state.mode==='playing',.12+state.centerGround,state.time,state.rideMode,riderController.trailContacts);
-  mountainWeather.update(state.mode==='paused'?0:simulationFrameDt,state);
+  const environmentDt=state.mode==='paused'?0:simulationFrameDt;
+  environment.update(environmentDt,worldSpeed,state.x,state.y,player.position.z,state.speed,state.edge,state.air,state.landingPulse,state.mode==='playing',.12+state.centerGround,state.time,state.rideMode,riderController.trailContacts);
+  urbanEnvironment.update?.(environmentDt,worldSpeed);
+  mountainWeather.update(environmentDt,state);
+  const urbanWeather=mountainWeather.getState?.();
+  const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
+  const asphalt=urbanEnvironment.materials?.asphalt;
+  if(asphalt){
+    asphalt.roughness=THREE.MathUtils.lerp(.94,.48,wet);
+    asphalt.clearcoat=THREE.MathUtils.lerp(0,.82,wet);
+    asphalt.clearcoatRoughness=THREE.MathUtils.lerp(.28,.12,wet);
+    asphalt.envMapIntensity=THREE.MathUtils.lerp(.20,.65,wet);
+  }
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 
@@ -1574,6 +1564,7 @@ window.chimpionsSki=()=>{
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
     ...environment.getQualityDiagnostics?.(),
+    urbanEnvironment:urbanEnvironment.getDiagnostics?.()||null,
     ...quality.getDiagnostics(),
     cameraViewMode,
     cameraMotionMode,
@@ -1653,6 +1644,8 @@ window.chimpionsSki=()=>{
     catalogSize:catalog.length,
     selectedAvatar:selectedAvatar?.name||'',
     selectedAvatarLocal:!!selectedAvatar?.localOnly,
+    sportMode:selectedSportMode,
+    sportLabel:getSportProfile(selectedSportMode).label,
     rideMode:selectedRideMode,
     baseSpeed:getRideProfile(selectedRideMode).baseSpeed,
     maxSpeed:getRideProfile(selectedRideMode).maxSpeed,
@@ -1660,6 +1653,7 @@ window.chimpionsSki=()=>{
     pooledCourseObjects:pooledObjects
   };
 };
+window.chimpionsUrbanSports=window.chimpionsSki;
 
 
 if(import.meta.hot){
@@ -1671,11 +1665,13 @@ if(import.meta.hot){
     runtimeListeners.dispose();
     riderController.dispose();
     impactVfx.dispose?.();
+    urbanEnvironment.dispose?.();
     composer?.dispose?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();
     selector?.dispose?.();
     delete window.chimpionsSki;
+    delete window.chimpionsUrbanSports;
   });
 }

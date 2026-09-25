@@ -59,8 +59,9 @@ export function createUrbanMaterials({renderer=null}={}){
   const sidewalkMap=makeSidewalkTexture(renderer);
 
   const materials={
-    asphalt:new THREE.MeshStandardMaterial({
-      color:0x41454b,map:asphaltMap,roughness:.95,metalness:.02
+    asphalt:new THREE.MeshPhysicalMaterial({
+      color:0x41454b,map:asphaltMap,roughness:.94,metalness:.02,
+      clearcoat:0,clearcoatRoughness:.28,envMapIntensity:.20
     }),
     sidewalk:new THREE.MeshStandardMaterial({
       color:0xa8aaab,map:sidewalkMap,roughness:.92,metalness:0

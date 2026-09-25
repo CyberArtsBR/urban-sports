@@ -258,7 +258,7 @@ export function createSkateboardEquipment({
     }),
     hub:new THREE.MeshStandardMaterial({color:0x1c2730,roughness:.25,metalness:.50}),
     bearing:new THREE.MeshStandardMaterial({color:0xc8d5de,roughness:.16,metalness:.94}),
-    powerLed:new THREE.MeshBasicMaterial({color:new THREE.Color().setRGB(.02,.62,8.4),toneMapped:false,fog:false})
+    powerLed:new THREE.MeshBasicMaterial({color:new THREE.Color().setRGB(.018,1.04,12.0),toneMapped:false,fog:false})
   };
 
   const edge=new THREE.Mesh(createDeckGeometry({width,length,thickness:.064,concave:.021,kick:.150}),materials.edge);
@@ -289,7 +289,7 @@ export function createSkateboardEquipment({
   }
 
   const deckLedMaterial=new THREE.MeshBasicMaterial({
-    color:new THREE.Color().setRGB(.015,.74,10.2),
+    color:new THREE.Color().setRGB(.018,1.05,12.2),
     toneMapped:false,
     fog:false,
     transparent:true,

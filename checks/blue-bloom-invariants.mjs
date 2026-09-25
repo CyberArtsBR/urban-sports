@@ -30,12 +30,15 @@ assert(rampAccent.material.color.b>rampAccent.material.color.g*5,'ramp bloom mus
 
 for(const mode of ['ski','snowboard']){
   const rider=createFallbackSkier({rideMode:mode});
-  const equipment=mode==='ski'?rider.userData.skis:rider.getObjectByName('snowboard-equipment').children;
+  const skateboard=rider.getObjectByName('skateboard-equipment');
+  const equipment=mode==='ski'?rider.userData.skis:[skateboard];
+  assert(equipment.every(Boolean),`${mode} equipment is missing`);
   const strips=[];
   for(const item of equipment)item.traverse(mesh=>{
     if(mesh.isMesh&&mesh.material?.color?.b>5)strips.push(mesh);
   });
-  assert.equal(strips.length,2,`${mode} needs two narrow special-bloom accents`);
+  const expected=mode==='ski'?2:6;
+  assert.equal(strips.length,expected,`${mode} needs ${expected} narrow special-bloom accents`);
   assert(strips.every(mesh=>!mesh.visible),`${mode} blooms before the special is ready`);
   rider.userData.setPowerGlow(1,0);
   assert(strips.every(mesh=>mesh.visible&&luminance(mesh.material.color)>threshold),`${mode} does not bloom when the special is ready`);

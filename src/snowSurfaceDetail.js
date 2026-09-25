@@ -50,6 +50,7 @@ export function createSnowSurfaceDetail({world,terrainHeight,snowMaterial,detail
   let activeMounds=moundCount;
   let activeRidges=ridgeCount;
   let travel=0;
+  let visible=true;
 
   function resetEntry(entry,i,isRidge){
     entry.x=(hash(i*3.17+4)-.5)*(isRidge?23:25);
@@ -92,8 +93,15 @@ export function createSnowSurfaceDetail({world,terrainHeight,snowMaterial,detail
     if(ridges.count>0)ridges.computeBoundingSphere();
   }
 
+  function setVisible(value=true){
+    visible=!!value;
+    mounds.visible=visible;
+    ridges.visible=visible;
+    return visible;
+  }
+
   function update(dt,worldSpeed){
-    if(worldSpeed===0)return;
+    if(!visible||worldSpeed===0)return;
     const dz=worldSpeed*dt;
     travel+=dz;
     for(let i=0;i<activeMounds;i++){
@@ -124,10 +132,10 @@ export function createSnowSurfaceDetail({world,terrainHeight,snowMaterial,detail
   }
 
   function getDiagnostics(){
-    return {activeMounds,activeRidges,moundCapacity:moundCount,ridgeCapacity:ridgeCount};
+    return {activeMounds,activeRidges,moundCapacity:moundCount,ridgeCapacity:ridgeCount,visible};
   }
 
   reset();
   setDensity(detailLevel);
-  return {update,reset,setDensity,getDiagnostics,moundMaterial,ridgeMaterial,setDetailLevel:setDensity,getDetailLevel:()=>activeMounds/moundCount};
+  return {update,reset,setDensity,setVisible,getDiagnostics,moundMaterial,ridgeMaterial,setDetailLevel:setDensity,getDetailLevel:()=>activeMounds/moundCount};
 }

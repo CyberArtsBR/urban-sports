@@ -11,10 +11,16 @@ const results=[];
 results.push(result('existing course architecture retains pooling',
  /coursePool/.test(all)&&/(acquireCourseItem|releaseCourseItem)/.test(all)?STATUS.PASS:STATUS.FAIL,
  'course objects must continue to reuse pools'));
-const perFrameAllocation=sourcePaths.some(path=>/function update\([^)]*\)[\s\S]{0,700}(new THREE\.|createElement\(|new Map\(|new Set\()/i.test(read(root,path)));
+const perFrameAllocationHits=sourcePaths.flatMap(path=>{
+ const source=read(root,path);
+ const match=source.match(/function update\([^)]*\)[\s\S]{0,700}(new THREE\.|createElement\(|new Map\(|new Set\()/i);
+ return match?[{path,token:match[1]}]:[];
+});
 results.push(result('no obvious object allocation inside per-frame update loop',
- !perFrameAllocation?STATUS.PASS:STATUS.FAIL,
- 'inspect frame update for allocations'));
+ perFrameAllocationHits.length===0?STATUS.PASS:STATUS.FAIL,
+ perFrameAllocationHits.length
+   ?'candidate allocations: '+perFrameAllocationHits.map(hit=>hit.path+' -> '+hit.token).join(', ')
+   :'no constructor-like allocation found near update()'));
 
 const future=['one reusable trick state','one active rider visual','one active equipment mode','selector listeners bounded across repeated open/close','temporary trick pivots bounded','trick events/timers bounded over ~10 virtual minutes'];
 if(!feature){

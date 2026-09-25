@@ -1,7 +1,7 @@
-name: Chimpions Ski production desktop audit
+name: Chimpions Urban Sports production desktop audit
 on:
   workflow_run:
-    workflows: ["Chimpions Ski desktop build and checks"]
+    workflows: ["Chimpions Urban Sports build and checks"]
     branches: [main]
     types: [completed]
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
       - run: |
           npm install
           npx playwright install --with-deps chromium
-      - name: Audit deployed desktop build
+      - name: Audit deployed Urban Sports desktop build
         env:
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
           CHIMPIONS_URBAN_SPORTS_EXPECTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}

@@ -78,6 +78,7 @@ const runner=readFileSync(new URL('../scripts/benchmark-ski-runtime.mjs',import.
 const core=readFileSync(new URL('../scripts/benchmark/core.mjs',import.meta.url),'utf8');
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const workflow=readFileSync(new URL('../.github/workflows/performance-quality-profiles.yml',import.meta.url),'utf8');
+const graphicsWorkflow=readFileSync(new URL('../.github/workflows/aaa-urban-graphics-regression.yml',import.meta.url),'utf8');
 assert((runner+core).includes('QUALITY_PROFILE'),'benchmark must support explicit quality profiles');
 assert(core.includes("'max'"),'benchmark quality parser must accept MAX');
 assert(core.includes('chimpionsUrbanSports'),'benchmark must prefer the Urban Sports diagnostics alias');
@@ -92,6 +93,9 @@ assert(main.includes('quality.observeFrame'),'AUTO quality must observe runtime 
 assert(!workflow.includes('$(run_preview'),'workflow must not start a long-lived preview inside command substitution');
 assert(workflow.includes('continue-on-error: true'),'benchmark profiles should preserve partial results');
 assert(workflow.includes('if: always()'),'benchmark artifacts must survive partial profile failures');
+assert(workflow.includes('QUALITY_PROFILE=max'),'performance workflow must benchmark the MAX profile');
+assert(workflow.includes('MAX_OUTCOME'),'performance workflow must enforce the MAX benchmark result');
+assert(graphicsWorkflow.includes('quality: [low, medium, high, max]'),'graphics browser matrix must exercise the MAX profile');
 
 console.log(JSON.stringify({
   check:'performance-quality-invariants',

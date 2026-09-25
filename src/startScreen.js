@@ -49,15 +49,10 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urba
     refreshReady();
   },{once:true});
   art.addEventListener('error',()=>{
-    if(!art.dataset.fallbackTried){
-      art.dataset.fallbackTried='1';
-      art.src='/start/chimpions-ski-start.jpg';
-      return;
-    }
     artReady=false;
     artFailed=true;
     refreshReady();
-  });
+  },{once:true});
   if(artReady)root.classList.add('is-art-ready');
 
   function setReady(value){

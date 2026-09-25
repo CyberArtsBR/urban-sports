@@ -11,10 +11,32 @@ const results=[];
 results.push(result('existing course architecture retains pooling',
  /coursePool/.test(all)&&/(acquireCourseItem|releaseCourseItem)/.test(all)?STATUS.PASS:STATUS.FAIL,
  'course objects must continue to reuse pools'));
-const perFrameAllocation=sourcePaths.some(path=>/function update\([^)]*\)[\s\S]{0,700}(new THREE\.|createElement\(|new Map\(|new Set\()/i.test(read(root,path)));
+function namedUpdateBodies(source){
+ const bodies=[];
+ for(const match of source.matchAll(/function update\([^)]*\)\s*\{/g)){
+   const open=match.index+match[0].length-1;
+   let depth=1,end=open+1;
+   for(;end<source.length&&depth>0;end++){
+     if(source[end]==='{')depth++;
+     else if(source[end]==='}')depth--;
+   }
+   bodies.push(source.slice(open+1,Math.max(open+1,end-1)));
+ }
+ return bodies;
+}
+const allocationPattern=/(new THREE\.|createElement\(|new Map\(|new Set\()/i;
+const perFrameAllocationHits=sourcePaths.flatMap(path=>{
+ const source=read(root,path);
+ return namedUpdateBodies(source).flatMap(body=>{
+   const match=body.match(allocationPattern);
+   return match?[{path,token:match[1]}]:[];
+ });
+});
 results.push(result('no obvious object allocation inside per-frame update loop',
- !perFrameAllocation?STATUS.PASS:STATUS.FAIL,
- 'inspect frame update for allocations'));
+ perFrameAllocationHits.length===0?STATUS.PASS:STATUS.FAIL,
+ perFrameAllocationHits.length
+   ?'candidate allocations inside update(): '+perFrameAllocationHits.map(hit=>hit.path+' -> '+hit.token).join(', ')
+   :'no constructor-like allocation found inside update() bodies'));
 
 const future=['one reusable trick state','one active rider visual','one active equipment mode','selector listeners bounded across repeated open/close','temporary trick pivots bounded','trick events/timers bounded over ~10 virtual minutes'];
 if(!feature){

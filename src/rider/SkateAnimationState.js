@@ -269,29 +269,27 @@ export function createSkateAnimationStateMachine(){
       ?clamp(explicitPushProgress)
       :pushClock%1;
 
-    Object.assign(snapshot,{
-      state:current,
-      previousState:previous,
-      changed,
-      stateTime,
-      speed,
-      speed01:clamp(speed/24),
-      steer,
-      acceleration,
-      air,
-      landing,
-      verticalVelocity,
-      trickType:token(trickRaw),
-      trickProgress,
-      grabType:isGrab(trickRaw)?token(trickRaw):token(frame.grabType),
-      manualType,
-      grindType,
-      landingQuality,
-      pushPhase,
-      bananaPower,
-      reducedMotion,
-      authoritativeEvent
-    });
+    snapshot.state=current;
+    snapshot.previousState=previous;
+    snapshot.changed=changed;
+    snapshot.stateTime=stateTime;
+    snapshot.speed=speed;
+    snapshot.speed01=clamp(speed/24);
+    snapshot.steer=steer;
+    snapshot.acceleration=acceleration;
+    snapshot.air=air;
+    snapshot.landing=landing;
+    snapshot.verticalVelocity=verticalVelocity;
+    snapshot.trickType=token(trickRaw);
+    snapshot.trickProgress=trickProgress;
+    snapshot.grabType=isGrab(trickRaw)?token(trickRaw):token(frame.grabType);
+    snapshot.manualType=manualType;
+    snapshot.grindType=grindType;
+    snapshot.landingQuality=landingQuality;
+    snapshot.pushPhase=pushPhase;
+    snapshot.bananaPower=bananaPower;
+    snapshot.reducedMotion=reducedMotion;
+    snapshot.authoritativeEvent=authoritativeEvent;
     previousSpeed=speed;
     return snapshot;
   }

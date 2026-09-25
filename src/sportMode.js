@@ -14,10 +14,14 @@ const SPORT_PROFILES=Object.freeze({
     mode:SPORT_MODE.SKATEBOARD,
     label:'SKATEBOARD',
     legacyRideMode:RIDE_MODE.SNOWBOARD,
+    physicsProfile:'skateboard-native',
+    displaySpeedProfile:'skateboard',
     equipment:'skateboard',
     stance:'sideways',
     wheelCount:4,
-    supportsGrinding:true
+    supportsGrinding:true,
+    supportsManuals:true,
+    supportsPowerslides:true
   }),
   [SPORT_MODE.INLINE]:Object.freeze({
     mode:SPORT_MODE.INLINE,

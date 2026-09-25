@@ -276,11 +276,11 @@ assert.equal(preMaxDensity.postMaxHazards,0,'post-300 filler appeared before rea
 assert(postMaxDensity.postMaxHazards>0,'post-300 filler never added hazards');
 assert(
   postMaxDensity.hazards>preMaxDensity.hazards*1.025,
-  'hazard density did not increase after sustained 300 km/h'
+  `hazard density did not increase after sustained 300 km/h (pre=${preMaxDensity.hazards}, post=${postMaxDensity.hazards}, required>${(preMaxDensity.hazards*1.025).toFixed(2)}, postMaxTagged=${postMaxDensity.postMaxHazards})`
 );
 assert(
   postMaxDensity.wideLogs>preMaxDensity.wideLogs,
-  'wide horizontal logs did not increase during post-300 escalation'
+  `wide horizontal logs did not increase during post-300 escalation (pre=${preMaxDensity.wideLogs}, post=${postMaxDensity.wideLogs})`
 );
 assert(
   preMaxDensity.specialWideLogs>preMaxDensity.specialLogs,

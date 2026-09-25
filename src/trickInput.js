@@ -21,3 +21,36 @@ export function readAirborneTrickIntent(keys,pad={}){
   // Jump remains the arcade shortcut for a 360, subject to airtime gating.
   return readTrickIntent(keys,pad)||TRICK_TYPE.SPIN_360;
 }
+
+export function readSkateboardTrickIntent(keys,pad={}, {airborne=false}={}){
+  const left=!!keys?.has?.('ArrowLeft')||!!keys?.has?.('KeyA')||!!pad?.dpad?.left||(Number(pad?.axis)||0)<=-TRICK_AXIS_THRESHOLD;
+  const right=!!keys?.has?.('ArrowRight')||!!keys?.has?.('KeyD')||!!pad?.dpad?.right||(Number(pad?.axis)||0)>=TRICK_AXIS_THRESHOLD;
+  const up=!!keys?.has?.('ArrowUp')||!!keys?.has?.('KeyW')||!!pad?.dpad?.up||(Number(pad?.axisY)||0)<=-TRICK_AXIS_THRESHOLD;
+  const down=!!keys?.has?.('ArrowDown')||!!keys?.has?.('KeyS')||!!pad?.dpad?.down||(Number(pad?.axisY)||0)>=TRICK_AXIS_THRESHOLD;
+  const shoulderLeft=!!pad?.buttons?.[4];
+  const shoulderRight=!!pad?.buttons?.[5];
+  const modifier=!!keys?.has?.('ShiftLeft')||!!keys?.has?.('ShiftRight')||shoulderLeft||shoulderRight;
+  const advanced=!!keys?.has?.('AltLeft')||!!keys?.has?.('AltRight')||(shoulderLeft&&shoulderRight);
+
+  if(modifier){
+    if(advanced){
+      if(left&&!right)return TRICK_TYPE.VARIAL_FLIP;
+      if(right&&!left)return TRICK_TYPE.TRE_FLIP;
+    }
+    if(airborne){
+      if(left&&!right)return TRICK_TYPE.MELON;
+      if(right&&!left)return TRICK_TYPE.NOSEGRAB;
+      if(up&&!down)return TRICK_TYPE.KICKFLIP;
+      if(down&&!up)return TRICK_TYPE.HEELFLIP;
+      return TRICK_TYPE.INDY;
+    }
+    if(up&&!down)return TRICK_TYPE.KICKFLIP;
+    if(down&&!up)return TRICK_TYPE.HEELFLIP;
+    if(left&&!right)return TRICK_TYPE.POP_SHOVE_IT;
+    if(right&&!left)return TRICK_TYPE.FRONTSIDE_SHOVE_IT;
+    return TRICK_TYPE.KICKFLIP;
+  }
+
+  if((left&&!right)||(right&&!left))return TRICK_TYPE.SPIN_180;
+  return airborne?readAirborneTrickIntent(keys,pad):readTrickIntent(keys,pad);
+}

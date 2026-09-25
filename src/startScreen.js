@@ -6,7 +6,7 @@ export function createStartScreen({audio,onStart,assetUrl='/start/chimpions-urba
   root.setAttribute('aria-label','Chimpions Urban Sports start screen');
   root.innerHTML=`
     <div class="start-screen-stage">
-      <img class="start-screen-art" src="${assetUrl}" alt="" aria-hidden="true" width="1920" height="1080" decoding="async" fetchpriority="high" draggable="false" />
+      <img class="start-screen-art" src="${assetUrl}" alt="" aria-hidden="true" width="1600" height="900" decoding="async" fetchpriority="high" draggable="false" />
       <div class="start-screen-actions" aria-label="Main menu">
         <button class="start-screen-hit start-screen-play" type="button" aria-label="Start Game" disabled><span>START GAME</span></button>
         <a class="start-screen-hit start-screen-back" href="${GAME_SELECTION_URL}" aria-label="Back to the Game selection"><span>Back to the Game selection</span></a>

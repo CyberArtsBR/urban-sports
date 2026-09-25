@@ -55,3 +55,5 @@ export {
 } from './urbanBuildings.js';
 
 export {createUrbanAtmosphere} from './urbanAtmosphere.js';
+
+export {createUrbanRoadSurfaceDetails} from './urbanRoadSurfaceDetails.js';

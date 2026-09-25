@@ -61,6 +61,8 @@ export const GRAPHICS_BUDGET_METRICS=Object.freeze(Object.keys(HIGH));
 const STABILITY_LIMITS=Object.freeze({
   rendererGeometries:{absolute:4,fraction:.05},
   rendererTextures:{absolute:2,fraction:.05},
+  sceneGeometryCount:{absolute:4,fraction:.05},
+  sceneTextureCount:{absolute:2,fraction:.05},
   sceneObjectCount:{absolute:20,fraction:.08},
   instancedMeshCount:{absolute:2,fraction:.05},
   materialCount:{absolute:4,fraction:.06},
@@ -215,10 +217,12 @@ function monotonicFraction(values){
   return nonDecreasing/(values.length-1);
 }
 
-export function analyzeGraphicsStability(samples,{limits=STABILITY_LIMITS}={}){
+export function analyzeGraphicsStability(samples,{limits=STABILITY_LIMITS,ignoredMetrics=[]}={}){
   const analyses={};
   const violations=[];
+  const ignored=new Set(ignoredMetrics||[]);
   for(const [metric,rule] of Object.entries(limits)){
+    if(ignored.has(metric))continue;
     const values=(samples||[]).map(sample=>finite(sample?.[metric])).filter(value=>value!=null);
     if(values.length<4){
       analyses[metric]={status:'UNAVAILABLE',samples:values.length};

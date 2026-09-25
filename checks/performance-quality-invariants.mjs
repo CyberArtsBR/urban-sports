@@ -75,11 +75,18 @@ broadphase.clear();
 assert.equal(broadphase.getDiagnostics().broadphaseBuckets,0);
 
 const runner=readFileSync(new URL('../scripts/benchmark-ski-runtime.mjs',import.meta.url),'utf8');
+const selectorBenchmark=readFileSync(new URL('../scripts/benchmark/selector.mjs',import.meta.url),'utf8');
+const gameplayBenchmark=readFileSync(new URL('../scripts/benchmark/gameplay.mjs',import.meta.url),'utf8');
 const core=readFileSync(new URL('../scripts/benchmark/core.mjs',import.meta.url),'utf8');
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const workflow=readFileSync(new URL('../.github/workflows/performance-quality-profiles.yml',import.meta.url),'utf8');
 const graphicsWorkflow=readFileSync(new URL('../.github/workflows/aaa-urban-graphics-regression.yml',import.meta.url),'utf8');
 assert((runner+core).includes('QUALITY_PROFILE'),'benchmark must support explicit quality profiles');
+assert(runner.includes('Required benchmark phases did not PASS'),'benchmark must fail instead of reporting success with core phases pending');
+assert(selectorBenchmark.includes('.start-screen-play'),'selector benchmark must enter through the real Urban start screen');
+assert(selectorBenchmark.includes(':not(.is-upload-avatar):not([aria-disabled="true"])'),'selector benchmark must wait for an enabled built-in Chimpion');
+assert(gameplayBenchmark.includes('chimpionsUrbanSports'),'gameplay benchmark must prefer Urban Sports diagnostics');
+assert(gameplayBenchmark.includes('.session-tutorial:not([hidden])'),'gameplay benchmark must deterministically clear the tutorial handoff');
 assert(core.includes("'max'"),'benchmark quality parser must accept MAX');
 assert(core.includes('chimpionsUrbanSports'),'benchmark must prefer the Urban Sports diagnostics alias');
 assert(core.includes('longTasks'),'benchmark must capture long main-thread tasks');

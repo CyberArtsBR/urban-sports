@@ -321,7 +321,7 @@ try{
   try{
     await touchPage.goto('http://127.0.0.1:4173/?test=1',{waitUntil:'domcontentloaded'});
     await touchPage.waitForFunction(()=>window.chimpionsSki?.().ready===true,null,{timeout:30000});
-    await touchPage.getByRole('button',{name:'Start Game'}).evaluate(button=>button.click());
+    await touchPage.locator('.start-screen-play').evaluate(button=>button.click());
     const touchSelector=touchPage.locator('#chimpion-selector');
     await touchSelector.waitFor({state:'visible',timeout:10000});
     const touchRiderName=await touchPage.evaluate(()=>window.chimpionsSki?.().selectedAvatar||'');

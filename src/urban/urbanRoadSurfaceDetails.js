@@ -176,14 +176,16 @@ export function createUrbanRoadSurfaceDetails(options={}){
         dampCount++;
       }
 
-      if(i%3===0||activeQuality==='max'){
+      const drainAccumulation=i%3===1;
+      if(i%3===0||drainAccumulation||activeQuality==='max'){
+        const drainX=entry.drainSide*(roadWidth*.5-entry.drainOffset);
         setTransform(puddles,puddleCount,{
-          x:entry.wetX+entry.wetWidth*.28,
+          x:drainAccumulation?drainX:entry.wetX+entry.wetWidth*.28,
           y:.030,
-          z:entry.z+3.0,
-          sx:entry.wetWidth,
-          sy:entry.wetLength,
-          ry:entry.yaw*.5
+          z:drainAccumulation?entry.z+.18:entry.z+3.0,
+          sx:drainAccumulation?.72:entry.wetWidth,
+          sy:drainAccumulation?1.35:entry.wetLength,
+          ry:drainAccumulation?0:entry.yaw*.5
         });
         puddleCount++;
       }

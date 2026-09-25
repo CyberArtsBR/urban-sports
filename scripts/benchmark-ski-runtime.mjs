@@ -112,6 +112,22 @@ async function main(){
     results.memory.note=results.memory.heapMetricsAvailable?'performance.memory captured where Chromium exposes it':'performance.memory unavailable; this is not considered a benchmark failure';
 
     results.network=tracker.summarize(portraitUrls);
+
+    const requiredPhases=[
+      'A_initialPageLoad',
+      'B_startScreenIdle',
+      'C_characterSelectorOpening',
+      'D_avatarSearchFilter',
+      'H_repeatedSelectorOpenClose',
+      'E_gameplayFirst30Seconds',
+      'G_repeatedRestart',
+      'K_trickHeavy'
+    ];
+    if(CONFIG.longRunSeconds>0)requiredPhases.push('F_extendedGameplay');
+    const incompleteRequired=requiredPhases.filter(name=>results.phases[name]?.status!=='PASS');
+    if(incompleteRequired.length){
+      throw new Error('Required benchmark phases did not PASS: '+incompleteRequired.map(name=>name+'='+String(results.phases[name]?.status||'MISSING')).join(', '));
+    }
     if(results.network.musicFullMp3.status==='FAIL')results.warnings.push('Forbidden chimp-jump.onrender.com/audio/music-full.mp3 runtime dependency detected.');
     for(const [phaseName,phase] of Object.entries(results.phases)){
       for(const category of ['course','graphics']){

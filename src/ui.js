@@ -10,6 +10,100 @@ function buttonList(root){
   return Array.from(root.querySelectorAll('button:not([disabled]),[role="button"][tabindex]:not([aria-disabled="true"])')).filter(isVisible);
 }
 
+const URBAN_CURRENT_SPORT='SKATEBOARD';
+const URBAN_SPORTS=Object.freeze([
+  {id:'skateboard',label:'SKATEBOARD',status:'PLAYABLE NOW',current:true},
+  {id:'inline',label:'INLINE',status:'COMING SOON',current:false},
+  {id:'bmx',label:'BMX',status:'COMING SOON',current:false}
+]);
+
+function setPresentationText(element,text){
+  if(element&&element.textContent!==text)element.textContent=text;
+}
+function ensureUrbanSportSelector(overlay){
+  const card=overlay?.querySelector('.card');
+  if(!card||card.querySelector('.urban-sport-selector'))return;
+  const selector=document.createElement('section');
+  selector.className='urban-sport-selector';
+  selector.setAttribute('aria-label','Sport availability');
+  selector.innerHTML=`
+    <div class="urban-sport-selector-head"><small>SPORT</small><strong>CHOOSE YOUR LINE</strong></div>
+    <div class="urban-sport-options" role="list">
+      ${URBAN_SPORTS.map(sport=>`<button type="button" class="urban-sport-option${sport.current?' is-current':''}" data-sport="${sport.id}" aria-disabled="true" tabindex="-1" role="listitem"${sport.current?' aria-current="true"':''}><strong>${sport.label}</strong><span>${sport.status}</span></button>`).join('')}
+    </div>
+  `;
+  const avatar=card.querySelector('.selected-avatar');
+  if(avatar)avatar.after(selector);
+  else card.querySelector('.menu-actions')?.before(selector);
+}
+function applyUrbanSelectorCopy(){
+  const dialog=document.querySelector('.selector-dialog');
+  if(!dialog)return;
+  const title=dialog.querySelector('#selector-title');
+  if(title?.textContent==='Choose your ride')setPresentationText(title,'Choose skateboard setup');
+  const stepLabel=dialog.querySelector('#selector-step-label');
+  if(stepLabel?.textContent?.includes('RIDE'))setPresentationText(stepLabel,'STEP 2 OF 2 · SKATEBOARD');
+  const rideStep=dialog.querySelector('#ride-mode-step');
+  if(!rideStep)return;
+  rideStep.setAttribute('aria-label','Choose skateboard setup');
+  const copy=rideStep.querySelector('.ride-mode-copy');
+  setPresentationText(copy?.querySelector('small'),'STEP 2 OF 2 · SKATEBOARD');
+  setPresentationText(copy?.querySelector('strong'),'Choose Skateboard Setup');
+  setPresentationText(copy?.querySelector('span'),'Pick a handling setup for the current street build.');
+  const cards=Array.from(rideStep.querySelectorAll('.ride-mode-card'));
+  const labels=[
+    {icon:'🛹',name:'STREET SETUP',detail:'Responsive line control'},
+    {icon:'🛹',name:'PARK SETUP',detail:'Alternate stance profile'}
+  ];
+  cards.forEach((card,index)=>{
+    const label=labels[index]||labels[0];
+    setPresentationText(card.querySelector('b'),label.icon);
+    setPresentationText(card.querySelector('strong'),label.name);
+    setPresentationText(card.querySelector('span'),label.detail);
+    card.dataset.sport='skateboard';
+    card.setAttribute('aria-label',`Skateboard ${label.name.toLowerCase()}`);
+  });
+}
+function applyUrbanTutorialCopy(){
+  const tutorial=document.querySelector('.session-tutorial');
+  if(!tutorial)return;
+  tutorial.setAttribute('aria-label','Chimpions Urban Sports how to play tutorial');
+  const title=tutorial.querySelector('.session-tutorial-title strong');
+  if(title&&title.textContent.trim()!=='CHIMPIONS URBAN SPORTS')title.innerHTML='CHIMPIONS <span>URBAN SPORTS</span>';
+  setPresentationText(tutorial.querySelector('.session-tutorial-title em'),'SKATEBOARD · HOW TO PLAY');
+  const sections=tutorial.querySelectorAll('.session-tutorial-grid section');
+  if(sections[0])setPresentationText(sections[0].querySelector('p'),'Steer left and right to thread through street obstacles.');
+  if(sections[1])setPresentationText(sections[1].querySelector('p'),'Pop jumps, clear hazards and link tricks.');
+  if(sections[4]){
+    const goals=sections[4].querySelectorAll('p');
+    if(goals[0])setPresentationText(goals[0],'🛹 Ride as far as possible.');
+    if(goals[1])setPresentationText(goals[1],'🚧 Avoid cones, barriers and street hazards.');
+    if(goals[2])setPresentationText(goals[2],'🍌 Grab bananas and survive the rising pace.');
+  }
+}
+function applyUrbanPresentationCopy(){
+  const overlay=byId('overlay');
+  const badge=overlay?.querySelector('.badge');
+  setPresentationText(badge,'⚡ URBAN NIGHT SERIES');
+  const title=byId('game-title');
+  if(title&&title.textContent.trim()!=='CHIMPIONS URBAN SPORTS')title.innerHTML='CHIMPIONS <span>URBAN SPORTS</span>';
+  setPresentationText(overlay?.querySelector('.tagline'),'Own the endless street, collect bananas, clear obstacles and keep your line as the run gets faster.');
+  setPresentationText(overlay?.querySelector('.tip'),'A / D or LEFT STICK / D-PAD · STEER · SPACE / A · CROSS · JUMP · ESC / START · MENU · PAUSE');
+  const ride=byId('selected-ride-mode');
+  setPresentationText(ride,'SKATEBOARD · STREET READY');
+  const start=byId('start');
+  if(start)start.setAttribute('aria-label','Start skateboarding');
+  ensureUrbanSportSelector(overlay);
+  applyUrbanSelectorCopy();
+  applyUrbanTutorialCopy();
+}
+function observeUrbanPresentation(){
+  const observer=new MutationObserver(()=>applyUrbanPresentationCopy());
+  observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+  window.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
+  return observer;
+}
+
 export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,onChoose,onGiveUp,onShowTutorial}){
   const overlay=byId('overlay');
   const startButton=byId('start');
@@ -21,6 +115,9 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   const distanceStat=distance?.closest('.stat');
   const bananaStat=bananas?.closest('.stat');
   const speedStat=speed?.closest('.stat');
+  ensureUrbanSportSelector(overlay);
+  applyUrbanPresentationCopy();
+  observeUrbanPresentation();
   const bestFlag=document.createElement('div');
   bestFlag.className='hud-best';
   bestFlag.hidden=true;
@@ -95,21 +192,21 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   runLoading.id='run-loading-overlay';
   runLoading.className='presentation-overlay run-loading-overlay';
   runLoading.hidden=true;
-  runLoading.innerHTML='<section class="presentation-card run-loading-card" role="status" aria-live="polite"><small class="eyebrow">RIDER READY</small><h2>PREPARING THE RUN…</h2><p>Finalizing rider and course</p></section>';
+  runLoading.innerHTML='<section class="presentation-card run-loading-card" role="status" aria-live="polite"><small class="eyebrow">RIDER READY</small><h2>PREPARING THE RUN…</h2><p>Finalizing rider and street run</p></section>';
   document.body.append(runLoading);
 
   const pause=document.createElement('div');
   pause.id='pause-overlay';
   pause.className='presentation-overlay';
   pause.hidden=true;
-  pause.innerHTML=`<section class="presentation-card pause-card" role="dialog" aria-modal="true" aria-labelledby="pause-title"><small class="eyebrow">MOUNTAIN PAUSED</small><h2 id="pause-title">PAUSE</h2><div class="control-legend"><span><b>${CONTROL_COPY.carve}</b> Carve</span><span><b>${CONTROL_COPY.jump}</b> Jump</span><span><b>${CONTROL_COPY.pause}</b> Pause</span></div><div class="presentation-actions vertical"><button class="primary" id="resume-game" data-menu-default="true">RESUME</button><button class="secondary" id="restart-pause">RESTART RUN</button><button class="secondary" id="settings-pause">SETTINGS</button><button class="leave-game-button" id="give-up-pause">GIVE UP AND LEAVE TO GAME SELECTION</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
+  pause.innerHTML=`<section class="presentation-card pause-card" role="dialog" aria-modal="true" aria-labelledby="pause-title"><small class="eyebrow">STREET RUN PAUSED</small><h2 id="pause-title">PAUSE</h2><div class="control-legend"><span><b>${CONTROL_COPY.carve}</b> Steer</span><span><b>${CONTROL_COPY.jump}</b> Jump</span><span><b>${CONTROL_COPY.pause}</b> Pause</span></div><div class="presentation-actions vertical"><button class="primary" id="resume-game" data-menu-default="true">RESUME</button><button class="secondary" id="restart-pause">RESTART RUN</button><button class="secondary" id="settings-pause">SETTINGS</button><button class="leave-game-button" id="give-up-pause">GIVE UP AND LEAVE TO GAME SELECTION</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
   document.body.append(pause);
 
   const results=document.createElement('div');
   results.id='result-overlay';
   results.className='presentation-overlay';
   results.hidden=true;
-  results.innerHTML=`<section class="presentation-card result-card" role="dialog" aria-modal="true" aria-labelledby="result-title"><small class="eyebrow" id="result-eyebrow">RUN COMPLETE</small><h2 id="result-title">WIPEOUT</h2><div class="result-grid"><div><small>DISTANCE</small><strong id="result-distance">0 m</strong></div><div><small>SCORE</small><strong id="result-score">0</strong></div><div><small>BANANAS</small><strong id="result-bananas">0</strong></div><div><small>TIME</small><strong id="result-time">0:00</strong></div><div><small>MAX SPEED</small><strong id="result-max-speed">0 km/h</strong></div><div><small>BEST COMBO</small><strong id="result-combo">0</strong></div><div><small>RIDE</small><strong id="result-ride">SKI</strong></div><div><small>BEST DIST.</small><strong id="result-best">0 m</strong></div><div><small>NEAR MISSES</small><strong id="result-near-misses">0</strong></div><div><small>TRICKS LANDED</small><strong id="result-tricks-landed">0</strong></div><div><small>TRICKS FAILED</small><strong id="result-tricks-failed">0</strong></div><div><small>CLEAN LANDINGS</small><strong id="result-clean-landings">0</strong></div><div><small>STRONG LANDINGS</small><strong id="result-strong-landings">0</strong></div><div><small>POWER USES</small><strong id="result-power-uses">0</strong></div><div><small>BEST TRICK</small><strong id="result-best-trick">0</strong></div></div><div class="new-best-banner" id="new-best-banner" hidden>NEW BEST!</div><div class="presentation-actions"><button class="primary" id="restart-result" data-menu-default="true">RIDE AGAIN</button><button class="secondary" id="choose-result">CHANGE CHIMPION</button></div><div class="presentation-actions vertical leave-actions"><button class="leave-game-button" id="give-up-result">GIVE UP AND LEAVE TO GAME SELECTION</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
+  results.innerHTML=`<section class="presentation-card result-card" role="dialog" aria-modal="true" aria-labelledby="result-title"><small class="eyebrow" id="result-eyebrow">RUN COMPLETE</small><h2 id="result-title">WIPEOUT</h2><div class="result-grid"><div><small>DISTANCE</small><strong id="result-distance">0 m</strong></div><div><small>SCORE</small><strong id="result-score">0</strong></div><div><small>BANANAS</small><strong id="result-bananas">0</strong></div><div><small>TIME</small><strong id="result-time">0:00</strong></div><div><small>MAX SPEED</small><strong id="result-max-speed">0 km/h</strong></div><div><small>BEST COMBO</small><strong id="result-combo">0</strong></div><div><small>RIDE</small><strong id="result-ride">SKATEBOARD</strong></div><div><small>BEST DIST.</small><strong id="result-best">0 m</strong></div><div><small>NEAR MISSES</small><strong id="result-near-misses">0</strong></div><div><small>TRICKS LANDED</small><strong id="result-tricks-landed">0</strong></div><div><small>TRICKS FAILED</small><strong id="result-tricks-failed">0</strong></div><div><small>CLEAN LANDINGS</small><strong id="result-clean-landings">0</strong></div><div><small>STRONG LANDINGS</small><strong id="result-strong-landings">0</strong></div><div><small>POWER USES</small><strong id="result-power-uses">0</strong></div><div><small>BEST TRICK</small><strong id="result-best-trick">0</strong></div></div><div class="new-best-banner" id="new-best-banner" hidden>NEW BEST!</div><div class="presentation-actions"><button class="primary" id="restart-result" data-menu-default="true">RIDE AGAIN</button><button class="secondary" id="choose-result">CHANGE CHIMPION</button></div><div class="presentation-actions vertical leave-actions"><button class="leave-game-button" id="give-up-result">GIVE UP AND LEAVE TO GAME SELECTION</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
   document.body.append(results);
 
   const settings=document.createElement('div');
@@ -222,7 +319,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     if(restartResult)restartResult.disabled=!!loading;
     if(chooseResult)chooseResult.disabled=!!loading;
     overlay?.classList.toggle('is-loading',!!loading);
-    if(startButton)startButton.textContent=loading?'LOADING CHIMPION…':(mode==='menu'?'START SKIING':'SKI AGAIN');
+    if(startButton)startButton.textContent=loading?'LOADING CHIMPION…':(mode==='menu'?'START RIDING':'RIDE AGAIN');
   }
   function syncAudioButtons(){
     const audioSettings=audio.getSettings();
@@ -395,7 +492,8 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
       byId('result-time').textContent=Math.floor(totalSeconds/60)+':'+String(totalSeconds%60).padStart(2,'0');
       byId('result-max-speed').textContent=Math.max(0,Math.round(Number(maxSpeedKmh)||0))+' km/h';
       byId('result-combo').textContent=String(Math.max(0,Math.floor(Number(bestCombo)||0)));
-      byId('result-ride').textContent=String(rideMode||'ski').toUpperCase();
+      const legacyRide=String(rideMode||'skateboard').toLowerCase();
+      byId('result-ride').textContent=['ski','snowboard'].includes(legacyRide)?URBAN_CURRENT_SPORT:legacyRide.replace(/[-_]/g,' ').toUpperCase();
       byId('result-best').textContent=Math.floor(best)+' m';
       byId('result-near-misses').textContent=String(Math.max(0,Math.floor(Number(nearMisses)||0)));
       byId('result-tricks-landed').textContent=String(Math.max(0,Math.floor(Number(tricksLanded)||0)));

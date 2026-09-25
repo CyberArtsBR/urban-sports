@@ -298,6 +298,45 @@ export function createUrbanStreetDressing(options={}){
     emitBox(x,1.0,z,.82,2.0,.66,STREET_COLORS.kiosk);
     emitBox(x-side*.425,1.18,z,.035,.72,.42,0x142633);
   }
+  function emitCafeHint(side,z){
+    const x=side*(config.roadWidth*.5+config.sidewalkWidth*.67);
+    emitCylinder(x,.46,z,.42,.08,.42,0x6e5845);
+    emitCylinder(x,.23,z,.07,.46,.07,STREET_COLORS.dark);
+    for(const dz of [-.72,.72]){
+      emitBox(x,.34,z+dz,.52,.09,.46,0x4b5963);
+      emitBox(x+side*.23,.68,z+dz,.08,.66,.46,0x4b5963);
+    }
+  }
+  function emitPedestrianSign(side,z){
+    const x=side*(config.roadWidth*.5+1.34);
+    emitCylinder(x,1.10,z,.05,2.20,.05,STREET_COLORS.steel);
+    emitBox(x,1.92,z,.72,.72,.07,0x356e9b);
+    emitBox(x-side*.365,1.92,z,.025,.44,.42,0xd7e2e5);
+  }
+  function emitSignalAssembly(side,z){
+    const roadEdge=config.roadWidth*.5;
+    const x=side*(roadEdge+1.24),towardRoad=-side;
+    emitCylinder(x,1.62,z,.07,3.24,.07,STREET_COLORS.dark);
+    emitBox(x+towardRoad*.52,3.13,z,1.10,.08,.08,STREET_COLORS.dark);
+    const signalX=x+towardRoad*1.02;
+    emitBox(signalX,2.62,z,.34,1.02,.30,0x1e252b);
+    emitBox(signalX+towardRoad*.18,2.91,z,.025,.18,.18,0x8a3939);
+    emitBox(signalX+towardRoad*.18,2.62,z,.025,.18,.18,0x8a7635);
+    emitBox(signalX+towardRoad*.18,2.33,z,.025,.18,.18,0x356b4b);
+    emitBox(x+towardRoad*.10,1.55,z,.48,.58,.18,0x27333b);
+    emitBox(x+towardRoad*.20,1.55,z,.025,.31,.26,0xd4ddd9);
+    emitBox(x,3.52,z+.34,.10,.34,1.18,0x2f6c72);
+    emitBox(x,3.52,z-.34,.10,.34,.82,0x315f93);
+  }
+  function emitTreeGrate(side,z){
+    const x=side*(config.roadWidth*.5+config.sidewalkWidth*.64);
+    emitFlat(x,.187,z,1.18,1.18,0x4b5357);
+    emitFlat(x,.189,z,.24,.24,0x252b2f);
+  }
+  function emitDrainGrate(side,z){
+    const x=side*(config.roadWidth*.5+.24);
+    emitFlat(x,.019,z,.34,.92,0x252a2e);
+  }
   function emitBusStop(side,z){
     const x=side*(config.roadWidth*.5+config.sidewalkWidth*.76),towardRoad=-side;
     emitBox(x,1.22,z-1.75,.10,2.44,.10,STREET_COLORS.steel);
@@ -337,6 +376,8 @@ export function createUrbanStreetDressing(options={}){
       const tactileX=side*(roadEdge+.72);
       emitFlat(tactileX,.186,entry.z+entry.jitter*.30,.72,1.22,0xcaaa45);
     }
+    if(detailLevel>=1&&entry.phase>.62)emitDrainGrate(side,entry.z-3.1);
+    if(detailLevel>=2&&entry.variant>.76)emitTreeGrate(side,entry.z+3.0);
   }
   function detailLevel(z){if(z<config.farDetailZ)return 0;if(z<config.mediumDetailZ)return 1;return 2;}
   function emitGenerated(entry,index){
@@ -350,14 +391,28 @@ export function createUrbanStreetDressing(options={}){
       if(level>=2)(entry.phase>.5?emitHydrant(side,z-2.5):emitBin(side,z-2.4,entry.phase>.72));
     }else if(entry.zone==='storefront'){
       if(level>=1)emitCommercial(side,z,entry.phase>.5?STREET_COLORS.awningA:STREET_COLORS.awningB);
-      if(level>=2){entry.phase>.55?emitBench(side,z+2.2):emitNewspaperBox(side,z+2.2);if(entry.variant>.58)emitBin(side,z-2.3,true);}
+      if(level>=2){
+        entry.phase>.55?emitBench(side,z+2.2):emitNewspaperBox(side,z+2.2);
+        if(entry.variant>.58)emitBin(side,z-2.3,true);
+        if(entry.variant<.34)emitCafeHint(side,z-3.0);
+      }
     }else if(entry.zone==='downtown'){
       if(entry.phase>.34)emitVehicle({side,z:z-1.2,type:entry.vehicleKind,color:VEHICLE_COLORS[entry.colorIndex],scale:.94,yaw});
+      else if(level>=2&&entry.phase<.16)emitVehicle({side,z:z-1.0,type:'scooter',color:VEHICLE_COLORS[entry.colorIndex],scale:.96,yaw});
       if(level>=1)(entry.variant>.52?emitBench(side,z+2.4):emitPlanter(side,z+2.4));
-      if(level>=2){entry.phase>.58?emitBikeRack(side,z-2.8):emitHydrant(side,z-2.8);if(entry.variant>.73)emitMailbox(side,z+4.2);}
+      if(level>=2){
+        entry.phase>.58?emitBikeRack(side,z-2.8):emitHydrant(side,z-2.8);
+        if(entry.variant>.73)emitMailbox(side,z+4.2);
+        if(entry.phase>.82)emitSignalAssembly(side,z+5.0);
+        else if(entry.variant<.18)emitPedestrianSign(side,z+4.5);
+      }
     }else if(entry.zone==='transit'){
       emitBusStop(side,z);
-      if(level>=2){emitBin(side,z+3.1,true);emitBollards(side,z-3.4,2);}
+      if(level>=2){
+        emitBin(side,z+3.1,true);emitBollards(side,z-3.4,2);
+        if(entry.variant>.55)emitSignalAssembly(side,z+5.2);
+        else emitPedestrianSign(side,z+4.7);
+      }
     }else if(entry.zone==='construction'){
       if(level>=1)emitConstruction(side,z);
       if(level>=2)emitBollards(side,z+3.0,3);

@@ -39,3 +39,22 @@ Composition is intentionally zoned rather than uniformly random. A deterministic
 All repeating geometry is pooled into a small fixed set of `InstancedMesh` batches. The layer creates no realtime lights and all vehicle/street-light accents are material-only. It exposes `update(dt, worldSpeed)`, `reset()`, `setDensity(profileOrSettings)`, `getDiagnostics()` and `dispose()`.
 
 The integrated `createUrbanEnvironment()` includes this street-dressing controller as `components.dressing`.
+
+
+## Final AAA city asset pass
+
+The final city pass keeps the nine-component streaming topology and the 42-draw-call environment guard. Quality is added inside the existing instanced batches rather than by spawning independent meshes.
+
+The skyline now uses procedural facade surface maps plus architecture-specific material families, richer merged structural geometry, storefront framing, rooftop HVAC/communications silhouettes, fire escapes, balconies, service bays and event marquees. Window panels use deterministic room-by-room illumination states instead of a uniform cyan grid.
+
+Street dressing uses a two-tier strategy without extra draw batches: MEDIUM/LOW retain the efficient procedural baseline, while HIGH/MAX spend more instances inside the existing pools on segmented vehicle bodies, mirrors, plate hints, storefront glazing/service hardware and additional sidewalk service/repair detail. MAX uses full density; HIGH uses the same hero vocabulary at reduced density.
+
+District identity is exposed independently of gameplay. Supported production districts are downtown, commercial, construction, industrial, entertainment and event, plus the mixed fallback. District changes affect skyline architecture cycles, colors/windows and street-zone/vehicle composition.
+
+Runtime integration may use the environment API directly:
+
+    urban.setDistrict('commercial');
+    urban.advanceDistrict();
+    urban.selectDistrictForDistance(distanceMeters, 720);
+
+No main.js hook is required by this branch. A gameplay/integration owner can call selectDistrictForDistance() from existing course/player distance when desired.

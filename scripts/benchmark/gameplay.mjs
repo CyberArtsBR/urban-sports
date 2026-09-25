@@ -1,10 +1,21 @@
 import {CONFIG,analyzeCourse,analyzeGraphics,analyzeMetric,frameMark,frameSummarySince,pending,readDiagnostics,round,runtimeSnapshot,sampleRuntime,speedBins} from './core.mjs';
 import {closeSelector,openSelector} from './selector.mjs';
 
+async function dismissTutorial(page){
+  const tutorial=page.locator('.session-tutorial:not([hidden])');
+  if(!await tutorial.isVisible().catch(()=>false))return;
+  await page.mouse.click(24,24).catch(()=>{});
+  await tutorial.waitFor({state:'hidden',timeout:2500}).catch(async()=>{
+    await page.keyboard.press('Enter').catch(()=>{});
+    await tutorial.waitFor({state:'hidden',timeout:2500}).catch(()=>{});
+  });
+}
+
+
 async function completeStartSelectionIfNeeded(page){
   try{
     await page.waitForFunction(()=>{
-      const d=window.chimpionsSki?.();
+      const d=(window.chimpionsUrbanSports?.()??window.chimpionsSki?.());
       return d?.mode==='playing'||document.querySelector('#chimpion-selector')?.open===true;
     },undefined,{timeout:5000});
   }catch{return {status:'PENDING',reason:'Start flow did not reach gameplay or open the selector'};}
@@ -15,7 +26,7 @@ async function completeStartSelectionIfNeeded(page){
   const avatar=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
     if(!dialog?.open)return {ok:false,reason:'Selector is not open'};
-    const card=dialog.querySelector('.chimpion-card.is-selected')||dialog.querySelector('.chimpion-card');
+    const card=dialog.querySelector('.chimpion-card.is-selected:not(.is-upload-avatar):not([aria-disabled="true"])')||dialog.querySelector('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])');
     if(!card)return {ok:false,reason:'No Chimpion card is rendered'};
     card.click();
     return {ok:true,avatarId:card.dataset.avatarId||null};
@@ -31,7 +42,8 @@ async function completeStartSelectionIfNeeded(page){
 
   const ride=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
-    const current=String(window.chimpionsSki?.().rideMode||'ski').toLowerCase();
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    const current=String(d?.rideMode||'snowboard').toLowerCase();
     const button=
       dialog?.querySelector('.ride-mode-card.is-selected')||
       dialog?.querySelector('.ride-mode-card[data-ride-mode="'+current+'"]')||
@@ -65,7 +77,16 @@ async function clickStart(page){
     :{status:'PASS',selectionRequired:false};
   if(selection.status!=='PASS')return selection;
   try{
-    await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',undefined,{timeout:CONFIG.readyTimeoutMs});
+    await page.waitForFunction(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      const tutorial=document.querySelector('.session-tutorial:not([hidden])');
+      return !!tutorial||d?.mode==='countdown'||d?.mode==='playing';
+    },undefined,{timeout:20000});
+    await dismissTutorial(page);
+    await page.waitForFunction(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      return d?.mode==='playing';
+    },undefined,{timeout:CONFIG.readyTimeoutMs});
   }catch{
     return pending('Start control was invoked but gameplay did not reach mode=playing');
   }
@@ -104,7 +125,7 @@ async function recoverCrash(page){
   });
   if(!clicked)return false;
   try{
-    await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',undefined,{timeout:CONFIG.readyTimeoutMs});
+    await page.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},undefined,{timeout:CONFIG.readyTimeoutMs});
     return true;
   }catch{return false;}
 }
@@ -204,7 +225,7 @@ export async function benchmarkRestarts(page,iterations){
     const mark=await frameMark(page);
     const before=await runtimeSnapshot(page,`restart-${i+1}-before`);
     await page.keyboard.press('Escape');
-    try{await page.waitForFunction(()=>window.chimpionsSki?.().mode==='paused',undefined,{timeout:3000});}catch{}
+    try{await page.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='paused';},undefined,{timeout:3000});}catch{}
     const wall=Date.now();
     const clicked=await page.evaluate(()=>{
       const button=document.querySelector('#restart-pause');
@@ -213,7 +234,7 @@ export async function benchmarkRestarts(page,iterations){
       return true;
     });
     if(!clicked)return pending('Pause/restart control unavailable during restart cycle');
-    try{await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',undefined,{timeout:CONFIG.readyTimeoutMs});}catch{return pending('Restart did not return to playing state');}
+    try{await page.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},undefined,{timeout:CONFIG.readyTimeoutMs});}catch{return pending('Restart did not return to playing state');}
     const after=await runtimeSnapshot(page,`restart-${i+1}-after`);
     cycles.push({iteration:i+1,restartToPlayingMs:Date.now()-wall,before,after,frames:await frameSummarySince(page,mark)});
   }
@@ -253,7 +274,7 @@ export async function selectRideMode(page,rideMode){
   try{
     await page.waitForFunction(mode=>{
       const dialog=document.querySelector('#chimpion-selector');
-      const d=window.chimpionsSki?.();
+      const d=(window.chimpionsUrbanSports?.()??window.chimpionsSki?.());
       return !dialog?.open&&String(d?.rideMode||'').toLowerCase()===mode;
     },rideMode,{timeout:CONFIG.readyTimeoutMs});
   }catch{

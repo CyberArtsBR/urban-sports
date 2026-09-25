@@ -17,6 +17,7 @@ import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
 import {progressSpeed,stepCarving,updateJumpAssist,tryManualJump,stepAir,launchRamp} from './skiPhysics.js';
+import {createGrindSystem,getSkateboardDisplaySpeedRange,getSkateboardGameplaySnapshot,launchSkateboardRamp,resetSkateboardState,skateboardDisplaySpeed,skateboardDisplaySpeedKmh,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
 import {createCourseDirector,getCourseDifficulty} from './course.js';
 import {terrainHeight,sampleSkiGround,displaceTerrainChunk,dampTerrainContact} from './terrainContact.js';
 import {createSkiCamera} from './skiCamera.js';
@@ -437,6 +438,7 @@ trickVisualPivot.name='trick-visual-pivot';
 player.add(trickVisualPivot);
 const riderController=createRiderController({visualRoot:trickVisualPivot,disposeRider:disposeAvatarObject});
 const tricks=createTrickSystem({visualTarget:trickVisualPivot});
+const grindSystem=createGrindSystem();
 const startCamera=createStartCameraSequence({camera,skiCamera,player});
 const startCrowd=createStartCrowd({world,terrainHeight});
 const startGate=createStartGateScene({world,terrainHeight,theme:'urban'});
@@ -453,6 +455,20 @@ let selectedRideMode=getLegacyRideModeForSport(selectedSportMode);
 let initialSelectionFlow=false;
 const initialRideProfile=getRideProfile(selectedRideMode);
 const state=createRunState({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:0});
+resetSkateboardState(state);
+const CURB_GRIND_X=SKI_TUNING.PLAYER_BOUNDARY_HALF_WIDTH+.72;
+for(const side of [-1,1]){
+  grindSystem.register({
+    id:side<0?'urban-curb-left':'urban-curb-right',
+    captureRadius:.96,
+    allowedTricks:['50-50','5-0','NOSEGRIND','BOARDSLIDE','LIPSLIDE'],
+    getEndpoints:()=>{
+      const zNear=player.position.z+24,zFar=player.position.z-24;
+      const y=.18+(state.centerGround||0);
+      return {start:{x:side*CURB_GRIND_X,y,z:zNear},end:{x:side*CURB_GRIND_X,y,z:zFar}};
+    }
+  });
+}
 state.runSeed=createRunSeed();
 const runSession=createRunSession({state});
 const gameFlow=createGameFlow({state,initial:GAME_FLOW.START});
@@ -698,7 +714,12 @@ function syncRideModePresentation(){
   const rideProfile=getRideProfile(selectedRideMode);
   const sportProfile=getSportProfile(selectedSportMode);
   const label=document.getElementById('selected-ride-mode');
-  if(label)label.textContent=sportProfile.label+' · '+speedToKmh(rideProfile.baseSpeed)+'–'+speedToKmh(rideProfile.maxSpeed)+' KM/H';
+  if(label){
+    const range=selectedSportMode===SPORT_MODE.SKATEBOARD
+      ?getSkateboardDisplaySpeedRange()
+      :{minKmh:speedToKmh(rideProfile.baseSpeed),maxKmh:speedToKmh(rideProfile.maxSpeed)};
+    label.textContent=sportProfile.label+' · '+range.minKmh+'–'+range.maxKmh+' KM/H';
+  }
   document.body.dataset.rideMode=selectedRideMode;
   document.body.dataset.sportMode=selectedSportMode;
 }
@@ -869,6 +890,7 @@ let last=performance.now();
 let physicsSubsteps=0;
 let runPreparing=false;
 let pendingCrashResults=null;
+let roadWetness=0;
 
 function resetRunState(){
   if(state.rideMode!==selectedRideMode)applyRideProfileToState(selectedRideMode);
@@ -881,6 +903,8 @@ function resetRunState(){
   resetAirborneScoring(state);
   resetTrickScoring(state);
   tricks.reset();
+  grindSystem.reset();
+  resetSkateboardState(state);
   audio.resetRun?.();
   haptics.reset?.();
   player.position.set(0,.12,2.2);resetPlayerOrientation(player);
@@ -1024,6 +1048,9 @@ function crash(kind='tree',item=null){
     wy:state.crashDirection*(7.8+crashSpeed01*7.2),
     wz:-state.crashDirection*(5.6+crashSpeed01*5.4)
   };
+  if(state.skate)state.skate.animationState='crash';
+  grindSystem.reset();
+  state.grinding=false;
   state.crashActive=true;
   state.crashVisualX=player.position.x;
   state.crashVisualY=player.position.y;
@@ -1055,7 +1082,9 @@ function crash(kind='tree',item=null){
     newBest,
     crashType:state.crashType,
     time:state.time,
-    maxSpeedKmh:speedToKmh(state.maxRunSpeed||state.speed),
+    maxSpeedKmh:selectedSportMode===SPORT_MODE.SKATEBOARD
+      ?skateboardDisplaySpeedKmh(state.maxRunSpeed||state.speed,state.rideMode)
+      :speedToKmh(state.maxRunSpeed||state.speed),
     bestCombo:state.bestCombo||0,
     rideMode:state.rideMode,
     runSeed:state.runSeed,
@@ -1115,6 +1144,7 @@ function update(dt,frameMs=dt*1000){
   const jumpPressed=wasPlaying&&state.mode==='playing'&&actions.jumpPressed;
   const jumpHeld=actions.jumpHeld;
   const trickIntent=jumpPressed?actions.trickIntent:null;
+  const nativeSkateboard=selectedSportMode===SPORT_MODE.SKATEBOARD;
   let worldDistance=0;
   const realFrameDt=dt;
   let simulationFrameDt=realFrameDt;
@@ -1161,7 +1191,9 @@ function update(dt,frameMs=dt*1000){
     }
     if(steerSign)state.lastSteerSign=steerSign;
 
-    const carveStep=stepCarving(state,steer,controlDt);
+    const carveStep=nativeSkateboard
+      ?stepSkateboardSteering(state,steer,controlDt,{powered:bananaPower.active,wetness:roadWetness})
+      :stepCarving(state,steer,controlDt);
     if(carveStep?.edgeScrape){
       const edgeFeedback=feedback.onEdgeContact(carveStep.edgeScrape.intensity,state.time);
       if(edgeFeedback?.play)haptics.edgeScrape?.(edgeFeedback.hapticStrength);
@@ -1171,7 +1203,9 @@ function update(dt,frameMs=dt*1000){
     const groundY=.12+state.centerGround;
 
     const pressedThisStep=step===0&&jumpPressed;
-    updateJumpAssist(state,pressedThisStep,dt,jumpHeld);
+    if(nativeSkateboard)updateSkateboardManual(state,{verticalIntent:actions.verticalIntent,dt:controlDt,powered:bananaPower.active});
+    if(nativeSkateboard)updateSkateboardJumpAssist(state,pressedThisStep,dt,jumpHeld);
+    else updateJumpAssist(state,pressedThisStep,dt,jumpHeld);
     const activeRamp=collisionRuntime.activeRamp;
     if(activeRamp?.visible&&Number.isFinite(activeRamp.userData.courseLocalZ)){
       activeRamp.position.z=activeRamp.userData.courseLocalZ+courseTravel;
@@ -1181,7 +1215,12 @@ function update(dt,frameMs=dt*1000){
     if(!ridingRamp&&!activeRamp)tricks.clearRampArm();
     tricks.updateTiming(state,{landingHeight:groundY,gravity:SKI_TUNING.GRAVITY});
 
-    if(pressedThisStep&&state.air){
+    let jumpedOffGrind=false;
+    if(nativeSkateboard&&pressedThisStep&&state.grinding){
+      jumpedOffGrind=!!grindSystem.jumpOff(state,{popVelocity:bananaPower.active?7.5:6.8});
+      if(jumpedOffGrind)skiTrails.breakTrail();
+    }
+    if(!jumpedOffGrind&&pressedThisStep&&state.air){
       const airborneTrick=actions.airborneTrickIntent;
       if(tricks.requestAirborne(airborneTrick,state,{
         startTime:state.time,
@@ -1197,7 +1236,12 @@ function update(dt,frameMs=dt*1000){
       }
     }
 
-    if(!ridingRamp&&tryManualJump(state,groundY)){
+    const flatGroundTakeoff=!state.grinding&&!ridingRamp&&(
+      nativeSkateboard
+        ?trySkateboardOllie(state,groundY,{powered:bananaPower.active})
+        :tryManualJump(state,groundY)
+    );
+    if(flatGroundTakeoff){
       feedback.onManualTakeoff();
       ui.showTrickHint?.();
       if(trickIntent==='BACKFLIP'){
@@ -1219,6 +1263,11 @@ function update(dt,frameMs=dt*1000){
       }
     }
 
+    if(nativeSkateboard&&state.air&&!state.grinding&&tricks.getSnapshot().state==='NONE'){
+      const preferredGrind=actions.verticalIntent<-.5?'NOSEGRIND':actions.verticalIntent>.5?'5-0':Math.abs(steer)>.62?'BOARDSLIDE':'50-50';
+      grindSystem.tryEnter(state,{playerZ:player.position.z,preferredTrick:preferredGrind,powered:bananaPower.active});
+    }
+
     const landingSource=state.jumpSource;
     tricks.step(dt);
     const completedTrick=tricks.consumeCompletion();
@@ -1227,7 +1276,12 @@ function update(dt,frameMs=dt*1000){
       resolveTrickAudio(scoreTrickCompletion(state,completedTrick));
     }
 
-    const landing=stepAir(state,dt,groundY);
+    let landing={landed:false,quality:'none',impact:0};
+    if(nativeSkateboard&&state.grinding){
+      grindSystem.step(state,dt,{steer,powered:bananaPower.active});
+    }else{
+      landing=nativeSkateboard?stepSkateboardAir(state,dt,groundY):stepAir(state,dt,groundY);
+    }
     if(landing.landed){
       if(landing.quality==='clean'){
         state.cleanLandings=(state.cleanLandings||0)+1;
@@ -1235,11 +1289,15 @@ function update(dt,frameMs=dt*1000){
         state.lastMistakeTime=state.time;
       }
       const trickLanding=tricks.land({jumpSource:landingSource});
-      if(trickLanding.interrupted){
+      if(nativeSkateboard&&landing.failed&&state.mode==='playing'){
+        if(trickLanding.interrupted)resolveTrickAudio(scoreTrickFailure(state,trickLanding));
+        crash('landing');
+      }else if(trickLanding.interrupted){
         resolveTrickAudio(scoreTrickFailure(state,trickLanding));
         crash('trick');
       }else if(state.mode==='playing'){
-        const landingFeedback=feedback.onLanding(landing,{jumpSource:landingSource,verticalVelocity:landing.impact});
+        const feedbackLanding=landing.quality==='sketchy'?{...landing,quality:'rough'}:landing;
+        const landingFeedback=feedback.onLanding(feedbackLanding,{jumpSource:landingSource,verticalVelocity:landing.impact});
         if(landingFeedback?.quality==='clean')state.cleanLandings=(state.cleanLandings||0)+1;
         if(landingFeedback?.dramatic&&landingFeedback?.quality!=='hard')state.strongLandings=(state.strongLandings||0)+1;
         haptics.land(landingFeedback?.hapticStrength??Math.min(1,(Number(landing.impact)||0)/18),landing.quality);
@@ -1262,7 +1320,12 @@ function update(dt,frameMs=dt*1000){
       groundRoll:state.groundRoll,
       leftGround:state.leftGround,
       rightGround:state.rightGround,
-      centerGround:state.centerGround
+      centerGround:state.centerGround,
+      skateboardState:state.skate?.animationState||'idle',
+      powerslide:!!state.skate?.powerslide,
+      manualMode:state.skate?.manualMode||'',
+      grinding:!!state.grinding,
+      grindTrick:grindSystem.snapshot().trick
     });
     if(!state.air&&!ridingRamp){
       trailTimer-=dt;
@@ -1360,7 +1423,7 @@ function update(dt,frameMs=dt*1000){
         if(crossedLip&&!state.air){
           item.userData.consumed=true;
           collisionRuntime.clearRamp(item);
-          if(launchRamp(state,itemGround)){
+          if((nativeSkateboard?launchSkateboardRamp(state,itemGround,{powered:bananaPower.active}):launchRamp(state,itemGround))){
             feedback.onRampTakeoff();
             haptics.rampTakeoff();
             const rampTrick=tricks.consumeRampArm();
@@ -1465,6 +1528,7 @@ function update(dt,frameMs=dt*1000){
   mountainWeather.update(environmentDt,state);
   const urbanWeather=mountainWeather.getState?.();
   const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
+  roadWetness=wet;
   const asphalt=urbanEnvironment.materials?.asphalt;
   if(asphalt){
     asphalt.roughness=THREE.MathUtils.lerp(.94,.48,wet);
@@ -1481,7 +1545,7 @@ function update(dt,frameMs=dt*1000){
     bananaPowerProgress:state.bananaPowerProgress,
     specialReady:state.specialReady,
     specialActiveTime:state.specialActiveTime,
-    speed:state.speed,
+    speed:nativeSkateboard?skateboardDisplaySpeed(state.speed,state.rideMode):state.speed,
     best:state.best,
     air:state.air,
     mode:state.mode
@@ -1645,7 +1709,7 @@ window.chimpionsSki=()=>{
     rampGrace:state.rampGrace,
     trickState:trickSnapshot.state,
     trickType:trickSnapshot.type||trickSnapshot.lastCompletedType||'',
-    trickActive:trickSnapshot.state==='SPIN_360'||trickSnapshot.state==='BACKFLIP',
+    trickActive:trickSnapshot.state==='SPIN_360'||trickSnapshot.state==='BACKFLIP'||trickSnapshot.state==='TRICK',
     trickRotation:trickSnapshot.rotation,
     trickProgress:trickSnapshot.progress,
     trickSystemProgress:trickSnapshot.progress,
@@ -1655,6 +1719,7 @@ window.chimpionsSki=()=>{
     pendingTrick:trickSnapshot.pendingTrick,
     trickRejectionReason:trickSnapshot.rejectionReason,
     trickVisualPivot:trickVisualPivot.name,
+    skateboard:getSkateboardGameplaySnapshot(state,grindSystem),
     rendererCalls:renderer.info.render.calls,
     rendererTriangles:renderer.info.render.triangles,
     rendererGeometries:renderer.info.memory.geometries,
@@ -1676,6 +1741,9 @@ window.chimpionsSki=()=>{
   };
 };
 window.chimpionsUrbanSports=window.chimpionsSki;
+window.chimpionsUrbanSports.registerGrindTarget=target=>grindSystem.register(target);
+window.chimpionsUrbanSports.unregisterGrindTarget=id=>grindSystem.unregister(id);
+window.chimpionsUrbanSports.getSkateboardGameplay=()=>getSkateboardGameplaySnapshot(state,grindSystem);
 
 
 if(import.meta.hot){

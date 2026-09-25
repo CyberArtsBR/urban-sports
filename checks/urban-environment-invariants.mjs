@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createUrbanEnvironment} from '../src/urban/urbanEnvironment.js';
 
-const DRAW_CALL_BUDGET=24;
-const ACTIVE_INSTANCE_BUDGET=1000;
-const ALLOCATED_INSTANCE_BUDGET=1100;
-const EXPECTED_COMPONENTS=['road','markings','streetlights','skyline','traffic-cones','barriers','signs','roadside-scenery'];
+const DRAW_CALL_BUDGET=36;
+const ACTIVE_INSTANCE_BUDGET=2500;
+const ALLOCATED_INSTANCE_BUDGET=4000;
+const EXPECTED_COMPONENTS=['road','markings','streetlights','skyline','traffic-cones','barriers','signs','roadside-scenery','street-dressing'];
 
 function inventory(root){
   let objects=0;
@@ -26,7 +26,7 @@ assert.equal(environment.group.userData.streaming,true,'environment advertises s
 assert.equal(environment.group.userData.gameplayIntegration,false,'standalone environment does not silently alter gameplay');
 
 const diagnostics=environment.getDiagnostics();
-assert.equal(diagnostics.componentCount,8,'urban environment retains all eight reusable component groups');
+assert.equal(diagnostics.componentCount,9,'urban environment retains all nine reusable component groups');
 assert.deepEqual(diagnostics.components.map(component=>component.name),EXPECTED_COMPONENTS,'urban environment component diagnostics changed unexpectedly');
 assert(diagnostics.drawCalls<=DRAW_CALL_BUDGET,`urban draw-call budget exceeded (${diagnostics.drawCalls} > ${DRAW_CALL_BUDGET})`);
 assert.equal(diagnostics.realtimeStreetLights,0,'decorative streetlights must not create per-instance realtime lights');

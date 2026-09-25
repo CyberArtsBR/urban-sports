@@ -413,7 +413,7 @@ function syncCourseVisuals(){
 }
 
 // Continuous twin grooves use one bounded dynamic mesh instead of disconnected decals.
-const skiTrails=createSkiTrails({world,terrainHeight,capacity:192});
+const skiTrails=createSkiTrails({world,terrainHeight,capacity:192,surface:'urban'});
 let trailTimer=0;
 
 const player=new THREE.Group();scene.add(player);

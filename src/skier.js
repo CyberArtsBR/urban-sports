@@ -4,6 +4,7 @@ import {disposeAvatarObject} from './avatar-system.js';
 import {SKI_TUNING} from './gameplayTuning.js';
 import {RIDE_MODE,getRideSpeedFeel,normalizeRideMode} from './rideMode.js';
 import {createSkateboardEquipment} from './skateboardEquipment.js';
+import {createSkateboardAnimator} from './rider/SkateboardAnimator.js';
 import {AvatarCompatibilityError,assertAvatarPlayable,isCatalogAvatarUrl,resolveAvatarRig} from './avatarCompatibility.js';
 import {validateParsedLocalGlb} from './localAvatarUpload.js';
 
@@ -302,6 +303,7 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
   root.userData.skis=skis;
   root.userData.setRideMode=setRideMode;
   root.userData.setPowerGlow=setPowerGlow;
+  root.userData.animationState='LEGACY_FALLBACK';
   root.userData.updateSkiPose=({dt=1/60,steer=0,air=false,landing=0,speed=12,time=0,verticalVelocity=0,jumpSource='',groundPitch=0,groundRoll=0,leftGround=0,rightGround=0,centerGround=0,rideMode:nextRideMode=currentRideMode,trickType='',trickProgress=0}={})=>{
     if(normalizeRideMode(nextRideMode)!==currentRideMode)setRideMode(nextRideMode);
     const mix=(a,b,response)=>THREE.MathUtils.lerp(a,b,1-Math.pow(1-response,dt*60));
@@ -361,6 +363,7 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
       });
     }
   };
+  root.userData.updateRidePose=root.userData.updateSkiPose;
   setRideMode(currentRideMode);
   return root;
 }
@@ -769,6 +772,13 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
     riderVisual.add(snowboard.root);
     const setPowerGlow=createEquipmentPowerGlow(skis,snowboard);
     updateRig?.setSnowboardSideSign?.(snowboardStance.sideSign);
+    const skateAnimator=createSkateboardAnimator({
+      model,
+      rig:updateRig?.rig,
+      snowboard,
+      stance:snowboardStance.placement,
+      sideSign:snowboardStance.sideSign
+    });
 
     let currentRideMode=normalizeRideMode(rideMode);
     function setRideMode(mode){
@@ -779,6 +789,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       // Rotate only the imported avatar visual. The selected side guarantees a
       // regular stance (left foot downhill/front) without touching gameplay axes.
       modelCarrier.rotation.y=snowboardMode?snowboardStance.carrierYaw:Math.PI;
+      skateAnimator?.setActive?.(snowboardMode);
       updateRig?.setRideMode?.(currentRideMode);
       root.userData.rideMode=currentRideMode;
       root.userData.equipmentType=snowboardMode?'skateboard':'skis';
@@ -799,13 +810,23 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
     root.userData.skiTrackSpacing=placement.spacing;
     root.userData.setRideMode=setRideMode;
     root.userData.setPowerGlow=setPowerGlow;
+    root.userData.skateAnimator=skateAnimator;
+    root.userData.animationState='IDLE';
+    root.userData.skateAnimationHooks=[
+      'skateState','pushActive','pushProgress','accelerating','acceleration',
+      'powerslideActive','olliePhase','trickType','trickProgress','grabType',
+      'manualType','grindType','grindBoardOrientation','landingQuality',
+      'bananaPowerActive','crashed','reducedMotion'
+    ];
     root.userData.updateSkiPose=(state={})=>{
       const requestedMode=normalizeRideMode(state.rideMode??currentRideMode);
       if(requestedMode!==currentRideMode)setRideMode(requestedMode);
       const dt=state.dt??1/60;
       const mix=(a,b,response)=>THREE.MathUtils.lerp(a,b,1-Math.pow(1-response,dt*60));
-      updateRig?.({...state,rideMode:currentRideMode});
-      const pose=updateRig?.pose;
+      const snowboardMode=currentRideMode===RIDE_MODE.SNOWBOARD;
+      if(snowboardMode)skateAnimator?.update(state);
+      else updateRig?.(state);
+      const pose=snowboardMode?skateAnimator?.pose:updateRig?.pose;
       const carve=pose?.carve??THREE.MathUtils.clamp(state.steer||0,-1,1);
       const air=pose?.air??Number(!!state.air);
       const landing=pose?.landing??THREE.MathUtils.clamp(state.landing||0,0,1);
@@ -822,7 +843,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       const rightGround=state.rightGround??state.centerGround??0;
       const centerGround=state.centerGround??0;
 
-      if(currentRideMode===RIDE_MODE.SNOWBOARD){
+      if(snowboardMode){
         const board=snowboard.root;
         const rest=board.userData.restPosition;
         board.rotation.y=mix(board.rotation.y,-carve*.040,.18);
@@ -857,7 +878,9 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
           ski.position.z=mix(ski.position.z,rest.z+air*.018,.18);
         });
       }
+      root.userData.animationState=snowboardMode?(skateAnimator?.state||'IDLE'):'SKI';
     };
+    root.userData.updateRidePose=root.userData.updateSkiPose;
 
     setRideMode(currentRideMode);
     return root;

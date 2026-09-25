@@ -38,6 +38,7 @@ import {createTrickSystem} from './trickSystem.js';
 import {announceTrickStart,resetTrickScoring,scoreTrickCompletion,scoreTrickFailure} from './trickScoring.js';
 import {createHaptics} from './haptics.js';
 import {RIDE_MODE,getRideProfile,normalizeRideMode,speedToKmh} from './rideMode.js';
+import {SPORT_MODE,getSportProfile,getLegacyRideModeForSport} from './sportMode.js';
 import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} from './playerOrientation.js';
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
@@ -486,7 +487,8 @@ let startCountdownStarted=false;
 let catalog=[],selectedAvatar=null,selector=null,ready=false;
 let selectorReady=false;
 let avatarCommitted=false;
-let selectedRideMode=normalizeRideMode(userPreferences.rideMode||RIDE_MODE.SKI);
+let selectedSportMode=SPORT_MODE.SKATEBOARD;
+let selectedRideMode=getLegacyRideModeForSport(selectedSportMode);
 let initialSelectionFlow=false;
 const initialRideProfile=getRideProfile(selectedRideMode);
 const state=createRunState({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:0});
@@ -730,10 +732,12 @@ startScreen.setReady(false);
 ui.setAvatarLoading(true);
 
 function syncRideModePresentation(){
-  const profile=getRideProfile(selectedRideMode);
+  const rideProfile=getRideProfile(selectedRideMode);
+  const sportProfile=getSportProfile(selectedSportMode);
   const label=document.getElementById('selected-ride-mode');
-  if(label)label.textContent=profile.label+' · '+speedToKmh(profile.baseSpeed)+'–'+speedToKmh(profile.maxSpeed)+' KM/H';
+  if(label)label.textContent=sportProfile.label+' · '+speedToKmh(rideProfile.baseSpeed)+'–'+speedToKmh(rideProfile.maxSpeed)+' KM/H';
   document.body.dataset.rideMode=selectedRideMode;
+  document.body.dataset.sportMode=selectedSportMode;
 }
 
 function applyRideProfileToState(mode,{resetSpeed=false}={}){
@@ -774,7 +778,9 @@ let avatarRequest=0;
 let avatarLoadController=null;
 async function setAvatar(entry,rideMode=selectedRideMode){
   if(!entry)return;
-  const nextRideMode=normalizeRideMode(rideMode);
+  // Skateboard is the first active Urban Sports discipline. Until sport-specific
+  // physics diverge, it deliberately reuses the proven snowboard handling.
+  const nextRideMode=getLegacyRideModeForSport(selectedSportMode);
 
   if(avatarCommitted&&selectedAvatar?.id===entry.id&&riderController.rider){
     selectedRideMode=nextRideMode;
@@ -846,7 +852,8 @@ function installAvatarSelector(initialAvatar){
     onValidateLocalAvatar:validateLocalAvatarEntry,
     onSelect:async(entry,rideMode)=>{
       await setAvatar(entry,rideMode);
-      // Choosing SKI or SNOWBOARD is the final selection step: launch immediately.
+      // Phase 2: any ride-card confirmation launches the current Urban sport.
+      // The presentation branch will replace the legacy Ski/Snowboard wording.
       initialSelectionFlow=false;
       setTimeout(()=>beginRun(),0);
     },
@@ -1675,6 +1682,8 @@ window.chimpionsSki=()=>{
     catalogSize:catalog.length,
     selectedAvatar:selectedAvatar?.name||'',
     selectedAvatarLocal:!!selectedAvatar?.localOnly,
+    sportMode:selectedSportMode,
+    sportLabel:getSportProfile(selectedSportMode).label,
     rideMode:selectedRideMode,
     baseSpeed:getRideProfile(selectedRideMode).baseSpeed,
     maxSpeed:getRideProfile(selectedRideMode).maxSpeed,

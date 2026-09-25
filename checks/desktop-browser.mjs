@@ -206,7 +206,7 @@ try{
   await page.keyboard.press('Escape');
   const pauseOverlay=page.locator('#pause-overlay');
   await pauseOverlay.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.id==='resume-game');
+  await page.waitForFunction(()=>document.activeElement?.id==='resume-game',null,{timeout:5000,polling:100});
   assert.equal(await page.locator('#resume-game.is-menu-selected').count(),1,'Pause default focus is not visibly selected');
 
   for(const viewport of responsiveViewports){
@@ -261,7 +261,7 @@ try{
 
   const settingsOverlay=page.locator('#settings-overlay');
   await settingsOverlay.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.id==='settings-close');
+  await page.waitForFunction(()=>document.activeElement?.id==='settings-close',null,{timeout:5000,polling:100});
   assert.equal(await page.locator('#settings-close.is-menu-selected').count(),1,'Settings default focus is not visibly selected');
 
   for(const viewport of responsiveViewports){
@@ -288,7 +288,7 @@ try{
   const cameraMotionButton=page.locator('#camera-motion');
   await cameraMotionButton.evaluate(button=>button.click()); // AUTO -> FULL
   await cameraMotionButton.evaluate(button=>button.click()); // FULL -> REDUCED
-  await page.waitForFunction(()=>document.documentElement.dataset.cameraMotion==='reduced');
+  await page.waitForFunction(()=>document.documentElement.dataset.cameraMotion==='reduced',null,{timeout:5000,polling:100});
   const explicitReduced=await settingsOverlay.locator('.settings-card').evaluate(element=>({
     animation:getComputedStyle(element).animationName,
     transition:getComputedStyle(element).transitionDuration

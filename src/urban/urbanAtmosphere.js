@@ -22,6 +22,7 @@ const LAMP_COLOR=new THREE.Color(0xffd59a);
 const LAMP_EMISSIVE=new THREE.Color(0xff9d36);
 const WINDOW_COLOR=new THREE.Color(0xc9def0);
 const WINDOW_EMISSIVE=new THREE.Color(0x67b9ff);
+const BUILDING_LED_EMISSIVE=new THREE.Color(0x2faeff);
 
 const _fogColor=new THREE.Color();
 const _roadColor=new THREE.Color();
@@ -69,6 +70,7 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
     curb:materialFor(root,'urban-curbs'),
     building:materialFor(root,['urban-buildings','urban-building-slab','urban-building-tower','urban-building-stepped','urban-building-warehouse']),
     windows:materialFor(root,['urban-building-windows','urban-building-facade-lights']),
+    buildingLed:materialFor(root,'urban-building-led-accents'),
     lamp:materialFor(root,'urban-streetlight-bulbs'),
     pool:materialFor(root,'urban-streetlight-pools')
   };
@@ -145,6 +147,10 @@ export function createUrbanAtmosphere({scene,renderer,ambient=null,rim=null,fill
         materials.windows.emissiveIntensity=(.12+night*1.52+wet*.34)*qualityFactors.emissive;
       }
       if('opacity' in materials.windows)materials.windows.opacity=.64+night*.22;
+    }
+    if(materials.buildingLed){
+      if(materials.buildingLed.emissive)materials.buildingLed.emissive.copy(BUILDING_LED_EMISSIVE);
+      materials.buildingLed.emissiveIntensity=(.28+night*1.12+wet*.10)*qualityFactors.emissive;
     }
     if(materials.lamp){
       setStandardColor(materials.lamp,LAMP_COLOR);

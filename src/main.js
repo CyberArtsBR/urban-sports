@@ -11,8 +11,8 @@ import {readPad} from './input.js';
 import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
 import {createSkiAudio} from './audio.js';
-import {createSkiEnvironment,decorateCourseObject} from './environment.js';
-import {createUrbanEnvironment} from './urban/index.js';
+import {createSkiEnvironment} from './environment.js';
+import {createUrbanEnvironment,createUrbanObstacle} from './urban/index.js';
 import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
@@ -27,7 +27,6 @@ import {createStartGateScene} from './startGateScene.js';
 import {createSkiTrails} from './snowTrails.js';
 import {SKI_TUNING} from './gameplayTuning.js';
 import {OBSTACLE_TUNING} from './obstacleTuning.js';
-import {createOilVisual,createRampVisual} from './courseSurfaceVisuals.js';
 import {getCourseLookahead} from './courseStreaming.js';
 import {breakSkillCombo,resetAirborneScoring,resetHazardScoring,scoreRiskBanana,tryScoreNearMiss,updateAirborneScoring,tryScoreAirborneClearance} from './airborneScoring.js';
 import {createStartScreen} from './startScreen.js';
@@ -194,15 +193,7 @@ if(urbanEnvironment.components?.road?.meshes?.[0]){
 const unsubscribeRendererQuality=quality.subscribe(applyRendererResolution);
 const unsubscribeRendererResolution=quality.subscribeResolution(applyRendererResolution);
 const groundMat=urbanEnvironment.materials.asphalt;
-const {
-  trunk:trunkMat,
-  pine:pineMat,
-  rock:rockMat,
-  banana:bananaMat,
-  ramp:rampMat,
-  log:logMat,
-  logEnd:logEndMat
-}=environment.courseMaterials;
+const {banana:bananaMat}=environment.courseMaterials;
 
 
 const tiles=[];
@@ -222,17 +213,8 @@ for(let i=0;i<9;i++){
   tiles.push(tile);
 }
 
-function makeTree(){
-  const g=new THREE.Group();
-  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.16,.24,1.6,8),trunkMat);trunk.position.y=.8;trunk.castShadow=true;g.add(trunk);
-  for(let i=0;i<3;i++){const c=new THREE.Mesh(new THREE.ConeGeometry(1.05-i*.12,2.1,10),pineMat);c.position.y=1.35+i*.72;c.castShadow=true;g.add(c);}
-  // Feet above ~3.7 m clear the full tree silhouette; manual jump cannot reach it,
-  // but the upper part of a monster ramp arc can.
-  g.userData.kind='tree';g.userData.radius=.72;g.userData.radiusX=.62;g.userData.radiusZ=.68;g.userData.clearance=3.70;decorateCourseObject(g,'tree');return g;
-}
-function makeRock(){
-  const m=new THREE.Mesh(new THREE.DodecahedronGeometry(.64,0),rockMat);m.scale.set(1.15,.75,.9);m.position.y=.48;m.castShadow=true;m.userData.kind='rock';m.userData.radius=.62;m.userData.radiusX=.55;m.userData.radiusZ=.58;m.userData.clearance=.78;decorateCourseObject(m,'rock');return m;
-}
+function makeTree(){return createUrbanObstacle('tree');}
+function makeRock(){return createUrbanObstacle('rock');}
 function makeBanana(){
   const g=createBananaVisual(bananaMat);
   g.position.y=1.05;
@@ -241,44 +223,12 @@ function makeBanana(){
   g.userData.radiusX=.48;
   g.userData.radiusZ=.58;
   g.userData.yOffset=1.05;
-  decorateCourseObject(g,'banana');
   return g;
 }
-function makeRamp(){
-  const g=createRampVisual();
-  g.userData.kind='ramp';g.userData.radius=1.15;g.userData.radiusX=1.16;g.userData.radiusZ=1.58;
-  return g;
-}
-function makeLog(){
-  const tuning=OBSTACLE_TUNING.log;
-  const g=new THREE.Group();
-  const log=new THREE.Mesh(new THREE.CylinderGeometry(.22,.28,tuning.length,12),logMat);
-  log.rotation.z=Math.PI/2;log.position.y=.28;log.castShadow=log.receiveShadow=true;g.add(log);
-  for(const side of [-1,1]){
-    const cap=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.16,12),logEndMat);
-    cap.rotation.z=Math.PI/2;cap.position.set(side*tuning.capOffset,.28,0);cap.castShadow=true;g.add(cap);
-  }
-  g.userData.kind='log';g.userData.radius=tuning.collisionHalfWidth;g.userData.radiusX=tuning.collisionHalfWidth;g.userData.radiusZ=tuning.radiusZ;g.userData.clearance=tuning.clearance;decorateCourseObject(g,'log');return g;
-}
-function makeWideLog(){
-  const tuning=OBSTACLE_TUNING.wideLog;
-  const g=new THREE.Group();
-  const log=new THREE.Mesh(new THREE.CylinderGeometry(.30,.35,tuning.length,14),logMat);
-  log.rotation.z=Math.PI/2;log.position.y=.35;log.castShadow=log.receiveShadow=true;g.add(log);
-  for(const side of [-1,1]){
-    const cap=new THREE.Mesh(new THREE.CylinderGeometry(.23,.23,.18,14),logEndMat);
-    cap.rotation.z=Math.PI/2;cap.position.set(side*tuning.capOffset,.35,0);cap.castShadow=true;g.add(cap);
-  }
-  g.userData.kind='wideLog';g.userData.radius=tuning.collisionHalfWidth;g.userData.radiusX=tuning.collisionHalfWidth;g.userData.radiusZ=tuning.radiusZ;g.userData.clearance=tuning.clearance;
-  decorateCourseObject(g,'wideLog');
-  return g;
-}
-function makeOil(){
-  const tuning=OBSTACLE_TUNING.oil;
-  const g=createOilVisual();
-  g.userData.kind='oil';g.userData.radius=tuning.collisionHalfWidth;g.userData.radiusX=tuning.collisionHalfWidth;g.userData.radiusZ=tuning.radiusZ;g.userData.clearance=tuning.clearance;g.userData.yOffset=.012;
-  return g;
-}
+function makeRamp(){return createUrbanObstacle('ramp');}
+function makeLog(){return createUrbanObstacle('log');}
+function makeWideLog(){return createUrbanObstacle('wideLog');}
+function makeOil(){return createUrbanObstacle('oil');}
 
 const courseRenderBatches=createCourseRenderBatches({
   world,

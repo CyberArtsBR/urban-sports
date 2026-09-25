@@ -6,7 +6,6 @@ const CLEAR_HALF_WIDTH=4.18;
 const UNIT_BOX=new THREE.BoxGeometry(1,1,1);
 const UNIT_PLANE=new THREE.PlaneGeometry(1,1);
 const UNIT_CYLINDER=new THREE.CylinderGeometry(1,1,1,10,1,false);
-const CROWD_HEAD_GEOMETRY=new THREE.SphereGeometry(.5,10,7);
 
 function canvasTexture(width,height,draw){
   const canvas=document.createElement('canvas');
@@ -536,63 +535,6 @@ function addBarrierLines(parent,materials,bannerMaterial,terrainHeight){
   parent.add(postMesh,railMesh);
 }
 
-function addCrowdSilhouettes(parent,materials,terrainHeight){
-  const people=[];
-  for(const side of [-1,1]){
-    for(let i=0;i<18;i++){
-      const lane=i%2;
-      const z=-3.9+i*.68+(lane*.10);
-      const x=side*(7.15+lane*.42+((i%3)-1)*.06);
-      const height=1.48+(i%5)*.075;
-      people.push({x,z,height,side,index:i});
-    }
-  }
-
-  const bodies=new THREE.InstancedMesh(UNIT_BOX,materials.crowd,people.length);
-  const heads=new THREE.InstancedMesh(CROWD_HEAD_GEOMETRY,materials.crowdHead,people.length);
-  bodies.name='start-event-crowd-bodies';
-  heads.name='start-event-crowd-heads';
-  bodies.castShadow=true;
-  heads.castShadow=true;
-  const matrix=new THREE.Matrix4();
-  const palette=[
-    new THREE.Color(0x263749),
-    new THREE.Color(0x14324b),
-    new THREE.Color(0x3b263e),
-    new THREE.Color(0x37434c),
-    new THREE.Color(0x2f2522),
-    new THREE.Color(0x1c3b32)
-  ];
-  const skinPalette=[
-    new THREE.Color(0x9a6b4d),
-    new THREE.Color(0xc58a65),
-    new THREE.Color(0x714a36),
-    new THREE.Color(0xd0a17e),
-    new THREE.Color(0x8d5c42)
-  ];
-
-  people.forEach((person,i)=>{
-    const ground=terrainY(terrainHeight,person.x,person.z);
-    const bodyScale=new THREE.Vector3(.42,person.height*.58,.30);
-    const bodyPos=new THREE.Vector3(person.x,ground+person.height*.39,person.z);
-    matrix.compose(bodyPos,new THREE.Quaternion(),bodyScale);
-    bodies.setMatrixAt(i,matrix);
-    bodies.setColorAt(i,palette[(person.index+person.side+8)%palette.length]);
-
-    const headScale=.30+(person.index%3)*.018;
-    const headPos=new THREE.Vector3(person.x,ground+person.height*.83,person.z);
-    matrix.compose(headPos,new THREE.Quaternion(),new THREE.Vector3(headScale,headScale,headScale));
-    heads.setMatrixAt(i,matrix);
-    heads.setColorAt(i,skinPalette[(person.index*2+3)%skinPalette.length]);
-  });
-  bodies.instanceMatrix.needsUpdate=true;
-  heads.instanceMatrix.needsUpdate=true;
-  if(bodies.instanceColor)bodies.instanceColor.needsUpdate=true;
-  if(heads.instanceColor)heads.instanceColor.needsUpdate=true;
-  parent.add(bodies,heads);
-  return people.length;
-}
-
 function addEventCases(parent,materials,terrainHeight){
   const cases=[
     [-7.36,4.45,.95,.54,.62],
@@ -724,8 +666,6 @@ function createMaterials(){
     barrier:new THREE.MeshStandardMaterial({color:0x8997a3,roughness:.42,metalness:.70}),
     case:new THREE.MeshStandardMaterial({color:0x151b23,roughness:.54,metalness:.36}),
     cable:new THREE.MeshStandardMaterial({color:0x08090b,roughness:.82,metalness:.05}),
-    crowd:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.80,metalness:0}),
-    crowdHead:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.88,metalness:0}),
     cyan:new THREE.MeshBasicMaterial({
       color:new THREE.Color().setRGB(.02,.62,1.28),
       toneMapped:false,
@@ -967,7 +907,7 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
   }
 
   function dispose(){
-    const sharedGeometries=new Set([UNIT_BOX,UNIT_PLANE,UNIT_CYLINDER,CROWD_HEAD_GEOMETRY]);
+    const sharedGeometries=new Set([UNIT_BOX,UNIT_PLANE,UNIT_CYLINDER]);
     const geometries=new Set();
     const materialSet=new Set();
     const textures=new Set();

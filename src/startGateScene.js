@@ -238,8 +238,10 @@ export function createStartGateScene({world,terrainHeight=()=>0,theme='alpine'}=
       }
     }
 
-  
-  
+    if(!urbanMode){
+      addSnowCluster(root,snowMaterial,x,ground+4.77,z,1.16,1.04);
+      addSnowCluster(root,snowMaterial,x,ground+.50,z+.05,1.15,1.12);
+    }
 
     const beaconBaseY=ground+5.03;
     addMesh(root,new THREE.CylinderGeometry(.21,.25,.15,16),frameDarkMaterial,{position:[x,beaconBaseY,z],cast:true});
@@ -260,9 +262,11 @@ export function createStartGateScene({world,terrainHeight=()=>0,theme='alpine'}=
   for(const x of [-3.70,-2.45,-1.20,1.20,2.45,3.70]){
     addMesh(root,new RoundedBoxGeometry(.64,.20,.18,3,.045),whiteLed,{position:[x,crossbarY+.04,z-.39],name:'start-overhead-lamp'});
   }
-  
-  
-  
+  if(!urbanMode){
+    addSnowCluster(root,snowMaterial,0,crossbarY+.39,z,5.6,1.0);
+    addSnowCluster(root,snowMaterial,-2.60,crossbarY+.39,z+.02,2.2,1.0);
+    addSnowCluster(root,snowMaterial,2.75,crossbarY+.39,z-.03,2.0,1.0);
+  }
 
   const bannerTexture=createBannerTexture({urban:urbanMode});
   const bannerMaterial=new THREE.MeshBasicMaterial({map:bannerTexture,side:THREE.DoubleSide,toneMapped:false,fog:false});

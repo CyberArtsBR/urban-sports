@@ -3,6 +3,7 @@ import {createUrbanMaterials} from './urbanMaterials.js';
 import {createUrbanBuildingSkyline} from './urbanBuildings.js';
 import {createUrbanStreetDressing} from './streetDressing.js';
 import {createUrbanRoadSurfaceDetails} from './urbanRoadSurfaceDetails.js';
+import {advanceUrbanDistrict,resolveUrbanDistrict,selectUrbanDistrictForDistance} from './urbanDistricts.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
@@ -407,6 +408,7 @@ export function createUrbanEnvironment(options={}){
   options.parent?.add?.(group);
 
   let quality=options.quality??'high';
+  let activeDistrict=resolveUrbanDistrict(options.district??'mixed').id;
   function setQualityProfile(value){
     quality=value;
     materials.setQuality?.(value);
@@ -418,12 +420,26 @@ export function createUrbanEnvironment(options={}){
   }
   function reset(){for(const component of Object.values(components))component.reset();}
   function setDistrict(value){
-    return components.skyline.setDistrict?.(value)??components.skyline.getDiagnostics();
+    const resolved=resolveUrbanDistrict(value);
+    activeDistrict=resolved.id;
+    for(const component of Object.values(components))component.setDistrict?.(resolved);
+    return getDiagnostics();
+  }
+  function advanceDistrict(steps=1){
+    const next=advanceUrbanDistrict(activeDistrict,steps);
+    setDistrict(next);
+    return next;
+  }
+  function selectDistrictForDistance(distance,segmentLength=options.districtLength??720,offset=0){
+    const selected=selectUrbanDistrictForDistance(distance,segmentLength,offset);
+    setDistrict(selected);
+    return selected;
   }
   function getDiagnostics(){
     const parts=Object.values(components).map(component=>component.getDiagnostics());
     return {
       environment:'urban',
+      district:activeDistrict,
       qualityDensity:densityFromQuality(quality),
       componentCount:parts.length,
       drawCalls:parts.reduce((sum,item)=>sum+(item.drawCalls||0),0),
@@ -440,6 +456,7 @@ export function createUrbanEnvironment(options={}){
     for(const component of Object.values(components))component.dispose();
     if(ownsMaterials)materials.dispose?.();
   }
+  setDistrict(activeDistrict);
   setQualityProfile(quality);
-  return {group,components,materials,update,reset,setQualityProfile,setDistrict,getDiagnostics,dispose};
+  return {group,components,materials,update,reset,setQualityProfile,setDistrict,advanceDistrict,selectDistrictForDistance,getDiagnostics,dispose};
 }

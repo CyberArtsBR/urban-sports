@@ -288,7 +288,7 @@ assert(
 );
 assert(
   preMaxDensity.specialWideLogs>preMaxDensity.specialLogs,
-  'wide logs are not the dominant log type among special hazards'
+  `wide logs are not the dominant log type among surviving special hazards (wide=${preMaxDensity.specialWideLogs}, normal=${preMaxDensity.specialLogs})`
 );
 
 // Streaming audit: generation must live well outside the ~280m far plane.

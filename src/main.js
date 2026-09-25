@@ -1238,7 +1238,10 @@ function update(dt,frameMs=dt*1000){
       }
     }
 
-    const flatGroundTakeoff=!state.grinding&&!ridingRamp&&(
+    const takeoffTrickIntent=nativeSkateboard&&state.skate?.manualMode&&!actions.trickModifier
+      ?null
+      :trickIntent;
+    const flatGroundTakeoff=!jumpedOffGrind&&!state.grinding&&!ridingRamp&&(
       nativeSkateboard
         ?trySkateboardOllie(state,groundY,{powered:bananaPower.active})
         :tryManualJump(state,groundY)
@@ -1246,7 +1249,7 @@ function update(dt,frameMs=dt*1000){
     if(flatGroundTakeoff){
       feedback.onManualTakeoff();
       ui.showTrickHint?.();
-      if(trickIntent==='BACKFLIP'){
+      if(takeoffTrickIntent==='BACKFLIP'){
         // Ground backflips get a dedicated vertical launch. Keep the full arc
         // even if the player releases Jump quickly so the rotation happens in air.
         state.vy=Math.max(state.vy,SKI_TUNING.BACKFLIP_MANUAL_JUMP_VELOCITY);
@@ -1254,14 +1257,14 @@ function update(dt,frameMs=dt*1000){
         state.jumpProfile='backflip';
         state.jumpCutApplied=true;
       }
-      if(trickIntent&&tricks.start(trickIntent,{
+      if(takeoffTrickIntent&&tricks.start(takeoffTrickIntent,{
         source:'manual',
         startTime:state.time,
         physicsState:state,
         landingHeight:groundY,
         gravity:SKI_TUNING.GRAVITY
       })){
-        announceTrickAudio(announceTrickStart(state,trickIntent,'manual'));
+        announceTrickAudio(announceTrickStart(state,takeoffTrickIntent,'manual'));
       }
     }
 

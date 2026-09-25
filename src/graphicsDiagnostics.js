@@ -1,4 +1,4 @@
-const PROFILE_NAMES=Object.freeze(['low','medium','auto','high']);
+const PROFILE_NAMES=Object.freeze(['low','medium','auto','high','max']);
 
 const LOW=Object.freeze({
   // Full EffectComposer-frame telemetry is ~214 calls after LOW restarts.
@@ -50,15 +50,31 @@ const HIGH=Object.freeze({
   urbanInstances:2800
 });
 
+const MAX=Object.freeze({
+  rendererCalls:440,
+  rendererTriangles:1900000,
+  rendererGeometries:540,
+  rendererTextures:210,
+  sceneObjectCount:1950,
+  instancedMeshCount:196,
+  materialCount:410,
+  lightCount:30,
+  streamingSegmentCount:64,
+  urbanPropPopulation:1550,
+  skylinePopulation:190,
+  urbanDrawCalls:92,
+  urbanInstances:3100
+});
+
 export const GRAPHICS_QUALITY_BUDGETS=Object.freeze({
   low:LOW,
   medium:MEDIUM,
   auto:MEDIUM,
   high:HIGH,
-  max:HIGH
+  max:MAX
 });
 
-export const GRAPHICS_BUDGET_METRICS=Object.freeze(Object.keys(HIGH));
+export const GRAPHICS_BUDGET_METRICS=Object.freeze(Object.keys(MAX));
 
 const STABILITY_LIMITS=Object.freeze({
   rendererGeometries:{absolute:4,fraction:.05},
@@ -94,7 +110,6 @@ function addMaterialTextures(material,textures){
 
 export function normalizeGraphicsBudgetProfile(value='high'){
   const normalized=String(value??'high').trim().toLowerCase();
-  if(normalized==='max')return 'high';
   if(PROFILE_NAMES.includes(normalized))return normalized;
   if(normalized==='reduced')return 'medium';
   return 'high';

@@ -165,15 +165,10 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
 app.prepend(renderer.domElement);
 
-const postTarget=new THREE.WebGLRenderTarget(innerWidth,innerHeight,{
-  type:THREE.HalfFloatType,
-  minFilter:THREE.LinearFilter,
-  magFilter:THREE.LinearFilter,
-  depthBuffer:true,
-  stencilBuffer:false
-});
-postTarget.samples=4;
-composer=new EffectComposer(renderer,postTarget);
+// Let EffectComposer allocate a driver-compatible render target. The previous
+// multisampled HalfFloat target produced valid game/HUD updates but black WebGL
+// frames on some production GPU/browser combinations.
+composer=new EffectComposer(renderer);
 composerPixelRatio=renderer.getPixelRatio();
 composer.setPixelRatio(composerPixelRatio);
 composer.setSize(innerWidth,innerHeight);

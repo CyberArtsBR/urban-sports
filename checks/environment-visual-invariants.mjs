@@ -10,6 +10,7 @@ const surface=read('../src/snowSurfaceDetail.js');
 const boundary=read('../src/boundaryMarkers.js');
 const flybys=read('../src/ambientFlybys.js');
 const premium=read('../src/premiumObstacles.js');
+const courseSurface=read('../src/courseSurfaceVisuals.js');
 const sky=read('../src/alpineSky.js');
 const landscape=read('../src/alpineLandscape.js');
 
@@ -37,7 +38,10 @@ assert(
   premium.includes("rocks:Array.from({length:4}")&&premium.includes('function makeRock(variant)'),
   'rock prototype polish missing'
 );
-assert(env.includes("visualPrototype='readable-ramp-v2'"),'ramp readability prototype missing');
+assert(
+  courseSurface.includes("root.userData.visualPrototype='competition-tech-kicker-v6-hdr'"),
+  'shared ramp readability prototype missing'
+);
 assert(
   premium.includes('log:makeLog(false),wideLog:makeLog(true)')&&
   premium.includes('return library??='),

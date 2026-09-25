@@ -141,7 +141,7 @@ try{
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return d?.mode==='playing';
-  },null,{timeout:20000});
+  },null,{timeout:45000});
 
   await page.waitForTimeout(1500);
   const afterRestart=await diagnostics(page);

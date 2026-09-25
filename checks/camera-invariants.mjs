@@ -74,7 +74,10 @@ for(const mode of [RIDE_MODE.SKI,RIDE_MODE.SNOWBOARD]){
   const state=makeState({rideMode:mode,speed:41});
   for(let i=0;i<15;i++)skiCamera.update(state,1/60);
   assert.equal(camera.position.y,1.05,'first-person view is above waist height');
-  const equipment=mode===RIDE_MODE.SKI?rider.userData.skis[0]:rider.getObjectByName('snowboard-equipment');
+  const equipment=mode===RIDE_MODE.SKI
+    ?rider.userData.skis?.[0]
+    :rider.getObjectByName('skateboard-equipment')||rider.getObjectByName('snowboard-equipment');
+  assert(equipment,mode+' equipment root is missing from the first-person framing fixture');
   const tip=equipment.localToWorld(new THREE.Vector3(0,0,-1.06)).project(camera);
   assert(Math.abs(tip.x)<1&&tip.y>-1&&tip.y<0,'ski or snowboard tip is outside the first-person frame');
   assert(rider.userData.firstPersonBody,'rider body cannot be hidden while keeping equipment visible');

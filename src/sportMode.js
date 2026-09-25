@@ -6,18 +6,22 @@ export const SPORT_MODE=Object.freeze({
   BMX:'bmx'
 });
 
-// Phase 1 keeps the proven Ski/Snowboard handling underneath each urban sport.
-// The urban-specific physics can then diverge incrementally without rewriting
-// the entire gameplay loop in one step.
+// Urban sports keep a legacy ride-mode compatibility layer for shared speed,
+// avatar and equipment contracts. Native sport physics can then own handling
+// without forcing a rewrite of the proven course/runtime engine.
 const SPORT_PROFILES=Object.freeze({
   [SPORT_MODE.SKATEBOARD]:Object.freeze({
     mode:SPORT_MODE.SKATEBOARD,
     label:'SKATEBOARD',
     legacyRideMode:RIDE_MODE.SNOWBOARD,
+    physicsProfile:'skateboard-native',
+    displaySpeedProfile:'skateboard',
     equipment:'skateboard',
     stance:'sideways',
     wheelCount:4,
-    supportsGrinding:true
+    supportsGrinding:true,
+    supportsManuals:true,
+    supportsPowerslides:true
   }),
   [SPORT_MODE.INLINE]:Object.freeze({
     mode:SPORT_MODE.INLINE,

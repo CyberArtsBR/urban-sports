@@ -1438,8 +1438,19 @@ function update(dt,frameMs=dt*1000){
   startGate.update(worldDistance);
   const worldSpeed=worldDistance/dt;
   const environmentUpdateStarted=performance.now();
-  environment.update(state.mode==='paused'?0:simulationFrameDt,worldSpeed,state.x,state.y,player.position.z,state.speed,state.edge,state.air,state.landingPulse,state.mode==='playing',.12+state.centerGround,state.time,state.rideMode,riderController.trailContacts);
-  mountainWeather.update(state.mode==='paused'?0:simulationFrameDt,state);
+  const environmentDt=state.mode==='paused'?0:simulationFrameDt;
+  environment.update(environmentDt,worldSpeed,state.x,state.y,player.position.z,state.speed,state.edge,state.air,state.landingPulse,state.mode==='playing',.12+state.centerGround,state.time,state.rideMode,riderController.trailContacts);
+  urbanEnvironment.update?.(environmentDt,worldSpeed);
+  mountainWeather.update(environmentDt,state);
+  const urbanWeather=mountainWeather.getState?.();
+  const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
+  const asphalt=urbanEnvironment.materials?.asphalt;
+  if(asphalt){
+    asphalt.roughness=THREE.MathUtils.lerp(.94,.48,wet);
+    asphalt.clearcoat=THREE.MathUtils.lerp(0,.82,wet);
+    asphalt.clearcoatRoughness=THREE.MathUtils.lerp(.28,.12,wet);
+    asphalt.envMapIntensity=THREE.MathUtils.lerp(.20,.65,wet);
+  }
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 

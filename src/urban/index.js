@@ -25,3 +25,18 @@ export {
   createUrbanRampObstacle,
   createUrbanOilHazard
 } from './urbanObstacles.js';
+
+export {
+  URBAN_DISTRICT_PRESETS,
+  listUrbanDistricts,
+  resolveUrbanDistrict
+} from './urbanDistricts.js';
+
+export {
+  URBAN_BUILDING_ARCHETYPES,
+  createUrbanFacadeGeometrySet
+} from './urbanFacadeSystem.js';
+
+export {
+  createUrbanBuildingSkyline
+} from './urbanBuildings.js';

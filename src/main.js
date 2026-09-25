@@ -76,7 +76,12 @@ function createRunSeed(){
 
 let explicitQualityOverride=false;
 try{explicitQualityOverride=new URLSearchParams(globalThis.location?.search||'').has('quality');}catch{}
-if(!explicitQualityOverride)quality.setProfile(userPreferences.quality||'auto');
+if(!explicitQualityOverride){
+  // Generic ?test=1 smoke runs should stay cheap under software rendering.
+  // Profile-specific graphics/benchmark jobs pass ?quality=... explicitly and
+  // therefore still exercise LOW/MEDIUM/HIGH exactly as requested.
+  quality.setProfile(runtimeTestMode?'low':(userPreferences.quality||'auto'));
+}
 
 const app=document.querySelector('#app');
 app.innerHTML=`
@@ -682,7 +687,8 @@ const startScreen=createStartScreen({
     // The selected rider is interaction-critical and should not compete with crowd parsing.
     return true;
   },
-  assetUrl:'/start/chimpions-urban-sports-start.webp'
+  assetUrl:'/start/chimpions-urban-sports-start.webp',
+  transitionMs:runtimeTestMode?0:300
 });
 startScreen.setReady(false);
 ui.setAvatarLoading(true);

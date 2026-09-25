@@ -71,8 +71,15 @@ const high=inventory(dressing.group);
 dressing.setDensity('low');
 const low=inventory(dressing.group);
 assert(low.activeInstances<=high.activeInstances,'low quality must not increase street dressing instances');
+assert.equal(low.drawCalls,initial.drawCalls-5,'low quality must detach five close-range accent batches');
+assert.equal(dressing.getDiagnostics().drawCalls,low.drawCalls,'low diagnostics must report active batches');
 dressing.setDensity('high');
 assert.equal(inventory(dressing.group).allocatedInstances,initial.allocatedInstances,'quality changes must reuse existing instance capacity');
+assert.equal(inventory(dressing.group).drawCalls,initial.drawCalls,'high quality must restore the accent batches');
+
+const initialLow=createUrbanStreetDressing({quality:'low',seed:'low-budget-startup'});
+assert.equal(inventory(initialLow.group).drawCalls,initial.drawCalls-5,'a fresh LOW scene must begin with reduced batches');
+initialLow.dispose();
 
 const geometries=new Set();
 dressing.group.traverse(object=>{if(object.geometry)geometries.add(object.geometry);});

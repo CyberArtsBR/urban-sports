@@ -769,6 +769,7 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
   });
   const speakerMaterial=new THREE.MeshBasicMaterial({
     map:createSpeakerTexture(),
+    side:THREE.DoubleSide,
     toneMapped:false,
     fog:false
   });
@@ -780,11 +781,13 @@ export function createUrbanStartEventScene({world,terrainHeight=()=>0}={}){
   });
   const ridersSignMaterial=new THREE.MeshBasicMaterial({
     map:createDirectionTexture('RIDERS  >','#32d9ff'),
+    side:THREE.DoubleSide,
     toneMapped:false,
     fog:false
   });
   const crewSignMaterial=new THREE.MeshBasicMaterial({
     map:createDirectionTexture('<  EVENT CREW','#ff315f'),
+    side:THREE.DoubleSide,
     toneMapped:false,
     fog:false
   });

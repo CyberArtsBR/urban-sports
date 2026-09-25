@@ -42,8 +42,8 @@ page.on('console',message=>{
 try{
   await page.goto('http://127.0.0.1:4173/?test=1',{waitUntil:'domcontentloaded'});
 
-  const start=page.getByRole('button',{name:'Start Game'});
-  const back=page.getByRole('link',{name:'Back to the Game selection'});
+  const start=page.locator('.start-screen-play');
+  const back=page.locator('.start-screen-back');
   const art=page.locator('.start-screen-art');
 
   await start.waitFor({state:'visible'});

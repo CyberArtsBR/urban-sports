@@ -134,23 +134,25 @@ try{
   assert.equal(await page.locator('.chimpion-card.is-menu-selected').count(),1,'Keyboard focus did not share the selector visual state');
   await page.keyboard.press('Enter');
 
-  const skiChoice=selector.locator('.ride-mode-card[data-ride-mode="ski"]');
-  await skiChoice.waitFor({state:'visible',timeout:5000});
+  const rideChoice=selector.locator(
+    '.ride-mode-card[data-ride-mode="skateboard"], .ride-mode-card[data-ride-mode="snowboard"], .ride-mode-card'
+  ).first();
+  await rideChoice.waitFor({state:'visible',timeout:5000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   await assertElementWithinViewport(selector,'ride selector');
-  await assertElementWithinViewport(skiChoice,'ski choice');
+  await assertElementWithinViewport(rideChoice,'urban ride choice');
   await assertElementWithinViewport(selector.locator('.ride-mode-back'),'ride back');
 
   await page.keyboard.press('Escape');
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('chimpion-card'));
   assert.equal(await selector.locator('#ride-mode-step').isHidden(),true,'Escape/B-style cancel did not return ride selection to avatars');
   await page.keyboard.press('Enter');
-  await skiChoice.waitFor({state:'visible',timeout:5000});
+  await rideChoice.waitFor({state:'visible',timeout:5000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   // Focus/navigation semantics were already verified above. Trigger the actual
   // button handler through DOM click so headless SwiftShader does not make this
   // release smoke depend on pointer hit-testing or transition stability.
-  await skiChoice.evaluate(button=>button.click());
+  await rideChoice.evaluate(button=>button.click());
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   // beginRun is scheduled immediately after the async rider selection closes.

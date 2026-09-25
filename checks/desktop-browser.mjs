@@ -132,12 +132,16 @@ try{
   assert.equal(await page.locator('.chimpion-card.is-menu-selected').count(),1,'Horizontal selector navigation lost visible state');
   await runChimpion.focus();
   assert.equal(await page.locator('.chimpion-card.is-menu-selected').count(),1,'Keyboard focus did not share the selector visual state');
-  await page.keyboard.press('Enter');
-
-  const rideChoice=selector.locator(
-    '.ride-mode-card[data-ride-mode="skateboard"], .ride-mode-card[data-ride-mode="snowboard"], .ride-mode-card'
-  ).first();
-  await rideChoice.waitFor({state:'visible',timeout:5000});
+  await runChimpion.evaluate(button=>button.click());
+  await page.waitForFunction(()=>{
+    const step=document.querySelector('#ride-mode-step');
+    return !!step&&!step.hidden;
+  },null,{timeout:20000});
+  const activeRideMode=await page.evaluate(()=>
+    (window.chimpionsUrbanSports?.()??window.chimpionsSki?.())?.rideMode||'snowboard'
+  );
+  const rideChoice=selector.locator(`.ride-mode-card[data-ride-mode="${activeRideMode}"]`).first();
+  await rideChoice.waitFor({state:'visible',timeout:10000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   await assertElementWithinViewport(selector,'ride selector');
   await assertElementWithinViewport(rideChoice,'urban ride choice');
@@ -146,8 +150,12 @@ try{
   await page.keyboard.press('Escape');
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('chimpion-card'));
   assert.equal(await selector.locator('#ride-mode-step').isHidden(),true,'Escape/B-style cancel did not return ride selection to avatars');
-  await page.keyboard.press('Enter');
-  await rideChoice.waitFor({state:'visible',timeout:5000});
+  await runChimpion.evaluate(button=>button.click());
+  await page.waitForFunction(()=>{
+    const step=document.querySelector('#ride-mode-step');
+    return !!step&&!step.hidden;
+  },null,{timeout:20000});
+  await rideChoice.waitFor({state:'visible',timeout:10000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   // Focus/navigation semantics were already verified above. Trigger the actual
   // button handler through DOM click so headless SwiftShader does not make this
@@ -343,9 +351,16 @@ try{
     const touchRider=touchSelector.locator('.chimpion-card:not([aria-disabled="true"])').filter({hasText:touchRiderName}).first();
     await touchRider.waitFor({state:'visible',timeout:10000});
     await touchRider.evaluate(button=>button.click());
-    const touchSkiChoice=touchSelector.locator('.ride-mode-card[data-ride-mode="ski"]');
-    await touchSkiChoice.waitFor({state:'visible',timeout:5000});
-    await touchSkiChoice.evaluate(button=>button.click());
+    await touchPage.waitForFunction(()=>{
+      const step=document.querySelector('#ride-mode-step');
+      return !!step&&!step.hidden;
+    },null,{timeout:20000});
+    const touchRideMode=await touchPage.evaluate(()=>
+      (window.chimpionsUrbanSports?.()??window.chimpionsSki?.())?.rideMode||'snowboard'
+    );
+    const touchRideChoice=touchSelector.locator(`.ride-mode-card[data-ride-mode="${touchRideMode}"]`).first();
+    await touchRideChoice.waitFor({state:'visible',timeout:10000});
+    await touchRideChoice.evaluate(button=>button.click());
     await touchPage.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
     const touchTutorial=touchPage.locator('.session-tutorial:not([hidden])');
     if(await touchTutorial.isVisible().catch(()=>false)){

@@ -134,6 +134,7 @@ function applyCameraMotionPreference(mode=cameraMotionMode){
 applyCameraMotionPreference();
 
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
 let composer=null,bloomPass=null,composerPixelRatio=0;
 
@@ -1545,6 +1546,7 @@ function render(now){
   const firstPersonBody=riderController.rider?.userData?.firstPersonBody;
   if(firstPersonBody)firstPersonBody.visible=cameraViewMode!==CAMERA_VIEW.FIRST_PERSON||
     (state.mode!=='playing'&&state.mode!=='paused'&&state.mode!=='crashed');
+  renderer.info.reset();
   composer.render(dt);
   renderFrameHandle=requestAnimationFrame(render);
 }

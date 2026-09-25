@@ -1272,13 +1272,11 @@ function update(dt,frameMs=dt*1000){
 
     const landingSource=state.jumpSource;
     tricks.step(dt);
-    if(nativeSkateboard&&state.skate){
-      const activeTrick=tricks.getSnapshot();
-      if(activeTrick.state==='TRICK'){
-        if(activeTrick.type==='KICKFLIP')state.skate.animationState='kickflip';
-        else if(activeTrick.type==='HEELFLIP')state.skate.animationState='heelflip';
-        else if(activeTrick.type==='POP SHOVE-IT'||activeTrick.type==='FRONTSIDE SHOVE-IT'||activeTrick.type==='VARIAL FLIP'||activeTrick.type==='360 FLIP')state.skate.animationState='shoveit';
-      }
+    const activeTrick=tricks.getSnapshot();
+    if(nativeSkateboard&&state.skate&&activeTrick.state==='TRICK'){
+      if(activeTrick.type==='KICKFLIP')state.skate.animationState='kickflip';
+      else if(activeTrick.type==='HEELFLIP')state.skate.animationState='heelflip';
+      else if(activeTrick.type==='POP SHOVE-IT'||activeTrick.type==='FRONTSIDE SHOVE-IT'||activeTrick.type==='VARIAL FLIP'||activeTrick.type==='360 FLIP')state.skate.animationState='shoveit';
     }
     const completedTrick=tricks.consumeCompletion();
     if(completedTrick){
@@ -1335,7 +1333,9 @@ function update(dt,frameMs=dt*1000){
       powerslide:!!state.skate?.powerslide,
       manualMode:state.skate?.manualMode||'',
       grinding:!!state.grinding,
-      grindTrick:grindSystem.snapshot().trick
+      grindTrick:grindSystem.snapshot().trick,
+      trickType:activeTrick.type||'',
+      trickProgress:activeTrick.progress||0
     });
     if(!state.air&&!ridingRamp){
       trailTimer-=dt;

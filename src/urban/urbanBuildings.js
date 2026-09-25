@@ -152,13 +152,23 @@ export function createUrbanBuildingSkyline(options={}){
     entry.bodyColor=district.bodyPalette[Math.floor(random01(seed,r,106)*district.bodyPalette.length)%district.bodyPalette.length];
     entry.windowColor=district.windowPalette[Math.floor(random01(seed,r,107)*district.windowPalette.length)%district.windowPalette.length];
     entry.bodyBrightness=.86+random01(seed,r,108)*.22;
-    entry.windowBrightness=(district.windowBrightness||.9)*(.82+random01(seed,r,109)*.22);
+    const darkRoll=random01(seed,r,109);
+    entry.windowBrightness=darkRoll<.16
+      ?.055+random01(seed,r,115)*.06
+      :(district.windowBrightness||.9)*(.72+random01(seed,r,116)*.34);
+    entry.windowPulse=darkRoll>.86;
+    entry.windowPulsePhase=random01(seed,r,117)*Math.PI*2;
+    entry.windowPulseRate=.18+random01(seed,r,118)*.34;
     entry.ledColor=LED_PALETTE[Math.floor(random01(seed,r,110)*LED_PALETTE.length)%LED_PALETTE.length];
-    entry.ledBrightness=.48+random01(seed,r,111)*.52;
+    entry.ledBrightness=.42+random01(seed,r,111)*.62;
+    entry.ledPulse=random01(seed,r,119)>.78;
+    entry.ledPulsePhase=random01(seed,r,120)*Math.PI*2;
     entry.yaw=(random01(seed,r,112)-.5)*(layer==='near'?.025:.012);
   }
 
-  function refresh(){
+  let animationTime=0;
+
+  function refresh(time=animationTime){
     const count=activeCount(capacity,density,10,true);
     const edge=roadWidth*.5+sidewalkWidth;
     const bodyCounts=new Array(archetypeCount).fill(0);
@@ -181,14 +191,16 @@ export function createUrbanBuildingSkyline(options={}){
         sx:entry.depth*1.002,sy:entry.height,sz:entry.width*1.002,
         ry:entry.yaw
       });
-      setInstanceColor(lights,i,entry.windowColor,entry.windowBrightness);
+      const windowPulse=entry.windowPulse?(1+Math.sin(time*entry.windowPulseRate+entry.windowPulsePhase)*.10):1;
+      setInstanceColor(lights,i,entry.windowColor,entry.windowBrightness*windowPulse);
 
       setTransform(leds,i,{
         x,y:.018,z:entry.z,
         sx:entry.depth*1.006,sy:entry.height,sz:entry.width*1.006,
         ry:entry.yaw
       });
-      setInstanceColor(leds,i,entry.ledColor,entry.ledBrightness);
+      const ledPulse=entry.ledPulse?(1+Math.sin(time*.42+entry.ledPulsePhase)*.08):1;
+      setInstanceColor(leds,i,entry.ledColor,entry.ledBrightness*ledPulse);
       layerCounts[entry.layer]++;
     }
 
@@ -208,12 +220,15 @@ export function createUrbanBuildingSkyline(options={}){
   }
 
   function update(dt,worldSpeed){
-    const dz=(Number(worldSpeed)||0)*(Number(dt)||0);
-    if(!Number.isFinite(dz)||Math.abs(dz)<1e-8)return;
-    for(let i=0;i<entries.length;i++){
-      advance(entries[i],dz,recycleNear,farZ,entry=>configure(entry,i));
+    const step=Math.max(0,Number(dt)||0);
+    animationTime+=step;
+    const dz=(Number(worldSpeed)||0)*step;
+    if(Number.isFinite(dz)&&Math.abs(dz)>=1e-8){
+      for(let i=0;i<entries.length;i++){
+        advance(entries[i],dz,recycleNear,farZ,entry=>configure(entry,i));
+      }
     }
-    refresh();
+    refresh(animationTime);
   }
 
   function setDensity(value){
@@ -240,7 +255,10 @@ export function createUrbanBuildingSkyline(options={}){
       drawCalls:archetypeCount+2,
       archetypes:URBAN_BUILDING_ARCHETYPES.length,
       layers:{...(group.userData.layerCounts||{})},
-      realtimeLights:0
+      realtimeLights:0,
+      animatedWindowVariation:true,
+      darkWindowProbability:.16,
+      huePreservingInstanceEmission:true
     };
   }
 

@@ -41,6 +41,7 @@ import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} f
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
+import {createGpuTimer} from './gpuTimer.js';
 import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
 import {CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference} from './userPreferences.js';
 import {GAME_FLOW,createGameFlow} from './gameFlow.js';
@@ -134,6 +135,7 @@ applyCameraMotionPreference();
 const renderer=new THREE.WebGLRenderer({antialias:quality.active!=='max-cinematic',powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
+const gpuTimer=createGpuTimer(renderer);
 let cinematicRendering=null;
 
 function applyRendererResolution(){
@@ -1707,8 +1709,13 @@ function render(now){
   // MAX CINEMATIC is explicit/manual and fail-open. Every other tier keeps the
   // production-safe direct renderer; any cinematic pass failure falls back in
   // the same frame so gameplay can never be replaced by a black screen.
-  const composed=cinematicRendering?.active?cinematicRendering.render(dt):false;
-  if(!composed)renderer.render(scene,camera);
+  gpuTimer.begin();
+  try{
+    const composed=cinematicRendering?.active?cinematicRendering.render(dt):false;
+    if(!composed)renderer.render(scene,camera);
+  }finally{
+    gpuTimer.end();
+  }
   renderFrameHandle=requestAnimationFrame(render);
 }
 renderFrameHandle=requestAnimationFrame(render);
@@ -1762,6 +1769,7 @@ window.chimpionsSki=()=>{
       bloomRadius:cinematicRendering?.getDiagnostics?.().bloomRadius??0,
       bloomThreshold:cinematicRendering?.getDiagnostics?.().bloomThreshold??0,
       cinematic:cinematicRendering?.getDiagnostics?.()||null,
+      gpuFrameTiming:gpuTimer.getDiagnostics(),
       contactShadow:riderContactShadow.getDiagnostics?.()||null,
       anisotropy:urbanEnvironment.materials?.getDiagnostics?.()?.anisotropy??0,
       materialQuality:urbanEnvironment.materials?.getDiagnostics?.()||null,
@@ -1877,6 +1885,7 @@ if(import.meta.hot){
     urbanEnvironment.dispose?.();
     riderContactShadow.dispose?.();
     cinematicRendering?.dispose?.();
+    gpuTimer.dispose?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();

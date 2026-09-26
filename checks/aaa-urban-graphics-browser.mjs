@@ -183,7 +183,12 @@ try{
   for(let cycle=1;cycle<=4;cycle++){
     const beforeRestart=await diagnostics(page);
     if(beforeRestart?.mode==='playing'){
-      await page.keyboard.press('Escape');
+      // Dispatch to the same window listener used by gameplay input. This avoids
+      // headless keyboard-focus races after long unattended graphics samples.
+      await page.evaluate(()=>{
+        window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape',key:'Escape'}));
+        window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape',key:'Escape'}));
+      });
       await page.waitForFunction(()=>{
         const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
         return d?.mode==='paused'||d?.mode==='crashed';

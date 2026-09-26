@@ -111,7 +111,8 @@ const LUT_SHADER={
 
     void main(){
       vec4 source=texture2D(tDiffuse,vUv);
-      vec3 mapped=sampleLut(source.rgb);
+      float hdrScale=max(1.0,max(source.r,max(source.g,source.b)));
+      vec3 mapped=sampleLut(source.rgb/hdrScale)*hdrScale;
       gl_FragColor=vec4(mix(source.rgb,mapped,clamp(intensity,0.0,1.0)),source.a);
     }
   `
@@ -216,6 +217,10 @@ class ReducedAtmospherePass extends Pass{
       depthWrite:false,
       uniforms:{
         tDiffuse:{value:null},
+        tDepth:{value:null},
+        cameraNear:{value:.1},
+        cameraFar:{value:1000},
+        maxDistance:{value:420},
         time:{value:0},
         fogDensity:{value:.003},
         storm:{value:0},
@@ -231,6 +236,10 @@ class ReducedAtmospherePass extends Pass{
       `,
       fragmentShader:`
         uniform sampler2D tDiffuse;
+        uniform sampler2D tDepth;
+        uniform float cameraNear;
+        uniform float cameraFar;
+        uniform float maxDistance;
         uniform float time;
         uniform float fogDensity;
         uniform float storm;
@@ -242,23 +251,31 @@ class ReducedAtmospherePass extends Pass{
         varying vec2 vUv;
 
         float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
+        float viewDistance(float depth){
+          float z=depth*2.0-1.0;
+          return (2.0*cameraNear*cameraFar)/max(.0001,cameraFar+cameraNear-z*(cameraFar-cameraNear));
+        }
 
         void main(){
           vec3 src=texture2D(tDiffuse,vUv).rgb;
+          float depth=texture2D(tDepth,vUv).x;
+          float distanceFade=smoothstep(32.0,max(48.0,maxDistance),viewDistance(depth));
           float corridor=1.0-smoothstep(.08,.46,abs(vUv.x-.5));
           corridor*=1.0-smoothstep(.30,.83,vUv.y);
           float horizon=1.0-smoothstep(.18,.96,vUv.y);
-          float mist=(.38+.62*horizon)*(1.0-corridor*.78);
+          float mist=(.22+.78*horizon)*(1.0-corridor*.78)*mix(.22,1.0,distanceFade);
           float noise=hash(floor(vUv*vec2(260.0,150.0))+floor(time*3.0))-.5;
           float density=clamp(hazeStrength+fogDensity*16.0+storm*.055+rain*.035,0.0,.34);
           vec3 haze=mix(vec3(.70,.78,.84),vec3(.43,.54,.68),clamp(night+storm*.42,0.0,1.0));
           vec2 ray=vUv-sunUv;
           float radial=exp(-dot(ray,ray)*7.0);
           float streak=.78+.22*sin(length(ray)*145.0-time*.18);
-          float shafts=radial*streak*shaftStrength*(1.0-corridor*.58);
-          vec3 outColor=mix(src,haze,clamp(mist*density+noise*.004,0.0,.42));
-          outColor+=vec3(1.0,.78,.52)*shafts*.075;
-          gl_FragColor=vec4(outColor,1.0);
+          float shafts=radial*streak*shaftStrength*(1.0-corridor*.58)*mix(.28,1.0,distanceFade);
+          float fogAmount=clamp(mist*density+noise*.004*distanceFade,0.0,.38);
+          float highlightGuard=1.0-smoothstep(1.0,3.5,max(src.r,max(src.g,src.b)));
+          fogAmount*=mix(.65,1.0,highlightGuard);
+          vec3 premultipliedScatter=haze*fogAmount+vec3(1.0,.78,.52)*shafts*.075;
+          gl_FragColor=vec4(premultipliedScatter,fogAmount);
         }
       `
     });
@@ -277,8 +294,9 @@ class ReducedAtmospherePass extends Pass{
         varying vec2 vUv;
         void main(){
           vec4 source=texture2D(tDiffuse,vUv);
-          vec3 atmosphere=texture2D(tAtmosphere,vUv).rgb;
-          gl_FragColor=vec4(atmosphere,source.a);
+          vec4 atmosphere=texture2D(tAtmosphere,vUv);
+          vec3 result=source.rgb*(1.0-atmosphere.a)+atmosphere.rgb;
+          gl_FragColor=vec4(result,source.a);
         }
       `
     });
@@ -490,6 +508,10 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       composer.addPass(bloomPass);
 
       atmospherePass=new ReducedAtmospherePass({scale:finite(currentSettings.volumetricResolutionScale,.5)});
+      atmospherePass.downsampleMaterial.uniforms.tDepth.value=gtaoPass.depthTexture;
+      atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
+      atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
+      atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
       composer.addPass(atmospherePass);
 
       lutPass=new ShaderPass(LUT_SHADER);
@@ -537,6 +559,9 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
 
     atmospherePass.enabled=currentSettings.volumetricFog!==false||currentSettings.lightShafts!==false;
     atmospherePass.setResolutionScale(finite(currentSettings.volumetricResolutionScale,.5));
+    atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
+    atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
+    atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
 
     lutPass.enabled=currentSettings.colorGrading!==false;
     lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);

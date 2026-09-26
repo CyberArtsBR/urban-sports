@@ -131,7 +131,7 @@ function applyCameraMotionPreference(mode=cameraMotionMode){
 }
 applyCameraMotionPreference();
 
-const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+const renderer=new THREE.WebGLRenderer({antialias:quality.active!=='max-cinematic',powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
 let cinematicRendering=null;
@@ -551,8 +551,18 @@ ui.configureQuality?.({
   mode:quality.current,
   options:QUALITY_PROFILE_NAMES,
   onChange:profile=>{
-    quality.setProfile(profile);
-    saveQualityPreference(profile);
+    const next=String(profile||'auto').toLowerCase();
+    const currentCanvasAA=renderer.getContext().getContextAttributes?.()?.antialias===true;
+    const nextCanvasAA=next!=='max-cinematic';
+    saveQualityPreference(next);
+    // WebGL antialias is a context-creation attribute. Recreate the renderer
+    // only when crossing the MAX CINEMATIC boundary so its MSAA-off contract is
+    // genuine while existing tiers retain their production canvas AA.
+    if(currentCanvasAA!==nextCanvasAA){
+      globalThis.location?.reload?.();
+      return;
+    }
+    quality.setProfile(next);
   }
 });
 ui.configureSettings?.({
@@ -1738,6 +1748,8 @@ window.chimpionsSki=()=>{
     renderingQuality:{
       profile:quality.active,
       effectiveDpr:renderer.getPixelRatio(),
+      canvasAntialias:renderer.getContext().getContextAttributes?.()?.antialias===true,
+      canvasSamples:(()=>{try{const gl=renderer.getContext();return gl.getParameter(gl.SAMPLES)||0;}catch{return 0;}})(),
       postResolution:cinematicRendering?.getDiagnostics?.().postResolutionScale??0,
       renderTargetType:cinematicRendering?.getDiagnostics?.().renderTargetType??'direct-backbuffer',
       msaaSamples:cinematicRendering?.getDiagnostics?.().msaaSamples??(quality.active==='max-cinematic'?0:null),

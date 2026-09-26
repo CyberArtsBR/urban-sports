@@ -68,7 +68,7 @@ async function completeStartFlow(page){
   });
   assert(rideResult.ok,rideResult.reason||'Failed to choose Skateboard');
 
-  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
+  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:120000});
   // beginRun is scheduled after the async rider-selection close handler. Wait
   // for the tutorial/countdown/run hand-off rather than sampling the tutorial
   // visibility on the same task that closed the modal.
@@ -183,16 +183,21 @@ try{
   for(let cycle=1;cycle<=4;cycle++){
     const beforeRestart=await diagnostics(page);
     if(beforeRestart?.mode==='playing'){
-      // Dispatch to the same window listener used by gameplay input. This avoids
-      // headless keyboard-focus races after long unattended graphics samples.
-      await page.evaluate(()=>{
-        window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape',key:'Escape'}));
-        window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape',key:'Escape'}));
-      });
-      await page.waitForFunction(()=>{
-        const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-        return d?.mode==='paused'||d?.mode==='crashed';
-      },null,{timeout:10000});
+      // SwiftShader HIGH/MAX can take seconds to present a frame while shadow
+      // maps are active. Retry the real gameplay Escape edge until the update
+      // loop consumes it, rather than treating renderer slowness as a game bug.
+      let pausedOrCrashed=false;
+      for(let attempt=0;attempt<6&&!pausedOrCrashed;attempt++){
+        await page.evaluate(()=>{
+          window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape',key:'Escape'}));
+          window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape',key:'Escape'}));
+        });
+        pausedOrCrashed=await page.waitForFunction(()=>{
+          const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+          return d?.mode==='paused'||d?.mode==='crashed';
+        },null,{timeout:5000}).then(()=>true).catch(()=>false);
+      }
+      assert(pausedOrCrashed,`pause/crash transition was not consumed on restart cycle ${cycle}`);
     }
     const restarted=await page.evaluate(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();

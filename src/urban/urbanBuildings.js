@@ -5,9 +5,9 @@ import {resolveUrbanDistrict} from './urbanDistricts.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:.90,medium:.66,low:.44});
-const PROFILE_LIGHT_DENSITY=Object.freeze({max:1,high:.92,medium:.68,low:.42});
-const PROFILE_LED_DENSITY=Object.freeze({max:1,high:.72,medium:.34,low:0});
+const PROFILE_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.90,medium:.66,low:.44});
+const PROFILE_LIGHT_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.92,medium:.68,low:.42});
+const PROFILE_LED_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.72,medium:.34,low:0});
 const ARCHETYPE_HEIGHT=Object.freeze([1,1.18,.58,1.02,1.28,.82,1.08]);
 const ARCHETYPE_WIDTH=Object.freeze([1,.88,1.16,.92,.82,1.08,.90]);
 const ARCHETYPE_DEPTH=Object.freeze([1,.92,1.18,.94,.84,1.02,.94]);

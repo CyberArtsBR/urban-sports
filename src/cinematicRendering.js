@@ -197,14 +197,14 @@ const DOF_SHADER={
 };
 
 class ReducedAtmospherePass extends Pass{
-  constructor({scale=.5}={}){
+  constructor({scale=.5,type=THREE.HalfFloatType}={}){
     super();
     this.needsSwap=true;
     this.scale=THREE.MathUtils.clamp(finite(scale,.5),.25,.5);
     this.width=1;
     this.height=1;
     this.target=new THREE.WebGLRenderTarget(1,1,{
-      type:THREE.HalfFloatType,
+      type,
       minFilter:THREE.LinearFilter,
       magFilter:THREE.LinearFilter,
       depthBuffer:false,
@@ -428,6 +428,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   let renderTargetType='none';
   let postRenderMs=0;
   let lastDofState=false;
+  const featureFailures={ao:null,bloom:null,volumetric:null,colorGrading:null,dof:null,sharpen:null};
   const lutTextures=new Map(Object.keys(GRADE_PRESETS).map(name=>[name,createLutTexture(name)]));
   const aoSize=new THREE.Vector2(1,1);
 
@@ -478,54 +479,97 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       renderPass=new RenderPass(scene,camera);
       composer.addPass(renderPass);
 
-      gtaoPass=new GTAOPass(scene,camera,1,1);
-      gtaoPass.output=GTAOPass.OUTPUT.Default;
-      gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
-      gtaoPass.updateGtaoMaterial({
-        radius:finite(currentSettings.aoRadius,.18),
-        distanceExponent:1.3,
-        thickness:finite(currentSettings.aoThickness,.75),
-        distanceFallOff:.12,
-        scale:1
-      });
-      gtaoPass.updatePdMaterial({
-        lumaPhi:9,
-        depthPhi:2,
-        normalPhi:3,
-        radius:5,
-        radiusExponent:1.8,
-        rings:2,
-        samples:12
-      });
-      composer.addPass(gtaoPass);
+      try{
+        gtaoPass=new GTAOPass(scene,camera,1,1);
+        gtaoPass.output=GTAOPass.OUTPUT.Default;
+        gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
+        gtaoPass.updateGtaoMaterial({
+          radius:finite(currentSettings.aoRadius,.18),
+          distanceExponent:1.3,
+          thickness:finite(currentSettings.aoThickness,.75),
+          distanceFallOff:.12,
+          scale:1
+        });
+        gtaoPass.updatePdMaterial({
+          lumaPhi:9,
+          depthPhi:2,
+          normalPhi:3,
+          radius:5,
+          radiusExponent:1.8,
+          rings:2,
+          samples:12
+        });
+        composer.addPass(gtaoPass);
+      }catch(error){
+        featureFailures.ao=String(error?.message||error||'GTAO unavailable');
+        try{gtaoPass?.dispose?.();}catch{}
+        gtaoPass=null;
+      }
 
-      bloomPass=new UnrealBloomPass(
-        new THREE.Vector2(1,1),
-        finite(currentSettings.bloomStrength,.65),
-        finite(currentSettings.bloomRadius,.48),
-        finite(currentSettings.bloomThreshold,1.60)
-      );
-      composer.addPass(bloomPass);
+      try{
+        bloomPass=new UnrealBloomPass(
+          new THREE.Vector2(1,1),
+          finite(currentSettings.bloomStrength,.65),
+          finite(currentSettings.bloomRadius,.48),
+          finite(currentSettings.bloomThreshold,1.60)
+        );
+        composer.addPass(bloomPass);
+      }catch(error){
+        featureFailures.bloom=String(error?.message||error||'bloom unavailable');
+        try{bloomPass?.dispose?.();}catch{}
+        bloomPass=null;
+      }
 
-      atmospherePass=new ReducedAtmospherePass({scale:finite(currentSettings.volumetricResolutionScale,.5)});
-      atmospherePass.downsampleMaterial.uniforms.tDepth.value=gtaoPass.depthTexture;
-      atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
-      atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
-      atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
-      composer.addPass(atmospherePass);
+      if(gtaoPass?.depthTexture){
+        try{
+          atmospherePass=new ReducedAtmospherePass({
+            scale:finite(currentSettings.volumetricResolutionScale,.5),
+            type
+          });
+          atmospherePass.downsampleMaterial.uniforms.tDepth.value=gtaoPass.depthTexture;
+          atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
+          atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
+          atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
+          composer.addPass(atmospherePass);
+        }catch(error){
+          featureFailures.volumetric=String(error?.message||error||'volumetrics unavailable');
+          try{atmospherePass?.dispose?.();}catch{}
+          atmospherePass=null;
+        }
+      }else{
+        featureFailures.volumetric='disabled because reduced-resolution depth is unavailable';
+      }
 
-      lutPass=new ShaderPass(LUT_SHADER);
-      lutPass.uniforms.tLut.value=lutTextures.get(currentGrade);
-      lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
-      composer.addPass(lutPass);
+      try{
+        lutPass=new ShaderPass(LUT_SHADER);
+        lutPass.uniforms.tLut.value=lutTextures.get(currentGrade);
+        lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
+        composer.addPass(lutPass);
+      }catch(error){
+        featureFailures.colorGrading=String(error?.message||error||'color grading unavailable');
+        try{lutPass?.dispose?.();}catch{}
+        lutPass=null;
+      }
 
-      dofPass=new ShaderPass(DOF_SHADER);
-      dofPass.enabled=false;
-      composer.addPass(dofPass);
+      try{
+        dofPass=new ShaderPass(DOF_SHADER);
+        dofPass.enabled=false;
+        composer.addPass(dofPass);
+      }catch(error){
+        featureFailures.dof=String(error?.message||error||'DOF unavailable');
+        try{dofPass?.dispose?.();}catch{}
+        dofPass=null;
+      }
 
-      sharpenPass=new ShaderPass(SHARPEN_SHADER);
-      sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
-      composer.addPass(sharpenPass);
+      try{
+        sharpenPass=new ShaderPass(SHARPEN_SHADER);
+        sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
+        composer.addPass(sharpenPass);
+      }catch(error){
+        featureFailures.sharpen=String(error?.message||error||'sharpen unavailable');
+        try{sharpenPass?.dispose?.();}catch{}
+        sharpenPass=null;
+      }
 
       outputPass=new OutputPass();
       composer.addPass(outputPass);
@@ -545,29 +589,39 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     if(!shouldEnable)return false;
     if(!ensure())return false;
 
-    gtaoPass.enabled=currentSettings.ambientOcclusion!==false;
-    gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
-    gtaoPass.updateGtaoMaterial({
-      radius:finite(currentSettings.aoRadius,.18),
-      thickness:finite(currentSettings.aoThickness,.75)
-    });
+    if(gtaoPass){
+      gtaoPass.enabled=currentSettings.ambientOcclusion!==false;
+      gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
+      gtaoPass.updateGtaoMaterial({
+        radius:finite(currentSettings.aoRadius,.18),
+        thickness:finite(currentSettings.aoThickness,.75)
+      });
+    }
 
-    bloomPass.enabled=currentSettings.bloomEnabled!==false;
-    bloomPass.strength=finite(currentSettings.bloomStrength,.65);
-    bloomPass.radius=finite(currentSettings.bloomRadius,.48);
-    bloomPass.threshold=finite(currentSettings.bloomThreshold,1.60);
+    if(bloomPass){
+      bloomPass.enabled=currentSettings.bloomEnabled!==false;
+      bloomPass.strength=finite(currentSettings.bloomStrength,.65);
+      bloomPass.radius=finite(currentSettings.bloomRadius,.48);
+      bloomPass.threshold=finite(currentSettings.bloomThreshold,1.60);
+    }
 
-    atmospherePass.enabled=currentSettings.volumetricFog!==false||currentSettings.lightShafts!==false;
-    atmospherePass.setResolutionScale(finite(currentSettings.volumetricResolutionScale,.5));
-    atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
-    atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
-    atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
+    if(atmospherePass){
+      atmospherePass.enabled=currentSettings.volumetricFog!==false||currentSettings.lightShafts!==false;
+      atmospherePass.setResolutionScale(finite(currentSettings.volumetricResolutionScale,.5));
+      atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
+      atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
+      atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
+    }
 
-    lutPass.enabled=currentSettings.colorGrading!==false;
-    lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
+    if(lutPass){
+      lutPass.enabled=currentSettings.colorGrading!==false;
+      lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
+    }
 
-    sharpenPass.enabled=currentSettings.sharpenEnabled!==false;
-    sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
+    if(sharpenPass){
+      sharpenPass.enabled=currentSettings.sharpenEnabled!==false;
+      sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
+    }
 
     resize(width,height,pixelRatio);
     return true;
@@ -598,45 +652,49 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     const nextGrade=gradeName(weather);
     if(nextGrade!==currentGrade){
       currentGrade=nextGrade;
-      lutPass.uniforms.tLut.value=lutTextures.get(currentGrade)||lutTextures.get('day');
+      if(lutPass)lutPass.uniforms.tLut.value=lutTextures.get(currentGrade)||lutTextures.get('day');
     }
 
-    const uniforms=atmospherePass.downsampleMaterial.uniforms;
     const preset=String(weather?.preset||weather?.mode||'day').toLowerCase();
-    const rain=clamp01(weather?.rain);
-    const night=clamp01(weather?.night??(preset==='night'||preset==='rain'||preset==='storm'?1:0));
-    const cloud=clamp01(weather?.cloud??(preset==='storm'?1:preset==='snow'?.88:.25));
-    uniforms.time.value=finite(time,0);
-    uniforms.rain.value=rain;
-    uniforms.night.value=night;
-    uniforms.storm.value=preset==='storm'?1:0;
-    uniforms.fogDensity.value=finite(weather?.fogDensity,preset==='storm'?.0105:preset==='snow'?.0105:.0065);
-    uniforms.hazeStrength.value=THREE.MathUtils.clamp(
-      finite(currentSettings.volumetricDensity,.065)+cloud*.035+rain*.028,
-      .025,.22
-    );
-
-    let shaft=0;
-    if(currentSettings.lightShafts!==false){
-      if(preset==='sunset')shaft=.72;
-      else if(preset==='day')shaft=.18+cloud*.12;
-      else if(preset==='storm')shaft=.04+clamp01(weather?.flash)*.12;
-    }
-    uniforms.shaftStrength.value=shaft;
-
-    if(sun?.position){
-      _sunNdc.copy(sun.position).project(camera);
-      uniforms.sunUv.value.set(
-        THREE.MathUtils.clamp(_sunNdc.x*.5+.5,-.25,1.25),
-        THREE.MathUtils.clamp(_sunNdc.y*.5+.5,-.25,1.25)
+    if(atmospherePass){
+      const uniforms=atmospherePass.downsampleMaterial.uniforms;
+      const rain=clamp01(weather?.rain);
+      const night=clamp01(weather?.night??(preset==='night'||preset==='rain'||preset==='storm'?1:0));
+      const cloud=clamp01(weather?.cloud??(preset==='storm'?1:preset==='snow'?.88:.25));
+      uniforms.time.value=finite(time,0);
+      uniforms.rain.value=rain;
+      uniforms.night.value=night;
+      uniforms.storm.value=preset==='storm'?1:0;
+      uniforms.fogDensity.value=finite(weather?.fogDensity,preset==='storm'?.0105:preset==='snow'?.0105:.0065);
+      uniforms.hazeStrength.value=THREE.MathUtils.clamp(
+        finite(currentSettings.volumetricDensity,.065)+cloud*.035+rain*.028,
+        .025,.22
       );
+
+      let shaft=0;
+      if(currentSettings.lightShafts!==false){
+        if(preset==='sunset')shaft=.72;
+        else if(preset==='day')shaft=.18+cloud*.12;
+        else if(preset==='storm')shaft=.04+clamp01(weather?.flash)*.12;
+      }
+      uniforms.shaftStrength.value=shaft;
+
+      if(sun?.position){
+        _sunNdc.copy(sun.position).project(camera);
+        uniforms.sunUv.value.set(
+          THREE.MathUtils.clamp(_sunNdc.x*.5+.5,-.25,1.25),
+          THREE.MathUtils.clamp(_sunNdc.y*.5+.5,-.25,1.25)
+        );
+      }
     }
 
     const cinematic=currentSettings.depthOfField==='cinematic'&&
       (mode==='countdown'||mode==='crashed'||mode==='results'||mode==='menu');
-    dofPass.enabled=cinematic;
-    dofPass.uniforms.strength.value=mode==='crashed'?.52:cinematic?.26:0;
-    lastDofState=cinematic;
+    if(dofPass){
+      dofPass.enabled=cinematic;
+      dofPass.uniforms.strength.value=mode==='crashed'?.52:cinematic?.26:0;
+    }
+    lastDofState=cinematic&&!!dofPass;
   }
 
   function render(delta=0){
@@ -659,6 +717,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       enabled:active&&!!composer,
       failed,
       failureReason:failureReason||null,
+      featureFailures:{...featureFailures},
       renderTargetType,
       msaaSamples:0,
       postResolutionScale:1,

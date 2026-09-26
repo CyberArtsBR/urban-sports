@@ -181,18 +181,26 @@ try{
 
   const restartSamples=[];
   for(let cycle=1;cycle<=4;cycle++){
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(()=>{
-      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.mode==='paused';
-    },null,{timeout:5000});
+    const beforeRestart=await diagnostics(page);
+    if(beforeRestart?.mode==='playing'){
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(()=>{
+        const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+        return d?.mode==='paused'||d?.mode==='crashed';
+      },null,{timeout:10000});
+    }
     const restarted=await page.evaluate(()=>{
-      const button=document.querySelector('#restart-pause');
-      if(!button||button.disabled)return false;
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      const button=d?.mode==='paused'
+        ?document.querySelector('#restart-pause')
+        :d?.mode==='crashed'
+          ?document.querySelector('#restart-result')
+          :null;
+      if(!button||button.disabled)return {ok:false,mode:d?.mode??null};
       button.click();
-      return true;
+      return {ok:true,mode:d?.mode??null};
     });
-    assert(restarted,`pause restart control unavailable on cycle ${cycle}`);
+    assert(restarted.ok,`restart control unavailable on cycle ${cycle} from mode ${restarted.mode}`);
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';

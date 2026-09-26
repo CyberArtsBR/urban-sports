@@ -1,9 +1,5 @@
 import * as THREE from 'three';
-import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
-import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
-import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
-import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
-import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {createCinematicRendering,createRiderContactShadow} from './cinematicRendering.js';
 import './style.css';
 import './floatingUI.css';
 import {createMountainWeather} from './mountainWeather.js';
@@ -138,24 +134,12 @@ applyCameraMotionPreference();
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
-let composer=null,renderPass=null,bloomPass=null,ssaoPass=null,composerPixelRatio=0;
-
-function applyBloomQuality(){
-  if(!bloomPass)return;
-  const profile=quality.active;
-  bloomPass.strength=profile==='max'?.72:profile==='high'?.62:profile==='medium'?.48:.35;
-  bloomPass.radius=profile==='max'?.42:profile==='high'?.38:profile==='medium'?.34:.28;
-  bloomPass.threshold=profile==='max'?1.15:profile==='high'?1.22:profile==='medium'?1.35:1.55;
-}
+let cinematicRendering=null;
 
 function applyRendererResolution(){
   const next=quality.getPixelRatio(devicePixelRatio);
   if(Math.abs(renderer.getPixelRatio()-next)>.005)renderer.setPixelRatio(next);
-  if(composer&&Math.abs(composerPixelRatio-next)>.005){
-    composer.setPixelRatio(next);
-    composerPixelRatio=next;
-  }
-  applyBloomQuality();
+  cinematicRendering?.resize?.(innerWidth,innerHeight,next);
 }
 applyRendererResolution();
 renderer.setSize(innerWidth,innerHeight);
@@ -165,17 +149,15 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
 app.prepend(renderer.domElement);
 
-// Stability hotfix: render the production gameplay scene directly with the
-// WebGLRenderer. The composed post-processing path can produce a black frame on
-// real client GPUs even when gameplay/HUD continue normally. Keep the pass
-// variables null so quality/diagnostic code remains compatible, but do not
-// allocate or execute EffectComposer until the pipeline is revalidated across
-// production hardware.
-composer=null;
-renderPass=null;
-ssaoPass=null;
-bloomPass=null;
-composerPixelRatio=0;
+// Production-safe default remains direct rendering. The new MAX CINEMATIC
+// stack allocates its zero-sample offscreen targets only when that explicit
+// manual tier is selected and fails open to WebGLRenderer if any pass errors.
+cinematicRendering=createCinematicRendering({
+  renderer,
+  scene,
+  camera,
+  settings:quality.getSettings()
+});
 
 const world=new THREE.Group();scene.add(world);
 const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
@@ -424,6 +406,7 @@ const skiTrails=createSkiTrails({world,terrainHeight,capacity:192,surface:'urban
 let trailTimer=0;
 
 const player=new THREE.Group();scene.add(player);
+const riderContactShadow=createRiderContactShadow({scene});
 player.position.set(0,.12,2.2);
 const impactVfx=createImpactVfx({scene,capacity:224});
 
@@ -626,6 +609,10 @@ function applyStartShadowPolicy(enabled){
 function applyRenderingQuality(settings=quality.getSettings()){
   currentRenderingSettings=settings;
   const profile=settings?.profile||quality.active;
+  const cinematic=profile==='max-cinematic';
+  // MAX CINEMATIC intentionally spends the old shadow-map/MSAA budget on
+  // reduced-resolution AO + atmosphere and uses the procedural rider contact
+  // shadow for close grounding. Existing HIGH/legacy MAX retain their shadow maps.
   const realShadows=profile==='max'||profile==='high';
   const keyLight=environment.weatherBindings?.sun||null;
 
@@ -661,15 +648,8 @@ function applyRenderingQuality(settings=quality.getSettings()){
   applyStartShadowPolicy(realShadows);
   applyRiderShadowPolicy();
 
-  if(ssaoPass){
-    const aoEnabled=profile==='max'&&settings.contactAO!==false;
-    ssaoPass.enabled=aoEnabled;
-    ssaoPass.kernelRadius=Math.max(8,Number(settings.aoKernelRadius)||18);
-    ssaoPass.minDistance=.0025;
-    ssaoPass.maxDistance=.12;
-    if(renderPass)renderPass.enabled=!aoEnabled;
-  }
-  applyBloomQuality();
+  cinematicRendering?.configure?.(settings);
+  if(cinematic)cinematicRendering?.resize?.(innerWidth,innerHeight,renderer.getPixelRatio());
 }
 function applyRuntimeQuality(settings=quality.getSettings()){
   environment.applyQuality?.(settings);
@@ -1627,6 +1607,18 @@ function update(dt,frameMs=dt*1000){
   const urbanWeather=mountainWeather.getState?.();
   const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
   roadWetness=wet;
+  cinematicRendering?.setContext?.({
+    weather:urbanWeather,
+    mode:state.mode,
+    sun:environment.weatherBindings?.sun||null,
+    time:state.time
+  });
+  riderContactShadow.update({
+    enabled:currentRenderingSettings?.contactShadows===true,
+    player,
+    state,
+    terrainHeight
+  });
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 
@@ -1702,9 +1694,11 @@ function render(now){
   if(firstPersonBody)firstPersonBody.visible=cameraViewMode!==CAMERA_VIEW.FIRST_PERSON||
     (state.mode!=='playing'&&state.mode!=='paused'&&state.mode!=='crashed');
   renderer.info.reset();
-  // Direct rendering is the production-safe path. This guarantees the world is
-  // presented even on GPUs/drivers that fail the offscreen composer pipeline.
-  renderer.render(scene,camera);
+  // MAX CINEMATIC is explicit/manual and fail-open. Every other tier keeps the
+  // production-safe direct renderer; any cinematic pass failure falls back in
+  // the same frame so gameplay can never be replaced by a black screen.
+  const composed=cinematicRendering?.active?cinematicRendering.render(dt):false;
+  if(!composed)renderer.render(scene,camera);
   renderFrameHandle=requestAnimationFrame(render);
 }
 renderFrameHandle=requestAnimationFrame(render);
@@ -1743,14 +1737,21 @@ window.chimpionsSki=()=>{
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
     renderingQuality:{
       profile:quality.active,
+      effectiveDpr:renderer.getPixelRatio(),
+      postResolution:cinematicRendering?.getDiagnostics?.().postResolutionScale??0,
+      renderTargetType:cinematicRendering?.getDiagnostics?.().renderTargetType??'direct-backbuffer',
+      msaaSamples:cinematicRendering?.getDiagnostics?.().msaaSamples??(quality.active==='max-cinematic'?0:null),
       shadowMapsEnabled:!!renderer.shadowMap.enabled,
       shadowMapSize:environment.weatherBindings?.sun?.shadow?.mapSize?.x??0,
       shadowDistance:environment.weatherBindings?.sun?.shadow?.camera?.far??0,
-      ssaoEnabled:!!ssaoPass?.enabled,
-      ssaoKernelRadius:ssaoPass?.kernelRadius??0,
-      bloomStrength:bloomPass?.strength??0,
-      bloomRadius:bloomPass?.radius??0,
-      bloomThreshold:bloomPass?.threshold??0,
+      ssaoEnabled:false,
+      ssaoKernelRadius:0,
+      bloomStrength:cinematicRendering?.getDiagnostics?.().bloomStrength??0,
+      bloomRadius:cinematicRendering?.getDiagnostics?.().bloomRadius??0,
+      bloomThreshold:cinematicRendering?.getDiagnostics?.().bloomThreshold??0,
+      cinematic:cinematicRendering?.getDiagnostics?.()||null,
+      contactShadow:riderContactShadow.getDiagnostics?.()||null,
+      anisotropy:urbanEnvironment.materials?.getDiagnostics?.()?.anisotropy??0,
       materialQuality:urbanEnvironment.materials?.getDiagnostics?.()||null,
       atmosphere:mountainWeather.getLightingDiagnostics?.()||null
     },
@@ -1862,8 +1863,8 @@ if(import.meta.hot){
     riderController.dispose();
     impactVfx.dispose?.();
     urbanEnvironment.dispose?.();
-    ssaoPass?.dispose?.();
-    composer?.dispose?.();
+    riderContactShadow.dispose?.();
+    cinematicRendering?.dispose?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();

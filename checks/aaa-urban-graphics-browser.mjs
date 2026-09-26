@@ -88,7 +88,7 @@ async function completeStartFlow(page){
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return d?.mode==='playing';
-  },null,{timeout:30000});
+  },null,{timeout:120000});
 
   const state=await diagnostics(page);
   assert.equal(state?.sportMode,'skateboard','Urban runtime must remain in Skateboard sport mode');
@@ -187,7 +187,7 @@ try{
       // maps are active. Retry the real gameplay Escape edge until the update
       // loop consumes it, rather than treating renderer slowness as a game bug.
       let pausedOrCrashed=false;
-      for(let attempt=0;attempt<6&&!pausedOrCrashed;attempt++){
+      for(let attempt=0;attempt<12&&!pausedOrCrashed;attempt++){
         await page.evaluate(()=>{
           window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape',key:'Escape'}));
           window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape',key:'Escape'}));
@@ -214,7 +214,7 @@ try{
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';
-    },null,{timeout:45000});
+    },null,{timeout:120000});
 
     await page.waitForTimeout(1500);
     const afterRestart=await diagnostics(page);

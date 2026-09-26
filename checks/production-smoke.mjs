@@ -142,7 +142,7 @@ try{
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return d?.mode==='countdown'||d?.mode==='playing';
-  },null,{timeout:10000});
+  },null,{timeout:RUN_TIMEOUT});
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return d?.mode==='playing';

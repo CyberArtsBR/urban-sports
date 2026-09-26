@@ -7,7 +7,7 @@ import {advanceUrbanDistrict,resolveUrbanDistrict,selectUrbanDistrictForDistance
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:1,medium:.72,low:.48});
+const PROFILE_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:1,medium:.72,low:.48});
 
 export const URBAN_ENVIRONMENT_DEFAULTS=Object.freeze({
   roadWidth:13.5,

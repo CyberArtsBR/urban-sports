@@ -333,7 +333,8 @@ export function createSkiEnvironment({scene,world,renderer,camera,quality={},mod
       dynamicSceneryFrustumCulled:true,
       landscape:landscape.getDiagnostics?.()||null,
       snowParticlePool:snowParticles.getDiagnostics?.()||{densityScale:snowParticles.getDensityMultiplier?.()},
-      snowSurfaceDetail:surfaceDetail.getDiagnostics?.()||{detailLevel:surfaceDetail.getDetailLevel?.()}
+      snowSurfaceDetail:surfaceDetail.getDiagnostics?.()||{detailLevel:surfaceDetail.getDetailLevel?.()},
+      legacyContactShadowEnabled:environmentProfileName!=='max-cinematic'
     };
   }
   setQualityProfile();
@@ -486,9 +487,13 @@ export function createSkiEnvironment({scene,world,renderer,camera,quality={},mod
     const jumpHeight=Math.max(0,playerY-groundY);
     const heightFade=THREE.MathUtils.clamp(1-jumpHeight/4.6,0,1);
     const landingAccent=1+THREE.MathUtils.clamp(landingPulse,0,1)*.13;
-    contactShadow.visible=!!running&&heightFade>.018;
+    // MAX CINEMATIC replaces this legacy flat decal with the terrain-oriented
+    // rider contact shadow owned by cinematicRendering.js. Other profiles keep
+    // the established production-safe grounding path unchanged.
+    const legacyContactShadow=environmentProfileName!=='max-cinematic';
+    contactShadow.visible=legacyContactShadow&&!!running&&heightFade>.018;
     contactShadow.position.set(playerX,Math.max(.006,groundY+.012),playerZ+.02);
-    const targetShadowOpacity=.205*heightFade*(air?.84:1)*landingAccent;
+    const targetShadowOpacity=legacyContactShadow?.205*heightFade*(air?.84:1)*landingAccent:0;
     contactShadow.material.opacity=THREE.MathUtils.lerp(contactShadow.material.opacity,targetShadowOpacity,1-Math.pow(.0009,dt));
     const airborneSpread=1+THREE.MathUtils.clamp(jumpHeight/4.6,0,1)*.58;
     contactShadow.scale.set(1.42*airborneSpread*landingAccent,.50*airborneSpread,1);

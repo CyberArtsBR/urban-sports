@@ -8,6 +8,7 @@ import {saveQualityPreference} from './userPreferences.js';
 import {createUrbanAtmosphere} from './urban/urbanAtmosphere.js';
 const budgets={
   high:{snowCount:850,rainCount:1400,splashCount:64,mistCount:18,glow:1},
+  'max-cinematic':{snowCount:1200,rainCount:2000,splashCount:96,mistCount:24,glow:1},
   max:{snowCount:1200,rainCount:2000,splashCount:96,mistCount:24,glow:1},
   medium:{snowCount:420,rainCount:650,splashCount:32,mistCount:10,glow:.6},
   low:{snowCount:220,rainCount:320,splashCount:16,mistCount:6,glow:.35}
@@ -24,7 +25,7 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
   const rendererWeather=createAlpineWeather({scene,camera,renderer,sun,ambient,rim,settings:budgets[quality.active]||budgets.high});
   const urbanAtmosphere=createUrbanAtmosphere({scene,renderer,ambient,rim,fill,quality:quality.active});
   const sceneMaterials=new Set();atmosphere.traverse(o=>{for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m?.color)sceneMaterials.add(m);});
-  app.insertAdjacentHTML('beforeend',`<details class="graphics-panel" id="mountain-atmosphere"><summary aria-label="City atmosphere settings"><span aria-hidden="true">🌆</span> City atmosphere</summary><div class="graphics-content"><div class="graphics-heading">MAKE IT YOUR CITY</div><label>Graphics<select id="atmosphere-quality"><option value="auto">Auto</option><option value="high">High</option><option value="max">Max</option><option value="medium">Balanced</option><option value="low">Low</option></select></label><label>Atmosphere<select id="atmosphere-mode"><option value="auto">Changing skies</option><option value="day">City daylight</option><option value="sunset">Golden hour</option><option value="night">City night</option><option value="snow">Cold haze</option><option value="rain">Night rain</option><option value="storm">Thunderstorm</option></select></label><label class="graphics-toggle"><input type="checkbox" id="atmosphere-flashes"> Gentle lightning</label><p>Skies change gradually. Audio follows your sound settings. Riding physics stay the same.</p></div></details>`);
+  app.insertAdjacentHTML('beforeend',`<details class="graphics-panel" id="mountain-atmosphere"><summary aria-label="City atmosphere settings"><span aria-hidden="true">🌆</span> City atmosphere</summary><div class="graphics-content"><div class="graphics-heading">MAKE IT YOUR CITY</div><label>Graphics<select id="atmosphere-quality"><option value="auto">Auto</option><option value="high">High</option><option value="max-cinematic">Max Cinematic</option><option value="max">Legacy Max</option><option value="medium">Balanced</option><option value="low">Low</option></select></label><label>Atmosphere<select id="atmosphere-mode"><option value="auto">Changing skies</option><option value="day">City daylight</option><option value="sunset">Golden hour</option><option value="night">City night</option><option value="snow">Cold haze</option><option value="rain">Night rain</option><option value="storm">Thunderstorm</option></select></label><label class="graphics-toggle"><input type="checkbox" id="atmosphere-flashes"> Gentle lightning</label><p>Skies change gradually. Audio follows your sound settings. Riding physics stay the same.</p></div></details>`);
   const panel=document.getElementById('mountain-atmosphere'),mode=document.getElementById('atmosphere-mode'),qualitySelect=document.getElementById('atmosphere-quality'),flashes=document.getElementById('atmosphere-flashes');
   const persist=()=>{try{localStorage.setItem('chimpions-ski-atmosphere',JSON.stringify(preferences));}catch{}};
   mode.value=preferences.weather;flashes.checked=preferences.reducedFlashes;
@@ -59,7 +60,7 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
   return {
     update,
     setRider,
-    getState:()=>({mode:preferences.weather,preset:controller.values.preset,rain:controller.values.rain,reducedFlashes:preferences.reducedFlashes}),
+    getState:()=>({mode:preferences.weather,preset:controller.values.preset,rain:controller.values.rain,night:controller.values.night,cloud:controller.values.cloud,wet:controller.values.wet,fogDensity:controller.values.fogDensity,flash:controller.values.flash,reducedFlashes:preferences.reducedFlashes}),
     getLightingDiagnostics:()=>urbanAtmosphere.getDiagnostics()
   };
 }

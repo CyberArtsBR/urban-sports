@@ -12,7 +12,7 @@ import {createUrbanEnvironment} from '../src/urban/urbanEnvironment.js';
 import {createUrbanObstacle} from '../src/urban/urbanObstacles.js';
 import {createSkateboardEquipment} from '../src/skateboardEquipment.js';
 
-const PROFILES=['low','medium','high','max'];
+const PROFILES=['low','medium','high','max-cinematic','max'];
 const profileOrder=['low','medium','high','max'];
 
 for(const metric of GRAPHICS_BUDGET_METRICS){
@@ -31,6 +31,8 @@ assert.notDeepEqual(GRAPHICS_QUALITY_BUDGETS.max,GRAPHICS_QUALITY_BUDGETS.high,
   'MAX must retain a dedicated rendering resource envelope');
 assert(GRAPHICS_QUALITY_BUDGETS.max.rendererCalls>GRAPHICS_QUALITY_BUDGETS.high.rendererCalls,
   'MAX draw-call envelope should account for premium rendering passes');
+assert(GRAPHICS_QUALITY_BUDGETS['max-cinematic'].rendererCalls>=GRAPHICS_QUALITY_BUDGETS.max.rendererCalls,
+  'MAX CINEMATIC resource envelope must include its reduced-resolution post passes');
 
 const syntheticScene=new THREE.Scene();
 const box=new THREE.BoxGeometry(1,1,1);
@@ -197,7 +199,7 @@ const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 assert(main.includes("captureGraphicsDiagnostics({renderer,scene,urbanEnvironment})"),'runtime diagnostics must expose graphics resource counts');
 assert(main.includes('renderer.info.autoReset=false'),'Renderer diagnostics must use explicit per-frame reset');
 assert(main.includes('renderer.info.reset();'),'renderer.info must reset once per frame before rendering');
-assert(main.includes('renderer.render(scene,camera);'),'Production stability path must render the scene directly without the black-frame composer path');
+assert(main.includes('if(!composed)renderer.render(scene,camera);'),'Runtime must preserve fail-open direct rendering when MAX CINEMATIC is inactive or fails');
 
 console.log(JSON.stringify({
   check:'aaa-urban-graphics-regression-invariants',

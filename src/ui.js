@@ -642,6 +642,12 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     trickHintTimer=setTimeout(()=>{trickHint.hidden=true;},4200);
     return true;
   }
+  function qualityLabel(value){
+    const key=String(value||'').toLowerCase();
+    if(key==='max-cinematic')return 'MAX CINEMATIC';
+    if(key==='max')return 'LEGACY MAX';
+    return key.toUpperCase();
+  }
   function configureQuality({mode='auto',options=['auto','high','medium','low'],onChange=null}={}){
     qualityOptions=Array.from(new Set((options||[]).map(value=>String(value).toLowerCase()).filter(Boolean)));
     qualityMode=String(mode||qualityOptions[0]||'high').toLowerCase();
@@ -649,7 +655,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     qualityCallback=typeof onChange==='function'?onChange:null;
     if(qualityButton){
       qualityButton.hidden=!(qualityCallback&&qualityOptions.length>1);
-      qualityButton.textContent='QUALITY · '+qualityMode.toUpperCase();
+      qualityButton.textContent='QUALITY · '+qualityLabel(qualityMode);
       qualityButton.setAttribute('aria-label','Quality profile '+qualityMode);
     }
   }
@@ -657,7 +663,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     if(!qualityCallback||qualityOptions.length<2)return false;
     const current=Math.max(0,qualityOptions.indexOf(qualityMode));
     qualityMode=qualityOptions[(current+1)%qualityOptions.length];
-    qualityButton.textContent='QUALITY · '+qualityMode.toUpperCase();
+    qualityButton.textContent='QUALITY · '+qualityLabel(qualityMode);
     qualityButton.setAttribute('aria-label','Quality profile '+qualityMode);
     qualityCallback(qualityMode);
     return true;

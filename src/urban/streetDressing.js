@@ -4,8 +4,8 @@ import {resolveUrbanDistrict} from './urbanDistricts.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:.90,medium:.66,low:.44});
-const PROFILE_DETAIL=Object.freeze({max:2,high:2,medium:1,low:0});
+const PROFILE_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.90,medium:.66,low:.44});
+const PROFILE_DETAIL=Object.freeze({'max-cinematic':2,max:2,high:2,medium:1,low:0});
 // These close-range accents cost five scene batches even when no instances are
 // rendered. Keep the pools allocated for quality changes, but detach them on LOW.
 const LOW_OMITTED_BATCHES=new Set(['vehicleTrim','vehicleArches','foliage','glass','flats']);

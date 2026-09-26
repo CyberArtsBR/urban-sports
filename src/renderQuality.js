@@ -1,4 +1,4 @@
-const MODE_NAMES=Object.freeze(['auto','high','max','medium','low']);
+const MODE_NAMES=Object.freeze(['auto','high','max-cinematic','max','medium','low']);
 const PROFILE_ORDER=Object.freeze(['high','medium','low']);
 
 const HIGH=Object.freeze({
@@ -37,6 +37,53 @@ const MAX=Object.freeze({
   facadeDetail:1,
   weatherDetail:1,
   maxExtras:true
+});
+
+const MAX_CINEMATIC=Object.freeze({
+  profile:'max-cinematic',
+  dprCap:1.60,
+  snowSurfaceDetailDensity:1,
+  environmentDecorationDensity:1,
+  distantSceneryDetail:1,
+  distantSceneryUpdateHz:0,
+  shadowQuality:'contact',
+  shadowMapSize:0,
+  shadowDistance:0,
+  contactAO:false,
+  aoKernelRadius:0,
+  roadDetailDensity:1,
+  roadTextureAnisotropy:8,
+  facadeDetail:1,
+  weatherDetail:1,
+  maxExtras:true,
+  postProcessing:true,
+  renderTargetType:'half-float',
+  msaaSamples:0,
+  postResolutionScale:1,
+  bloomEnabled:true,
+  bloomStrength:.65,
+  bloomRadius:.48,
+  bloomThreshold:1.60,
+  maxAnisotropy:8,
+  ambientOcclusion:true,
+  aoResolutionScale:.50,
+  aoIntensity:.82,
+  aoRadius:.18,
+  aoThickness:.75,
+  contactShadows:true,
+  colorGrading:true,
+  colorGradeIntensity:.82,
+  sharpenEnabled:true,
+  sharpenStrength:.30,
+  volumetricFog:true,
+  volumetricResolutionScale:.50,
+  volumetricSteps:8,
+  volumetricDensity:.065,
+  volumetricDistance:420,
+  lightShafts:true,
+  depthOfField:'cinematic',
+  riderVisualQuality:'maximum',
+  particleDensity:1
 });
 
 const MEDIUM=Object.freeze({
@@ -79,6 +126,7 @@ const LOW=Object.freeze({
 
 export const QUALITY_PROFILES=Object.freeze({
   high:HIGH,
+  'max-cinematic':MAX_CINEMATIC,
   max:MAX,
   medium:MEDIUM,
   low:LOW
@@ -100,6 +148,7 @@ const AUTO_PROFILE_UP_COOLDOWN_MS=12000;
 export function resolveQualityProfile(value,fallback='auto'){
   const normalized=String(value??'').trim().toLowerCase();
   if(normalized==='reduced')return 'medium';
+  if(normalized==='cinematic'||normalized==='max_cinematic'||normalized==='maxcinematic')return 'max-cinematic';
   if(MODE_NAMES.includes(normalized))return normalized;
   const normalizedFallback=String(fallback??'').trim().toLowerCase();
   if(normalizedFallback==='reduced')return 'medium';

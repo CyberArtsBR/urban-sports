@@ -131,6 +131,8 @@ try{
     assert.equal(tierProbe?.qualitySettings?.dprCap,1.6,'MAX CINEMATIC must request DPR 1.6');
     assert((tierProbe?.rendererPixelRatio??99)<=1.6001,'MAX CINEMATIC effective DPR must not exceed 1.6');
     assert.equal(rendering.msaaSamples,0,'MAX CINEMATIC offscreen target must use zero MSAA samples');
+    assert.equal(rendering.canvasAntialias,false,'MAX CINEMATIC WebGL context must disable canvas MSAA');
+    assert.equal(rendering.canvasSamples,0,'MAX CINEMATIC default framebuffer must report zero samples');
     assert.equal(rendering.shadowMapsEnabled,false,'MAX CINEMATIC must spend the shadow-map budget on cinematic passes');
     assert.equal(cinematic.failed,false,'MAX CINEMATIC post stack must initialize without failure: '+String(cinematic.failureReason||''));
     assert.equal(cinematic.enabled,true,'MAX CINEMATIC post stack must be active during gameplay');

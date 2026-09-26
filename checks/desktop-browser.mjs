@@ -140,7 +140,7 @@ try{
   const activeRideMode=await page.evaluate(()=>
     (window.chimpionsUrbanSports?.()??window.chimpionsSki?.())?.rideMode||'snowboard'
   );
-  const rideChoice=selector.locator(`.ride-mode-card[data-ride-mode="${activeRideMode}"]`).first();
+  const rideChoice=selector.locator(`[data-sport-mode="skateboard"], .ride-mode-card[data-ride-mode="${activeRideMode}"], .ride-mode-card[data-ride-mode="snowboard"]`).first();
   await rideChoice.waitFor({state:'visible',timeout:10000});
   await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
   await assertElementWithinViewport(selector,'ride selector');

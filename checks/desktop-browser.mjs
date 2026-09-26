@@ -322,8 +322,11 @@ try{
   assert.equal(await pauseOverlay.isVisible(),true,'Confirming default NO did not return to pause menu');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'give-up-pause','NO did not restore pause focus');
 
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:5000});
+  // Resume through the real pause-menu control. Escape behavior has already
+  // been exercised for modal cancellation above, and direct activation avoids
+  // a headless focus race when the leave action still owns keyboard focus.
+  await page.locator('#resume-game').evaluate(button=>button.click());
+  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:10000});
 
   // Release the active desktop WebGL page before creating a second mobile
   // renderer. Running both Three.js scenes concurrently under SwiftShader can

@@ -107,23 +107,25 @@ function edgeData(current){
   }
   return {pressed,released};
 }
-function disconnectedState(){
+function disconnectedState(activeControllerDisconnected=false){
   const current=emptySemantic(),edges=edgeData(current);previousSemantic=current;
-  return {connected:false,axis:0,axisY:0,buttons:[],...current,edges,activeIndex:null,activeKey:null,activeGamepad:null,id:'',mapping:'',controllerChanged:false,dpad:{left:false,right:false,up:false,down:false}};
+  return {connected:false,axis:0,axisY:0,buttons:[],...current,edges,activeIndex:null,activeKey:null,activeGamepad:null,id:'',mapping:'',controllerChanged:false,activeControllerDisconnected:!!activeControllerDisconnected,dpad:{left:false,right:false,up:false,down:false}};
 }
 
 export function readPad(pads){
   const entries=sortConnected(Array.from(pads||[]).map((pad,slot)=>({pad,slot,key:padKey(pad,slot)})).filter(entry=>entry.pad?.connected));
 
   let current=activeKey?entries.find(entry=>entry.key===activeKey):null;
+  let activeControllerDisconnected=false;
   if(activeKey&&!current){
+    activeControllerDisconnected=true;
     const guard=createReconnectGuard(lastSnapshot?.key===activeKey?lastSnapshot:null);
     if(guard&&(guard.blockedButtons.size||guard.blockX||guard.blockY))reconnectGuards.set(activeKey,guard);
     activeKey=null;current=null;resetAxisState();lastSnapshot=null;
   }
 
   for(const entry of entries)refreshGuard(entry);
-  if(!entries.length)return disconnectedState();
+  if(!entries.length)return disconnectedState(activeControllerDisconnected);
 
   let selected=current;
   if(!selected)selected=entries.find(hasMeaningfulActivity)||entries[0];
@@ -168,6 +170,7 @@ export function readPad(pads){
     id:String(selected.pad.id||''),
     mapping:String(selected.pad.mapping||''),
     controllerChanged:changed,
+    activeControllerDisconnected,
     dpad:{left,right,up,down}
   };
 }

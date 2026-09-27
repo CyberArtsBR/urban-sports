@@ -5,7 +5,7 @@ export const SHARE_CODE_PREFIX='USC1.';
 export const MAX_REPLAY_FRAMES=1_000_000;
 export const MAX_REPLAY_DT_TICKS=300; // 50 ms at 1/6000 s resolution; render dt is capped at 50 ms.
 export const MAX_REPLAY_DURATION_SECONDS=4*60*60;
-export const DEFAULT_CHECKPOINT_INTERVAL=120;
+export const DEFAULT_CHECKPOINT_INTERVAL=240;
 
 const TRICK_IDS=Object.freeze(['','180','360','BACKFLIP','KICKFLIP','HEELFLIP','POP SHOVE-IT','FRONTSIDE SHOVE-IT','INDY','MELON','NOSEGRAB','VARIAL FLIP','360 FLIP']);
 const encoder=new TextEncoder();

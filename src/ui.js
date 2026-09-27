@@ -346,7 +346,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     if(restartResult)restartResult.disabled=!!loading;
     if(chooseResult)chooseResult.disabled=!!loading;
     overlay?.classList.toggle('is-loading',!!loading);
-    if(startButton)startButton.textContent=loading?'LOADING CHIMPION…':(mode==='menu'?'START RIDING':'RIDE AGAIN');
+    if(startButton)startButton.textContent=loading?t('menu.loadingRider','LOADING CHIMPION…'):(mode==='menu'?t('menu.startRiding','START RIDING'):t('menu.rideAgain','RIDE AGAIN'));
   }
   function syncAudioButtons(){
     const audioSettings=audio.getSettings();
@@ -548,7 +548,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     pause.hidden=true;
     setMode('playing');
   }
-  function showResults({distance=0,score=0,bananas=0,best=0,newBest=false,crashType='',time=0,maxSpeedKmh=0,bestCombo=0,rideMode='ski',nearMisses=0,tricksLanded=0,tricksFailed=0,cleanLandings=0,strongLandings=0,bananaPowerUses=0,largestTrickScore=0}={},delay=620){
+  function showResults({distance=0,score=0,bananas=0,best=0,newBest=false,crashType='',time=0,maxSpeedKmh=0,bestCombo=0,sportMode='skateboard',nearMisses=0,tricksLanded=0,tricksFailed=0,cleanLandings=0,strongLandings=0,bananaPowerUses=0,largestTrickScore=0}={},delay=620){
     clearTimeout(resultTimer);
     resultTimer=setTimeout(()=>{
       leaveConfirm.hidden=true;
@@ -559,8 +559,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
       byId('result-time').textContent=Math.floor(totalSeconds/60)+':'+String(totalSeconds%60).padStart(2,'0');
       byId('result-max-speed').textContent=Math.max(0,Math.round(Number(maxSpeedKmh)||0))+' km/h';
       byId('result-combo').textContent=String(Math.max(0,Math.floor(Number(bestCombo)||0)));
-      const legacyRide=String(rideMode||'skateboard').toLowerCase();
-      byId('result-ride').textContent=['ski','snowboard'].includes(legacyRide)?URBAN_CURRENT_SPORT:legacyRide.replace(/[-_]/g,' ').toUpperCase();
+      byId('result-ride').textContent=String(sportMode||'skateboard').replace(/[-_]/g,' ').toUpperCase();
       byId('result-best').textContent=Math.floor(best)+' m';
       byId('result-near-misses').textContent=String(Math.max(0,Math.floor(Number(nearMisses)||0)));
       byId('result-tricks-landed').textContent=String(Math.max(0,Math.floor(Number(tricksLanded)||0)));
@@ -572,7 +571,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
       const banner=byId('new-best-banner');
       banner.hidden=!newBest;
       const eyebrow=byId('result-eyebrow');
-      eyebrow.textContent=crashType?String(crashType).replace(/[-_]/g,' ').toUpperCase():'RUN COMPLETE';
+      eyebrow.textContent=crashType?String(crashType).replace(/[-_]/g,' ').toUpperCase():t('results.complete','RUN COMPLETE');
       results.hidden=false;
       pause.hidden=true;
       if(newBest){

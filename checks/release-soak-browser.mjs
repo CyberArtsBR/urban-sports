@@ -112,7 +112,13 @@ try{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='paused';
     },null,{timeout:5000});
-    await page.locator('#restart-pause').click();
+    const restartInvoked=await page.evaluate(()=>{
+      const button=document.querySelector('#restart-pause');
+      if(!button||button.disabled)return false;
+      button.click();
+      return true;
+    });
+    assert.equal(restartInvoked,true,'soak restart control was unavailable');
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';

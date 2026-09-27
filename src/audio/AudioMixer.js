@@ -234,7 +234,10 @@ export function createAudioMixer({getSettings=()=>({master:.82,sfx:.25,music:.25
     const persistent=graph?.sources?.length||0;
     return {contextState:context?.state??'uninitialized',graphInitialized:!!graph,persistentLoopCount:persistent,
       activeTransientCount:activeTransientSources.size,maxTransientCount:MAX_TRANSIENT_SOURCES,peakTransientCount,
-      peakRequestedGain,bufferCount:buffers.size,activeNodeEstimate:persistent+activeTransientSources.size+(graph?18:0)};
+      peakRequestedGain,
+      bufferCount:buffers.size,
+      bufferCountEstimate:buffers.size+(graph?9:0),
+      activeNodeEstimate:persistent+activeTransientSources.size+(graph?18:0)};
   }
 
   function dispose(){

@@ -6,6 +6,7 @@ import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {Pass,FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
+import {chooseCinematicTarget,estimateRenderTargetBytes,getRenderFailureSimulation,probeRenderingCapabilities} from './renderCapabilities.js';
 
 const CINEMATIC_PROFILE='max-cinematic';
 const LUT_SIZE=16;
@@ -408,6 +409,10 @@ export function createRiderContactShadow({scene}={}){
 export function createCinematicRendering({renderer,scene,camera,settings=null}={}){
   if(!renderer||!scene||!camera)throw new TypeError('createCinematicRendering requires renderer, scene and camera');
 
+  const simulation=getRenderFailureSimulation();
+  let capabilities=probeRenderingCapabilities(renderer,{simulation});
+  const gl=renderer.getContext();
+  const canvas=renderer.domElement;
   let composer=null;
   let renderPass=null;
   let gtaoPass=null;
@@ -424,13 +429,49 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   let height=1;
   let pixelRatio=1;
   let currentGrade='day';
+  let currentMode='menu';
   let currentSettings=settings||{};
   let renderTargetType='none';
+  let renderTargetReason='not-created';
   let postRenderMs=0;
   let lastDofState=false;
+  let forceByteTarget=false;
+  let contextLost=false;
+  let contextLossCount=0;
+  let contextRestoreCount=0;
+  let restoreDirectFrames=0;
+  let frameCounter=0;
+  let lastHealthCheckFrame=-9999;
+  let healthChecks=0;
+  let blackFallbackCount=0;
+  let blackSimulationConsumed=false;
+  const runtimeDegradations=[];
   const featureFailures={ao:null,bloom:null,volumetric:null,colorGrading:null,dof:null,sharpen:null};
+  const passTimings={};
   const lutTextures=new Map(Object.keys(GRADE_PRESETS).map(name=>[name,createLutTexture(name)]));
   const aoSize=new THREE.Vector2(1,1);
+
+  function now(){return globalThis.performance?.now?.()??0;}
+  function markPassTiming(name,elapsed){
+    const value=Math.max(0,Number(elapsed)||0);
+    const previous=passTimings[name];
+    passTimings[name]={
+      lastMs:value,
+      emaMs:previous?previous.emaMs*.85+value*.15:value
+    };
+  }
+  function instrumentPass(pass,name){
+    if(!pass||pass.userData?.urbanTimingWrapped)return pass;
+    const original=pass.render.bind(pass);
+    pass.render=function(...args){
+      const started=now();
+      try{return original(...args);}
+      finally{markPassTiming(name,now()-started);}
+    };
+    pass.userData={...(pass.userData||{}),urbanTimingWrapped:true};
+    return pass;
+  }
+  function forced(name){return simulation.failures.has(String(name).toLowerCase());}
 
   function disposeComposer(){
     try{composer?.dispose?.();}catch{}
@@ -455,123 +496,157 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   function fail(error){
     failed=true;
     failureReason=String(error?.message||error||'cinematic pipeline failure');
+    runtimeDegradations.push({type:'pipeline-disabled',reason:failureReason,frame:frameCounter});
     disposeComposer();
   }
 
+  function noteFeatureFailure(name,error){
+    const reason=String(error?.message||error||name+' unavailable');
+    featureFailures[name]=reason;
+    runtimeDegradations.push({type:'feature-disabled',feature:name,reason,frame:frameCounter});
+  }
+
+  function targetChoice(){
+    const choice=chooseCinematicTarget(capabilities,{preferHalfFloat:true,forceByte:forceByteTarget});
+    renderTargetType=choice.label;
+    renderTargetReason=choice.reason;
+    return choice;
+  }
+
   function ensure(){
-    if(composer||failed)return !!composer;
+    if(composer||failed||contextLost)return !!composer;
+    if(forced('composer')){fail('forced composer failure');return false;}
+    const choice=targetChoice();
+    if(!choice.supported){fail(choice.reason);return false;}
     try{
-      const halfFloat=supportsHalfFloatTarget(renderer);
-      const type=halfFloat?THREE.HalfFloatType:THREE.UnsignedByteType;
-      renderTargetType=halfFloat?'half-float':'unsigned-byte-fallback';
+      const filter=choice.linear?THREE.LinearFilter:THREE.NearestFilter;
       const target=new THREE.WebGLRenderTarget(1,1,{
-        type,
+        type:choice.type,
         format:THREE.RGBAFormat,
-        minFilter:THREE.LinearFilter,
-        magFilter:THREE.LinearFilter,
+        minFilter:filter,
+        magFilter:filter,
         depthBuffer:true,
         stencilBuffer:false
       });
       target.samples=0;
       target.texture.name='urban-max-cinematic-color';
+      target.texture.colorSpace=THREE.NoColorSpace;
 
       composer=new EffectComposer(renderer,target);
-      renderPass=new RenderPass(scene,camera);
+      renderPass=instrumentPass(new RenderPass(scene,camera),'scene');
       composer.addPass(renderPass);
 
-      try{
-        gtaoPass=new GTAOPass(scene,camera,1,1);
-        gtaoPass.output=GTAOPass.OUTPUT.Default;
-        gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
-        gtaoPass.updateGtaoMaterial({
-          radius:finite(currentSettings.aoRadius,.18),
-          distanceExponent:1.3,
-          thickness:finite(currentSettings.aoThickness,.75),
-          distanceFallOff:.12,
-          scale:1
-        });
-        gtaoPass.updatePdMaterial({
-          lumaPhi:9,
-          depthPhi:2,
-          normalPhi:3,
-          radius:5,
-          radiusExponent:1.8,
-          rings:2,
-          samples:12
-        });
-        composer.addPass(gtaoPass);
-      }catch(error){
-        featureFailures.ao=String(error?.message||error||'GTAO unavailable');
-        try{gtaoPass?.dispose?.();}catch{}
-        gtaoPass=null;
+      if(currentSettings.ambientOcclusion!==false&&capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable&&!forced('gtao')){
+        try{
+          gtaoPass=new GTAOPass(scene,camera,1,1);
+          gtaoPass.output=GTAOPass.OUTPUT.Default;
+          gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
+          gtaoPass.updateGtaoMaterial({
+            radius:finite(currentSettings.aoRadius,.18),
+            distanceExponent:1.3,
+            thickness:finite(currentSettings.aoThickness,.75),
+            distanceFallOff:.12,
+            scale:1
+          });
+          gtaoPass.updatePdMaterial({lumaPhi:9,depthPhi:2,normalPhi:3,radius:5,radiusExponent:1.8,rings:2,samples:12});
+          instrumentPass(gtaoPass,'gtao');
+          composer.addPass(gtaoPass);
+        }catch(error){
+          noteFeatureFailure('ao',error);
+          try{gtaoPass?.dispose?.();}catch{}
+          gtaoPass=null;
+        }
+      }else if(currentSettings.ambientOcclusion!==false){
+        noteFeatureFailure('ao',forced('gtao')?'forced GTAO failure':'GTAO requires verified HalfFloat + depth texture support');
       }
 
-      try{
-        bloomPass=new UnrealBloomPass(
-          new THREE.Vector2(1,1),
-          finite(currentSettings.bloomStrength,.65),
-          finite(currentSettings.bloomRadius,.48),
-          finite(currentSettings.bloomThreshold,1.60)
-        );
-        composer.addPass(bloomPass);
-      }catch(error){
-        featureFailures.bloom=String(error?.message||error||'bloom unavailable');
-        try{bloomPass?.dispose?.();}catch{}
-        bloomPass=null;
+      if(currentSettings.bloomEnabled!==false&&capabilities.halfFloatRenderable&&!forced('bloom')){
+        try{
+          bloomPass=new UnrealBloomPass(
+            new THREE.Vector2(1,1),
+            finite(currentSettings.bloomStrength,.65),
+            finite(currentSettings.bloomRadius,.48),
+            finite(currentSettings.bloomThreshold,1.60)
+          );
+          instrumentPass(bloomPass,'bloom');
+          composer.addPass(bloomPass);
+        }catch(error){
+          noteFeatureFailure('bloom',error);
+          try{bloomPass?.dispose?.();}catch{}
+          bloomPass=null;
+        }
+      }else if(currentSettings.bloomEnabled!==false){
+        noteFeatureFailure('bloom',forced('bloom')?'forced bloom failure':'Bloom requires verified HalfFloat render targets');
       }
 
-      if(gtaoPass?.depthTexture){
+      if(gtaoPass?.depthTexture&&currentSettings.volumetricFog!==false&&!forced('volumetric')){
         try{
           atmospherePass=new ReducedAtmospherePass({
             scale:finite(currentSettings.volumetricResolutionScale,.5),
-            type
+            type:choice.type
           });
           atmospherePass.downsampleMaterial.uniforms.tDepth.value=gtaoPass.depthTexture;
           atmospherePass.downsampleMaterial.uniforms.cameraNear.value=camera.near;
           atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
           atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
+          instrumentPass(atmospherePass,'volumetric');
           composer.addPass(atmospherePass);
         }catch(error){
-          featureFailures.volumetric=String(error?.message||error||'volumetrics unavailable');
+          noteFeatureFailure('volumetric',error);
           try{atmospherePass?.dispose?.();}catch{}
           atmospherePass=null;
         }
-      }else{
-        featureFailures.volumetric='disabled because reduced-resolution depth is unavailable';
+      }else if(currentSettings.volumetricFog!==false){
+        noteFeatureFailure('volumetric',forced('volumetric')?'forced volumetric failure':'volumetrics require GTAO depth');
       }
 
-      try{
-        lutPass=new ShaderPass(LUT_SHADER);
-        lutPass.uniforms.tLut.value=lutTextures.get(currentGrade);
-        lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
-        composer.addPass(lutPass);
-      }catch(error){
-        featureFailures.colorGrading=String(error?.message||error||'color grading unavailable');
-        try{lutPass?.dispose?.();}catch{}
-        lutPass=null;
+      if(currentSettings.colorGrading!==false&&!forced('lut')){
+        try{
+          lutPass=new ShaderPass(LUT_SHADER);
+          lutPass.uniforms.tLut.value=lutTextures.get(currentGrade);
+          lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
+          instrumentPass(lutPass,'lut');
+          composer.addPass(lutPass);
+        }catch(error){
+          noteFeatureFailure('colorGrading',error);
+          try{lutPass?.dispose?.();}catch{}
+          lutPass=null;
+        }
+      }else if(currentSettings.colorGrading!==false){
+        noteFeatureFailure('colorGrading','forced LUT failure');
       }
 
-      try{
-        dofPass=new ShaderPass(DOF_SHADER);
-        dofPass.enabled=false;
-        composer.addPass(dofPass);
-      }catch(error){
-        featureFailures.dof=String(error?.message||error||'DOF unavailable');
-        try{dofPass?.dispose?.();}catch{}
-        dofPass=null;
+      if(currentSettings.depthOfField==='cinematic'&&!forced('dof')){
+        try{
+          dofPass=new ShaderPass(DOF_SHADER);
+          dofPass.enabled=false;
+          instrumentPass(dofPass,'dof');
+          composer.addPass(dofPass);
+        }catch(error){
+          noteFeatureFailure('dof',error);
+          try{dofPass?.dispose?.();}catch{}
+          dofPass=null;
+        }
+      }else if(currentSettings.depthOfField==='cinematic'&&forced('dof')){
+        noteFeatureFailure('dof','forced DOF failure');
       }
 
-      try{
-        sharpenPass=new ShaderPass(SHARPEN_SHADER);
-        sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
-        composer.addPass(sharpenPass);
-      }catch(error){
-        featureFailures.sharpen=String(error?.message||error||'sharpen unavailable');
-        try{sharpenPass?.dispose?.();}catch{}
-        sharpenPass=null;
+      if(currentSettings.sharpenEnabled!==false&&!forced('sharpen')){
+        try{
+          sharpenPass=new ShaderPass(SHARPEN_SHADER);
+          sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
+          instrumentPass(sharpenPass,'sharpen');
+          composer.addPass(sharpenPass);
+        }catch(error){
+          noteFeatureFailure('sharpen',error);
+          try{sharpenPass?.dispose?.();}catch{}
+          sharpenPass=null;
+        }
+      }else if(currentSettings.sharpenEnabled!==false){
+        noteFeatureFailure('sharpen','forced sharpen failure');
       }
 
-      outputPass=new OutputPass();
+      outputPass=instrumentPass(new OutputPass(),'output');
       composer.addPass(outputPass);
       resize(width,height,pixelRatio);
       configure(currentSettings);
@@ -585,26 +660,22 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   function configure(next={}){
     currentSettings=next||{};
     const shouldEnable=currentSettings.profile===CINEMATIC_PROFILE;
-    active=shouldEnable&&!failed;
+    active=shouldEnable&&!failed&&!contextLost;
     if(!shouldEnable)return false;
+    if(restoreDirectFrames>0)return false;
     if(!ensure())return false;
 
     if(gtaoPass){
       gtaoPass.enabled=currentSettings.ambientOcclusion!==false;
       gtaoPass.blendIntensity=finite(currentSettings.aoIntensity,.82);
-      gtaoPass.updateGtaoMaterial({
-        radius:finite(currentSettings.aoRadius,.18),
-        thickness:finite(currentSettings.aoThickness,.75)
-      });
+      gtaoPass.updateGtaoMaterial({radius:finite(currentSettings.aoRadius,.18),thickness:finite(currentSettings.aoThickness,.75)});
     }
-
     if(bloomPass){
       bloomPass.enabled=currentSettings.bloomEnabled!==false;
       bloomPass.strength=finite(currentSettings.bloomStrength,.65);
       bloomPass.radius=finite(currentSettings.bloomRadius,.48);
       bloomPass.threshold=finite(currentSettings.bloomThreshold,1.60);
     }
-
     if(atmospherePass){
       atmospherePass.enabled=currentSettings.volumetricFog!==false||currentSettings.lightShafts!==false;
       atmospherePass.setResolutionScale(finite(currentSettings.volumetricResolutionScale,.5));
@@ -612,17 +683,14 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       atmospherePass.downsampleMaterial.uniforms.cameraFar.value=camera.far;
       atmospherePass.downsampleMaterial.uniforms.maxDistance.value=finite(currentSettings.volumetricDistance,420);
     }
-
     if(lutPass){
       lutPass.enabled=currentSettings.colorGrading!==false;
       lutPass.uniforms.intensity.value=finite(currentSettings.colorGradeIntensity,.82);
     }
-
     if(sharpenPass){
       sharpenPass.enabled=currentSettings.sharpenEnabled!==false;
       sharpenPass.uniforms.strength.value=finite(currentSettings.sharpenStrength,.30);
     }
-
     resize(width,height,pixelRatio);
     return true;
   }
@@ -634,7 +702,6 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     if(!composer)return;
     composer.setPixelRatio(pixelRatio);
     composer.setSize(width,height);
-
     const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio));
     const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio));
     const aoScale=THREE.MathUtils.clamp(finite(currentSettings.aoResolutionScale,.5),.25,.75);
@@ -642,19 +709,18 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     const aoHeight=Math.max(1,Math.floor(effectiveHeight*aoScale));
     gtaoPass?.setSize?.(aoWidth,aoHeight);
     aoSize.set(aoWidth,aoHeight);
-
     sharpenPass?.uniforms?.resolution?.value?.set(effectiveWidth,effectiveHeight);
     dofPass?.uniforms?.resolution?.value?.set(effectiveWidth,effectiveHeight);
   }
 
   function setContext({weather={},mode='playing',sun=null,time=0}={}){
+    currentMode=mode;
     if(!composer)return;
     const nextGrade=gradeName(weather);
     if(nextGrade!==currentGrade){
       currentGrade=nextGrade;
       if(lutPass)lutPass.uniforms.tLut.value=lutTextures.get(currentGrade)||lutTextures.get('day');
     }
-
     const preset=String(weather?.preset||weather?.mode||'day').toLowerCase();
     if(atmospherePass){
       const uniforms=atmospherePass.downsampleMaterial.uniforms;
@@ -666,11 +732,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       uniforms.night.value=night;
       uniforms.storm.value=preset==='storm'?1:0;
       uniforms.fogDensity.value=finite(weather?.fogDensity,preset==='storm'?.0105:preset==='snow'?.0105:.0065);
-      uniforms.hazeStrength.value=THREE.MathUtils.clamp(
-        finite(currentSettings.volumetricDensity,.065)+cloud*.035+rain*.028,
-        .025,.22
-      );
-
+      uniforms.hazeStrength.value=THREE.MathUtils.clamp(finite(currentSettings.volumetricDensity,.065)+cloud*.035+rain*.028,.025,.22);
       let shaft=0;
       if(currentSettings.lightShafts!==false){
         if(preset==='sunset')shaft=.72;
@@ -678,7 +740,6 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
         else if(preset==='storm')shaft=.04+clamp01(weather?.flash)*.12;
       }
       uniforms.shaftStrength.value=shaft;
-
       if(sun?.position){
         _sunNdc.copy(sun.position).project(camera);
         uniforms.sunUv.value.set(
@@ -687,9 +748,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
         );
       }
     }
-
-    const cinematic=currentSettings.depthOfField==='cinematic'&&
-      (mode==='countdown'||mode==='crashed'||mode==='results'||mode==='menu');
+    const cinematic=currentSettings.depthOfField==='cinematic'&&(mode==='countdown'||mode==='crashed'||mode==='results'||mode==='menu');
     if(dofPass){
       dofPass.enabled=cinematic;
       dofPass.uniforms.strength.value=mode==='crashed'?.52:cinematic?.26:0;
@@ -697,18 +756,120 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     lastDofState=cinematic&&!!dofPass;
   }
 
-  function render(delta=0){
-    if(!active||!composer)return false;
-    const started=globalThis.performance?.now?.()??0;
+  function criticalGlErrors(){
+    const found=[];
     try{
-      composer.render(delta);
-      const ended=globalThis.performance?.now?.()??started;
-      postRenderMs=Math.max(0,ended-started);
-      return true;
+      for(let i=0;i<8;i++){
+        const code=gl.getError();
+        if(code===gl.NO_ERROR)break;
+        if(code===gl.INVALID_FRAMEBUFFER_OPERATION||code===gl.OUT_OF_MEMORY||code===gl.CONTEXT_LOST_WEBGL)found.push(code);
+      }
+    }catch{}
+    return found;
+  }
+
+  function backbufferHealth(){
+    const w=gl.drawingBufferWidth,h=gl.drawingBufferHeight;
+    if(w<2||h<2)return {ok:false,reason:'empty-backbuffer'};
+    const coords=[
+      [.50,.50],[.25,.35],[.75,.35],[.25,.70],[.75,.70],
+      [.50,.22],[.50,.78],[.12,.50],[.88,.50]
+    ];
+    const px=new Uint8Array(4);
+    let visible=0;
+    try{
+      for(const [nx,ny] of coords){
+        gl.readPixels(Math.min(w-1,Math.max(0,Math.floor(w*nx))),Math.min(h-1,Math.max(0,Math.floor(h*ny))),1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
+        if(Math.max(px[0],px[1],px[2])>3)visible++;
+      }
+      const errors=criticalGlErrors();
+      if(errors.length)return {ok:false,reason:'readback-gl-error'};
+      return {ok:visible>0,reason:visible>0?'visible':'near-black',visibleSamples:visible};
     }catch(error){
-      fail(error);
+      return {ok:false,reason:String(error?.message||error||'readback-failed')};
+    }
+  }
+
+  function degradeRuntime(reason){
+    blackFallbackCount+=String(reason).includes('black')?1:0;
+    if(renderTargetType==='half-float'&&!forceByteTarget&&capabilities.unsignedByteRenderable){
+      forceByteTarget=true;
+      runtimeDegradations.push({type:'target-fallback',from:'half-float',to:'unsigned-byte',reason,frame:frameCounter});
+      disposeComposer();
+      active=currentSettings.profile===CINEMATIC_PROFILE&&!failed&&!contextLost;
       return false;
     }
+    const candidates=[
+      ['ao',gtaoPass],['volumetric',atmospherePass],['bloom',bloomPass],
+      ['colorGrading',lutPass],['sharpen',sharpenPass],['dof',dofPass]
+    ];
+    for(const [name,pass] of candidates){
+      if(pass?.enabled){
+        pass.enabled=false;
+        noteFeatureFailure(name,'runtime degradation: '+reason);
+        return false;
+      }
+    }
+    fail(reason);
+    return false;
+  }
+
+  function maybeValidateOutput(){
+    if(currentMode!=='playing')return true;
+    const scheduled=healthChecks<3||frameCounter-lastHealthCheckFrame>=240||forced('black-output')&&!blackSimulationConsumed;
+    if(!scheduled)return true;
+    lastHealthCheckFrame=frameCounter;
+    healthChecks++;
+    if(forced('black-output')&&!blackSimulationConsumed){
+      blackSimulationConsumed=true;
+      const previousColor=renderer.getClearColor(new THREE.Color());
+      const previousAlpha=renderer.getClearAlpha();
+      renderer.setClearColor(0x000000,1);
+      renderer.clear(true,false,false);
+      renderer.setClearColor(previousColor,previousAlpha);
+    }
+    const health=backbufferHealth();
+    if(health.ok)return true;
+    degradeRuntime('black/invalid composer output: '+health.reason);
+    return false;
+  }
+
+  function render(delta=0){
+    frameCounter++;
+    if(currentSettings.profile!==CINEMATIC_PROFILE||failed||contextLost)return false;
+    if(restoreDirectFrames>0){
+      restoreDirectFrames--;
+      return false;
+    }
+    if(!composer&&!ensure())return false;
+    if(!active)active=true;
+    const started=now();
+    try{
+      criticalGlErrors();
+      composer.render(delta);
+      postRenderMs=Math.max(0,now()-started);
+      const glErrors=criticalGlErrors();
+      if(glErrors.length)return degradeRuntime('critical WebGL error '+glErrors.join(','));
+      if(!maybeValidateOutput())return false;
+      return true;
+    }catch(error){
+      return degradeRuntime(String(error?.message||error||'composer render failure'));
+    }
+  }
+
+  function estimateMemory(){
+    const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio));
+    const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio));
+    const hdrBytes=renderTargetType==='half-float'?8:4;
+    let bytes=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:2});
+    bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:4,count:2});
+    if(gtaoPass)bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:3,scale:finite(currentSettings.aoResolutionScale,.5)});
+    if(atmospherePass)bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:1,scale:atmospherePass.scale});
+    if(bloomPass){
+      bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:8,count:1,scale:.5});
+      for(const scale of [.5,.25,.125,.0625,.03125])bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:8,count:2,scale});
+    }
+    return bytes;
   }
 
   function getDiagnostics(){
@@ -718,7 +879,10 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       failed,
       failureReason:failureReason||null,
       featureFailures:{...featureFailures},
+      runtimeDegradations:[...runtimeDegradations],
       renderTargetType,
+      renderTargetReason,
+      renderTargetMemoryBytes:composer?estimateMemory():0,
       msaaSamples:0,
       postResolutionScale:1,
       bloomEnabled:!!bloomPass?.enabled,
@@ -741,16 +905,74 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       depthOfField:lastDofState,
       depthOfFieldMode:currentSettings.depthOfField||'off',
       postProcessingMs:Math.round(postRenderMs*1000)/1000,
-      renderTargetCount:composer?2+(gtaoPass?3:0)+(atmospherePass?1:0):0
+      passCpuMs:Object.fromEntries(Object.entries(passTimings).map(([name,value])=>[name,{lastMs:Math.round(value.lastMs*1000)/1000,emaMs:Math.round(value.emaMs*1000)/1000}])),
+      renderTargetCount:composer?2+(gtaoPass?3:0)+(atmospherePass?1:0)+(bloomPass?11:0):0,
+      healthChecks,
+      blackFallbackCount,
+      contextLost,
+      contextLossCount,
+      contextRestoreCount,
+      capabilities:{
+        webgl2:capabilities.webgl2,
+        unsignedByteRenderable:capabilities.unsignedByteRenderable,
+        halfFloatRenderable:capabilities.halfFloatRenderable,
+        halfFloatLinear:capabilities.halfFloatLinear,
+        floatRenderable:capabilities.floatRenderable,
+        depthTextureRenderable:capabilities.depthTextureRenderable,
+        maxTextureSize:capabilities.maxTextureSize,
+        maxRenderbufferSize:capabilities.maxRenderbufferSize,
+        maxSamples:capabilities.maxSamples,
+        maxAnisotropy:capabilities.maxAnisotropy,
+        fragmentHighp:capabilities.fragmentHighp,
+        gpuTimerSupported:capabilities.gpuTimerSupported,
+        precision:capabilities.precision,
+        extensions:capabilities.extensions,
+        probes:capabilities.probes,
+        simulatedGpuClass:capabilities.simulatedGpuClass,
+        simulationLabel:capabilities.simulationLabel,
+        simulationDisclaimer:capabilities.simulationDisclaimer
+      },
+      colorPipeline:{
+        rendererToneMapping:renderer.toneMapping,
+        rendererExposure:renderer.toneMappingExposure,
+        outputColorSpace:renderer.outputColorSpace,
+        offscreenColorSpace:'NoColorSpace',
+        outputPass:true
+      }
     };
   }
 
+  function onContextLost(event){
+    event?.preventDefault?.();
+    contextLost=true;
+    contextLossCount++;
+    active=false;
+    runtimeDegradations.push({type:'context-lost',frame:frameCounter});
+  }
+
+  function onContextRestored(){
+    contextLost=false;
+    contextRestoreCount++;
+    failed=false;
+    failureReason='';
+    forceByteTarget=true;
+    restoreDirectFrames=2;
+    disposeComposer();
+    capabilities=probeRenderingCapabilities(renderer,{simulation});
+    runtimeDegradations.push({type:'context-restored-direct-first',frame:frameCounter});
+  }
+
+  canvas?.addEventListener?.('webglcontextlost',onContextLost,false);
+  canvas?.addEventListener?.('webglcontextrestored',onContextRestored,false);
+
   function dispose(){
+    canvas?.removeEventListener?.('webglcontextlost',onContextLost,false);
+    canvas?.removeEventListener?.('webglcontextrestored',onContextRestored,false);
     disposeComposer();
     for(const texture of lutTextures.values())texture.dispose();
     lutTextures.clear();
   }
 
   configure(currentSettings);
-  return {configure,resize,setContext,render,getDiagnostics,dispose,get active(){return active&&!!composer;}};
+  return {configure,resize,setContext,render,getDiagnostics,dispose,get active(){return active&&!!composer&&!contextLost;}};
 }

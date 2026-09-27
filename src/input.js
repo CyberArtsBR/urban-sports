@@ -1,14 +1,10 @@
 import {SKI_TUNING} from './gameplayTuning.js';
+import {DEFAULT_ACTION_MAP,GAMEPAD_BUTTON,INPUT_ACTION,createActionMap,gamepadButtonFor} from './actionMap.js';
 
-// Browser "standard" mapping normalizes Xbox/PlayStation-style controllers to
-// the same button indices. Generic USB pads commonly expose the same layout, so
-// we keep one small fallback instead of a vendor-specific table.
-const DEADZONE=Math.max(0,Math.min(.45,Number(SKI_TUNING.CONTROLLER_DEADZONE)||.14));
-const DEADZONE_HYSTERESIS=.03;
-const DEADZONE_ENTER=Math.min(.55,DEADZONE+DEADZONE_HYSTERESIS);
-const SWITCH_AXIS_THRESHOLD=Math.max(.28,DEADZONE_ENTER+.08);
+const clampSetting=(value,min,max,fallback)=>Math.max(min,Math.min(max,Number.isFinite(Number(value))?Number(value):fallback));
+let controllerDeadzone=clampSetting(SKI_TUNING.CONTROLLER_DEADZONE,0,.45,.14);
+let controllerActionMap=createActionMap(DEFAULT_ACTION_MAP);
 const BUTTON_PRESS_THRESHOLD=.5;
-const STANDARD_BUTTON={confirm:0,cancel:1,special:2,camera:3,menu:9,up:12,down:13,left:14,right:15};
 
 let activeKey=null;
 let activeAxisState=makeAxisPair();
@@ -16,6 +12,8 @@ let previousSemantic=emptySemantic();
 let lastSnapshot=null;
 const reconnectGuards=new Map();
 
+function deadzoneEnter(){return Math.min(.55,controllerDeadzone+.03);}
+function switchAxisThreshold(){return Math.max(.28,deadzoneEnter()+.08);}
 function makeAxisState(){return {engaged:false,sign:0};}
 function makeAxisPair(){return {x:makeAxisState(),y:makeAxisState()};}
 function emptySemantic(){return {confirm:false,jump:false,cancel:false,cameraMotion:false,special:false,camera:false,menu:false};}
@@ -33,32 +31,32 @@ function rawButtons(pad){return Array.from(pad?.buttons||[],buttonPressed);}
 function rawAxes(pad){return [clampAxis(pad?.axes?.[0]),clampAxis(pad?.axes?.[1])];}
 function resetAxisState(){activeAxisState=makeAxisPair();}
 
+export function configureControllerInput({deadzone=controllerDeadzone,actionMap=null}={}){
+  controllerDeadzone=clampSetting(deadzone,.05,.35,.14);
+  if(actionMap)controllerActionMap=createActionMap(actionMap);
+  resetAxisState();
+  return getControllerInputSettings();
+}
+export function getControllerInputSettings(){return {deadzone:controllerDeadzone,actionMap:controllerActionMap};}
+
 function filteredAxis(raw,state){
   const value=clampAxis(raw);
   const magnitude=Math.abs(value);
   const sign=Math.sign(value);
+  const enter=deadzoneEnter();
 
   if(!state.engaged){
-    if(magnitude<=DEADZONE_ENTER)return 0;
-    state.engaged=true;
-    state.sign=sign;
+    if(magnitude<=enter)return 0;
+    state.engaged=true;state.sign=sign;
   }else{
-    if(magnitude<=DEADZONE){
-      state.engaged=false;
-      state.sign=0;
-      return 0;
-    }
+    if(magnitude<=controllerDeadzone){state.engaged=false;state.sign=0;return 0;}
     if(sign&&state.sign&&sign!==state.sign){
-      if(magnitude<=DEADZONE_ENTER){
-        state.engaged=false;
-        state.sign=0;
-        return 0;
-      }
+      if(magnitude<=enter){state.engaged=false;state.sign=0;return 0;}
       state.sign=sign;
     }
   }
 
-  const scaled=(magnitude-DEADZONE)/(1-DEADZONE);
+  const scaled=(magnitude-controllerDeadzone)/(1-controllerDeadzone);
   return sign*Math.max(0,Math.min(1,scaled));
 }
 
@@ -66,31 +64,21 @@ function createReconnectGuard(snapshot){
   if(!snapshot)return null;
   const blockedButtons=new Set();
   snapshot.buttons.forEach((pressed,index)=>{if(pressed)blockedButtons.add(index);});
-  return {
-    blockedButtons,
-    blockX:Math.abs(snapshot.axes[0])>DEADZONE,
-    blockY:Math.abs(snapshot.axes[1])>DEADZONE
-  };
+  return {blockedButtons,blockX:Math.abs(snapshot.axes[0])>controllerDeadzone,blockY:Math.abs(snapshot.axes[1])>controllerDeadzone};
 }
 function refreshGuard(entry){
   const guard=reconnectGuards.get(entry.key);
   if(!guard)return null;
   const buttons=rawButtons(entry.pad);
-  for(const index of [...guard.blockedButtons]){
-    if(!buttons[index])guard.blockedButtons.delete(index);
-  }
+  for(const index of [...guard.blockedButtons])if(!buttons[index])guard.blockedButtons.delete(index);
   const axes=rawAxes(entry.pad);
-  if(guard.blockX&&Math.abs(axes[0])<=DEADZONE)guard.blockX=false;
-  if(guard.blockY&&Math.abs(axes[1])<=DEADZONE)guard.blockY=false;
-  if(!guard.blockedButtons.size&&!guard.blockX&&!guard.blockY){
-    reconnectGuards.delete(entry.key);
-    return null;
-  }
+  if(guard.blockX&&Math.abs(axes[0])<=controllerDeadzone)guard.blockX=false;
+  if(guard.blockY&&Math.abs(axes[1])<=controllerDeadzone)guard.blockY=false;
+  if(!guard.blockedButtons.size&&!guard.blockX&&!guard.blockY){reconnectGuards.delete(entry.key);return null;}
   return guard;
 }
 function effectiveRaw(entry){
-  const buttons=rawButtons(entry.pad);
-  const axes=rawAxes(entry.pad);
+  const buttons=rawButtons(entry.pad),axes=rawAxes(entry.pad);
   const guard=reconnectGuards.get(entry.key);
   if(guard){
     for(const index of guard.blockedButtons)buttons[index]=false;
@@ -101,7 +89,8 @@ function effectiveRaw(entry){
 }
 function hasMeaningfulActivity(entry){
   const {buttons,axes}=effectiveRaw(entry);
-  return buttons.some(Boolean)||Math.abs(axes[0])>=SWITCH_AXIS_THRESHOLD||Math.abs(axes[1])>=SWITCH_AXIS_THRESHOLD;
+  const threshold=switchAxisThreshold();
+  return buttons.some(Boolean)||Math.abs(axes[0])>=threshold||Math.abs(axes[1])>=threshold;
 }
 function sortConnected(entries){
   return entries.sort((a,b)=>{
@@ -111,110 +100,56 @@ function sortConnected(entries){
   });
 }
 function edgeData(current){
-  return {
-    pressed:{
-      confirm:current.confirm&&!previousSemantic.confirm,
-      jump:current.jump&&!previousSemantic.jump,
-      cancel:current.cancel&&!previousSemantic.cancel,
-      cameraMotion:current.cameraMotion&&!previousSemantic.cameraMotion,
-      special:current.special&&!previousSemantic.special,
-      camera:current.camera&&!previousSemantic.camera,
-      menu:current.menu&&!previousSemantic.menu
-    },
-    released:{
-      confirm:!current.confirm&&previousSemantic.confirm,
-      jump:!current.jump&&previousSemantic.jump,
-      cancel:!current.cancel&&previousSemantic.cancel,
-      cameraMotion:!current.cameraMotion&&previousSemantic.cameraMotion,
-      special:!current.special&&previousSemantic.special,
-      camera:!current.camera&&previousSemantic.camera,
-      menu:!current.menu&&previousSemantic.menu
-    }
-  };
+  const pressed={},released={};
+  for(const key of Object.keys(current)){
+    pressed[key]=current[key]&&!previousSemantic[key];
+    released[key]=!current[key]&&previousSemantic[key];
+  }
+  return {pressed,released};
 }
 function disconnectedState(){
-  const current=emptySemantic();
-  const edges=edgeData(current);
-  previousSemantic=current;
-  return {
-    connected:false,
-    axis:0,
-    axisY:0,
-    buttons:[],
-    confirm:false,
-    jump:false,
-    cancel:false,
-    cameraMotion:false,
-    special:false,
-    camera:false,
-    menu:false,
-    edges,
-    activeIndex:null,
-    activeKey:null,
-    activeGamepad:null,
-    id:'',
-    mapping:'',
-    controllerChanged:false,
-    dpad:{left:false,right:false,up:false,down:false}
-  };
+  const current=emptySemantic(),edges=edgeData(current);previousSemantic=current;
+  return {connected:false,axis:0,axisY:0,buttons:[],...current,edges,activeIndex:null,activeKey:null,activeGamepad:null,id:'',mapping:'',controllerChanged:false,dpad:{left:false,right:false,up:false,down:false}};
 }
 
 export function readPad(pads){
-  const entries=sortConnected(Array.from(pads||[])
-    .map((pad,slot)=>({pad,slot,key:padKey(pad,slot)}))
-    .filter(entry=>entry.pad?.connected));
+  const entries=sortConnected(Array.from(pads||[]).map((pad,slot)=>({pad,slot,key:padKey(pad,slot)})).filter(entry=>entry.pad?.connected));
 
   let current=activeKey?entries.find(entry=>entry.key===activeKey):null;
   if(activeKey&&!current){
     const guard=createReconnectGuard(lastSnapshot?.key===activeKey?lastSnapshot:null);
     if(guard&&(guard.blockedButtons.size||guard.blockX||guard.blockY))reconnectGuards.set(activeKey,guard);
-    activeKey=null;
-    current=null;
-    resetAxisState();
-    lastSnapshot=null;
+    activeKey=null;current=null;resetAxisState();lastSnapshot=null;
   }
 
   for(const entry of entries)refreshGuard(entry);
   if(!entries.length)return disconnectedState();
 
   let selected=current;
-  if(!selected){
-    selected=entries.find(hasMeaningfulActivity)||entries[0];
-  }else if(!hasMeaningfulActivity(selected)){
+  if(!selected)selected=entries.find(hasMeaningfulActivity)||entries[0];
+  else if(!hasMeaningfulActivity(selected)){
     const takeover=entries.find(entry=>entry.key!==selected.key&&hasMeaningfulActivity(entry));
     if(takeover)selected=takeover;
   }
 
   const changed=selected.key!==activeKey;
-  if(changed){
-    activeKey=selected.key;
-    resetAxisState();
-    previousSemantic=emptySemantic();
-  }
+  if(changed){activeKey=selected.key;resetAxisState();previousSemantic=emptySemantic();}
 
-  const physicalButtons=rawButtons(selected.pad);
-  const physicalAxes=rawAxes(selected.pad);
+  const physicalButtons=rawButtons(selected.pad),physicalAxes=rawAxes(selected.pad);
   const {buttons,axes}=effectiveRaw(selected);
-  const analogX=filteredAxis(axes[0],activeAxisState.x);
-  const analogY=filteredAxis(axes[1],activeAxisState.y);
-
-  const left=!!buttons[STANDARD_BUTTON.left];
-  const right=!!buttons[STANDARD_BUTTON.right];
-  const up=!!buttons[STANDARD_BUTTON.up];
-  const down=!!buttons[STANDARD_BUTTON.down];
-  const dpadX=Number(right)-Number(left);
-  const dpadY=Number(down)-Number(up);
-  const horizontalDpad=left||right;
-  const verticalDpad=up||down;
-
+  const analogX=filteredAxis(axes[0],activeAxisState.x),analogY=filteredAxis(axes[1],activeAxisState.y);
+  const left=!!buttons[GAMEPAD_BUTTON.LEFT],right=!!buttons[GAMEPAD_BUTTON.RIGHT],up=!!buttons[GAMEPAD_BUTTON.UP],down=!!buttons[GAMEPAD_BUTTON.DOWN];
+  const dpadX=Number(right)-Number(left),dpadY=Number(down)-Number(up);
+  const horizontalDpad=left||right,verticalDpad=up||down;
+  const at=action=>!!buttons[gamepadButtonFor(controllerActionMap,action,-1)];
   const semantic={
-    confirm:!!buttons[STANDARD_BUTTON.confirm],
-    jump:!!buttons[STANDARD_BUTTON.confirm],
-    cancel:!!buttons[STANDARD_BUTTON.cancel],
-    cameraMotion:!!buttons[STANDARD_BUTTON.cancel],
-    special:!!buttons[STANDARD_BUTTON.special],
-    camera:!!buttons[STANDARD_BUTTON.camera],
-    menu:!!buttons[STANDARD_BUTTON.menu]
+    confirm:at(INPUT_ACTION.CONFIRM),
+    jump:at(INPUT_ACTION.JUMP),
+    cancel:at(INPUT_ACTION.CANCEL),
+    cameraMotion:at(INPUT_ACTION.CAMERA_MOTION),
+    special:at(INPUT_ACTION.SPECIAL),
+    camera:at(INPUT_ACTION.CAMERA),
+    menu:at(INPUT_ACTION.PAUSE)
   };
   const edges=edgeData(semantic);
   previousSemantic=semantic;

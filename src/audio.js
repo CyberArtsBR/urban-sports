@@ -10,6 +10,7 @@ import {createSkateboardAudio} from './audio/SkateboardAudio.js';
 import {createWeatherAudio} from './audio/WeatherAudio.js';
 import {createWorldAudio} from './audio/WorldAudio.js';
 import {createMusicSystem,URBAN_MUSIC_URL} from './audio/MusicSystem.js';
+import {getUIAudioCue} from './audio/UIAudio.js';
 
 const clamp=(value,min=0,max=1)=>Math.max(min,Math.min(max,Number(value)||0));
 const performanceNow=()=>globalThis.performance?.now?.()??Date.now();
@@ -182,6 +183,11 @@ export function createSkiAudio(){
   function play(type,gain=1,rateScale=1,pan=0){
     if(disposed)return false;
     let sound=String(type||'');
+    const uiCue=getUIAudioCue(sound);
+    if(uiCue){
+      gain=Math.min(Number(gain)||0,uiCue.gain);
+      rateScale*=uiCue.rate;
+    }
     if(isSkateboard()){
       const skateCue=getSkateEventCue(sound,{intensity:gain});
       if(skateCue){

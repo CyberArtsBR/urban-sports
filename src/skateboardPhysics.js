@@ -10,7 +10,7 @@ export const SKATEBOARD_LANDING=Object.freeze({CLEAN:'clean',SKETCHY:'sketchy',H
 export const SKATEBOARD_ANIMATION_STATE=Object.freeze({IDLE:'idle',PUSH:'push',CARVE_LEFT:'carveLeft',CARVE_RIGHT:'carveRight',POWERSLIDE:'powerslide',OLLIE_COMPRESSION:'ollieCompression',OLLIE_POP:'olliePop',AIR:'air',KICKFLIP:'kickflip',HEELFLIP:'heelflip',SHOVEIT:'shoveit',MANUAL:'manual',NOSE_MANUAL:'noseManual',GRIND:'grind',LAND:'land',HARD_LAND:'hardLand',CRASH:'crash'});
 export const SKATEBOARD_TUNING=Object.freeze({
   PLAYER_BOUNDARY_HALF_WIDTH:13.10,
-  INPUT_DEADZONE:.022,
+  INPUT_DEADZONE:.018,
   PHYSICS_SUBSTEP_SECONDS:1/180,
 
   DISPLAY_MIN_KMH:24,
@@ -22,16 +22,24 @@ export const SKATEBOARD_TUNING=Object.freeze({
   POWERSLIDE_SPEED_SCRUB:.16,
   MAX_SPEED_SCRUB:.24,
 
-  LOW_SPEED_STEER:1.18,
-  HIGH_SPEED_STEER:.66,
-  TRUCK_RESPONSE_LOW:12.8,
-  TRUCK_RESPONSE_HIGH:7.4,
-  TURN_RATE_LOW:1.26,
-  TURN_RATE_HIGH:.86,
-  HEADING_LOW:.42,
-  HEADING_HIGH:.29,
-  MAX_LATERAL_LOW:7.35,
-  MAX_LATERAL_HIGH:8.15,
+  LOW_SPEED_STEER:1.34,
+  HIGH_SPEED_STEER:.94,
+  STEER_CURVE_EXPONENT:.78,
+  TRUCK_RESPONSE_LOW:21.0,
+  TRUCK_RESPONSE_HIGH:14.5,
+  TURN_RATE_LOW:1.72,
+  TURN_RATE_HIGH:1.36,
+  TURN_RESPONSE_LOW:11.5,
+  TURN_RESPONSE_HIGH:9.4,
+  TURN_REVERSAL_MULTIPLIER:1.42,
+  HEADING_LOW:.50,
+  HEADING_HIGH:.38,
+  DIRECT_LATERAL_ASSIST_LOW:.58,
+  DIRECT_LATERAL_ASSIST_HIGH:.52,
+  MAX_LATERAL_LOW:9.40,
+  MAX_LATERAL_HIGH:11.20,
+  LATERAL_RESPONSE_LOW:14.0,
+  LATERAL_RESPONSE_HIGH:10.5,
   AIR_LATERAL_LOW:5.8,
   AIR_LATERAL_HIGH:7.0,
   AIR_TURN_LOW:.82,
@@ -129,10 +137,12 @@ function stepGameplayVelocity(state,dt,{powered=false,carveLoad=0,powerslideAmou
 
 function animate(state,steer=0){const s=ensureSkateboardState(state);if(s.grindState==='active')s.animationState='grind';else if(state.air)s.animationState='air';else if(s.powerslide)s.animationState='powerslide';else if(s.manualMode)s.animationState=s.manualMode;else if(Math.abs(steer)>.12)s.animationState=steer<0?'carveLeft':'carveRight';else s.animationState=s.pushIntensity>.06?'push':'idle';return s.animationState;}
 
-export function stepSkateboardSteering(state,input,dt,{powered=false,wetness=0}={}){
+export function stepSkateboardSteering(state,input,dt,{powered=false,wetness=0,powerslideIntent=false}={}){
   const s=ensureSkateboardState(state),setup=getSkateboardSetupProfile(state.skateSetup),p=getRideProfile(state.rideMode);
   const span=Math.max(.001,p.maxSpeed-p.baseSpeed),speed01=clamp((state.speed-p.baseSpeed)/span,0,1);
-  const steer=Math.abs(input)<T.INPUT_DEADZONE?0:clamp(input,-1,1),frame=Math.max(0,Number(dt)||0);
+  const rawSteer=Math.abs(input)<T.INPUT_DEADZONE?0:clamp(input,-1,1);
+  const steer=rawSteer===0?0:Math.sign(rawSteer)*Math.pow(Math.abs(rawSteer),T.STEER_CURVE_EXPONENT);
+  const frame=Math.max(0,Number(dt)||0);
   const oil=clamp((state.oilSlipTime||0)/Math.max(.001,T.OIL_SLIP_SECONDS),0,1);
   state.landingGripLoss=Math.max(0,(state.landingGripLoss||0)-frame*SKATEBOARD_TUNING.LANDING_GRIP_RECOVERY);
   state.oilSlipTime=Math.max(0,(state.oilSlipTime||0)-frame);
@@ -170,8 +180,9 @@ export function stepSkateboardSteering(state,input,dt,{powered=false,wetness=0}=
   const surface=lerp(1,SKATEBOARD_TUNING.WET_GRIP,clamp(wetness,0,1))*lerp(1,SKATEBOARD_TUNING.OIL_GRIP,oil)*landing*(powered?SKATEBOARD_TUNING.POWER_GRIP:1);
   const rolling=clamp(lerp(SKATEBOARD_TUNING.ROLLING_GRIP_LOW,SKATEBOARD_TUNING.ROLLING_GRIP_HIGH,speed01)*surface,.22,1.08);
   const before=s.powerslide;
-  const wantsEntry=speed01>=SKATEBOARD_TUNING.POWERSLIDE_SPEED01&&Math.abs(steer)>=SKATEBOARD_TUNING.POWERSLIDE_ENTRY_STEER&&Math.abs(state.edge)>=SKATEBOARD_TUNING.POWERSLIDE_ENTRY_EDGE&&oil<.82;
-  const wantsHold=before&&speed01>=SKATEBOARD_TUNING.POWERSLIDE_SPEED01*.8&&Math.abs(steer)>=SKATEBOARD_TUNING.POWERSLIDE_HOLD_STEER&&Math.abs(state.edge)>=SKATEBOARD_TUNING.POWERSLIDE_HOLD_EDGE&&oil<.90;
+  const slideRequested=!!powerslideIntent;
+  const wantsEntry=slideRequested&&speed01>=SKATEBOARD_TUNING.POWERSLIDE_SPEED01&&Math.abs(steer)>=SKATEBOARD_TUNING.POWERSLIDE_ENTRY_STEER&&Math.abs(state.edge)>=SKATEBOARD_TUNING.POWERSLIDE_ENTRY_EDGE&&oil<.82;
+  const wantsHold=before&&slideRequested&&speed01>=SKATEBOARD_TUNING.POWERSLIDE_SPEED01*.8&&Math.abs(steer)>=SKATEBOARD_TUNING.POWERSLIDE_HOLD_STEER&&Math.abs(state.edge)>=SKATEBOARD_TUNING.POWERSLIDE_HOLD_EDGE&&oil<.90;
   const wanted=wantsEntry||wantsHold;
   s.powerslideAmount=damp(s.powerslideAmount,wanted?1:0,wanted?SKATEBOARD_TUNING.POWERSLIDE_ENTRY_RESPONSE:SKATEBOARD_TUNING.POWERSLIDE_EXIT_RESPONSE,frame);
   s.powerslide=s.powerslideAmount>.28;
@@ -198,7 +209,8 @@ export function stepSkateboardSteering(state,input,dt,{powered=false,wetness=0}=
   const hlim=lerp(SKATEBOARD_TUNING.HEADING_LOW,SKATEBOARD_TUNING.HEADING_HIGH,speed01);
   const turn=state.edge*lerp(SKATEBOARD_TUNING.TURN_RATE_LOW,SKATEBOARD_TUNING.TURN_RATE_HIGH,speed01)*setup.carveAuthority*(.72+s.lateralGrip*.38);
   const reversingTurn=turn&&state.turnRate&&Math.sign(turn)!==Math.sign(state.turnRate);
-  state.turnRate=damp(state.turnRate,turn,reversingTurn?9.4:6.8,frame);
+  const turnResponse=lerp(SKATEBOARD_TUNING.TURN_RESPONSE_LOW,SKATEBOARD_TUNING.TURN_RESPONSE_HIGH,speed01);
+  state.turnRate=damp(state.turnRate,turn,reversingTurn?turnResponse*SKATEBOARD_TUNING.TURN_REVERSAL_MULTIPLIER:turnResponse,frame);
   state.heading=clamp(state.heading+state.turnRate*frame,-hlim,hlim);
   if(oil>.01){
     const lateralMomentum=clamp((state.vx||0)/Math.max(1,SKATEBOARD_TUNING.MAX_LATERAL_HIGH),-1,1);
@@ -210,9 +222,12 @@ export function stepSkateboardSteering(state,input,dt,{powered=false,wetness=0}=
   }
 
   const normalizedHeading=clamp(state.heading/Math.max(.001,hlim),-1,1);
+  const directAssist=lerp(SKATEBOARD_TUNING.DIRECT_LATERAL_ASSIST_LOW,SKATEBOARD_TUNING.DIRECT_LATERAL_ASSIST_HIGH,speed01);
+  const lateralIntent=clamp(normalizedHeading+state.edge*directAssist,-1,1);
   const maxLateral=lerp(SKATEBOARD_TUNING.MAX_LATERAL_LOW,SKATEBOARD_TUNING.MAX_LATERAL_HIGH,speed01)*setup.carveAuthority;
-  const targetVx=normalizedHeading*maxLateral*(s.powerslide?1.16:1);
-  state.vx=damp(state.vx,targetVx,lerp(8.8,6.4,speed01)*lerp(.46,1,s.lateralGrip),frame);
+  const targetVx=lateralIntent*maxLateral*(s.powerslide?1.10:1);
+  const lateralResponse=lerp(SKATEBOARD_TUNING.LATERAL_RESPONSE_LOW,SKATEBOARD_TUNING.LATERAL_RESPONSE_HIGH,speed01)*lerp(.58,1,s.lateralGrip);
+  state.vx=damp(state.vx,targetVx,lateralResponse,frame);
   state.x=clamp(state.x+state.vx*frame,-T.PLAYER_BOUNDARY_HALF_WIDTH,T.PLAYER_BOUNDARY_HALF_WIDTH);
 
   stepGameplayVelocity(state,frame,{powered,carveLoad:state.carveLoad,powerslideAmount:s.powerslideAmount});

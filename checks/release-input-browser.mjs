@@ -143,7 +143,7 @@ try{
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='crashed';},null,{timeout:5000});
   const resultsShown=await controllerPage.evaluate(()=>window.__urbanReleaseTest?.showCrashResults?.()===true);
   assert.equal(resultsShown,true,'crash results could not be surfaced');
-  await controllerPage.locator('#results-overlay').waitFor({state:'visible',timeout:5000});
+  await controllerPage.locator('#result-overlay').waitFor({state:'visible',timeout:5000});
   await controllerPage.waitForFunction(()=>document.activeElement?.id==='restart-result',null,{timeout:5000});
   await pulse(controllerPage,0);
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:30000});

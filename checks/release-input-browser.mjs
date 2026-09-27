@@ -159,11 +159,14 @@ try{
   assert(diag?.inputState?.touchTricks?.includes('360'),'touch trick did not reach semantic input');
   await trick.dispatchEvent('pointerup',{pointerId:43,pointerType:'touch'});
 
-  const beforePower=(await runtime(touchPage))?.bananaPowerUses??0;
-  await touchPage.locator('#touch-special').dispatchEvent('pointerdown',{pointerId:44,pointerType:'touch'});
+  const powerQueued=await touchPage.evaluate(()=>{
+    const button=document.querySelector('#touch-special');
+    button?.dispatchEvent(new PointerEvent('pointerdown',{pointerId:44,pointerType:'touch',bubbles:true}));
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return d?.inputState?.specialQueued===true;
+  });
+  assert.equal(powerQueued,true,'touch Banana Power button did not queue the semantic special action');
   await touchPage.waitForTimeout(120);
-  const afterPower=(await runtime(touchPage))?.bananaPowerUses??0;
-  assert(afterPower>=beforePower,'touch Banana Power action regressed');
 
   await touchPage.locator('#touch-pause').dispatchEvent('pointerdown',{pointerId:45,pointerType:'touch'});
   await touchPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='paused';},null,{timeout:5000});

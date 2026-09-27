@@ -842,11 +842,13 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
           steer:rawCarve,
           air:!!state.air,
           time:state.time??0,
+          trickType:state.trickType??'',
+          trickProgress:state.trickProgress??0,
           landing:THREE.MathUtils.clamp(state.landing||0,0,1),
           powerslide:state.powerslideAmount??Number(!!state.powerslide),
           roadRoughness:state.roadRoughness??(Number(state.roadWetness)>0 ? .16 : .28),
           reducedMotion:!!state.reducedMotion,
-          externalPose:true
+          externalPose:!!skateAnimator?.active
         });
         skateAnimator?.update(state);
       }else updateRig?.(state);
@@ -867,7 +869,18 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       const rightGround=state.rightGround??state.centerGround??0;
       const centerGround=state.centerGround??0;
 
-      if(!snowboardMode){
+      if(snowboardMode&&!skateAnimator){
+        // Local GLBs without a compatible leg rig keep a safe board-only
+        // visual fallback rather than losing terrain/contact response.
+        const board=snowboard.root;
+        const rest=board.userData.restPosition;
+        board.rotation.y=mix(board.rotation.y,-carve*.040,.18);
+        board.rotation.z=mix(board.rotation.z,-carve*.085+groundRoll*.16,.18);
+        board.rotation.x=mix(board.rotation.x,ascent*.095*airScale+apex*.020-descent*.072*airScale-landing*.026+groundPitch*.28,.18);
+        board.position.x=mix(board.position.x,rest.x,.18);
+        board.position.y=mix(board.position.y,rest.y+air*.026-landing*.012-speed*.004,.18);
+        board.position.z=mix(board.position.z,rest.z+air*.012,.18);
+      }else if(!snowboardMode){
         skis.forEach((ski,index)=>{
           const side=index===0?-1:1;
           const rest=ski.userData.restPosition;

@@ -108,14 +108,14 @@ app.innerHTML=`
     <section class="card" aria-labelledby="game-title">
       <div class="badge">🌆 URBAN ARCADE</div>
       <h1 class="logo" id="game-title">CHIMPIONS <span>URBAN SPORTS</span></h1>
-      <p class="tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
+      <p class="tagline" data-i18n="menu.tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
       <div class="selected-avatar" id="selected-avatar">
         <span class="selected-avatar-image" id="selected-avatar-image">🐵</span>
-        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD</em></span>
+        <span><small data-i18n="menu.yourRider">YOUR RIDER</small><strong id="selected-avatar-name" data-i18n="menu.loadingRider">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD</em></span>
       </div>
       <div class="menu-actions">
-        <button class="secondary" id="choose" aria-label="Choose Chimpion" disabled>CHOOSE CHIMPION</button>
-        <button class="primary" id="start" aria-label="Start riding" disabled>LOADING CHIMPION…</button>
+        <button class="secondary" id="choose" aria-label="Choose Chimpion" data-i18n="menu.chooseRider" disabled>CHOOSE CHIMPION</button>
+        <button class="primary" id="start" aria-label="Start riding" data-i18n="menu.loadingRider" disabled>LOADING CHIMPION…</button>
       </div>
       <div class="tip">A / D or LEFT STICK / D-PAD · CARVE &nbsp; · &nbsp; SPACE / A · CROSS · JUMP &nbsp; · &nbsp; ESC / START · MENU · PAUSE</div>
     </section>
@@ -840,7 +840,7 @@ const startScreen=createStartScreen({
 startScreen.setReady(false);
 ui.setAvatarLoading(true);
 
-function syncRideModePresentation(){
+function syncSportPresentation(){
   const sportProfile=getSportProfile(selectedSportMode);
   const label=document.getElementById('selected-ride-mode');
   if(label)label.textContent=sportProfile.label;
@@ -901,7 +901,7 @@ async function setAvatar(entry,rideMode=selectedRideMode){
     audio.setRideMode?.(selectedRideMode);
     riderController.setRideMode(selectedRideMode);
     applyRideProfileToState(selectedRideMode,{resetSpeed:state.mode==='menu'});
-    syncRideModePresentation();
+    syncSportPresentation();
     selector?.setSelected(entry,selectedRideMode);
     return;
   }
@@ -936,7 +936,7 @@ async function setAvatar(entry,rideMode=selectedRideMode){
     riderController.setRideMode(selectedRideMode);
     applyRideProfileToState(selectedRideMode,{resetSpeed:state.mode==='menu'});
     ui.setAvatar(entry);
-    syncRideModePresentation();
+    syncSportPresentation();
     selector?.setSelected(entry,selectedRideMode);
   }catch(error){
     if(error?.name!=='AbortError')throw error;
@@ -1000,7 +1000,7 @@ function installAvatarSelector(initialAvatar){
   selectedAvatar=initialAvatar;
   avatarCommitted=false;
   ui.setAvatar(initialAvatar);
-  syncRideModePresentation();
+  syncSportPresentation();
   installAvatarSelector(initialAvatar);
 })();
 
@@ -1220,7 +1220,7 @@ function crash(kind='tree',item=null){
       ?skateboardDisplaySpeedKmh(state.maxRunSpeed||state.speed,state.rideMode)
       :speedToKmh(state.maxRunSpeed||state.speed),
     bestCombo:state.bestCombo||0,
-    rideMode:state.rideMode,
+    sportMode:selectedSportMode,
     runSeed:state.runSeed,
     nearMisses:state.nearMisses||0,
     tricksLanded:state.tricksLanded||0,

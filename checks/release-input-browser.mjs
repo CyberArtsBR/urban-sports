@@ -64,19 +64,27 @@ try{
   await controllerPage.locator('#chimpion-selector').waitFor({state:'visible',timeout:5000});
 
   assert.equal(await controllerPage.evaluate(()=>document.activeElement?.id),'chimpion-search','selector should begin at the search field');
-  await axisPulse(controllerPage,1,.92);
-  const gridEntryFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  assert.equal(gridEntryFocus,'0','analog DOWN did not enter the rider grid at the first card');
+  // menuInputRepeat intentionally rearms only after a neutral frame. Give the
+  // just-opened modal that neutral poll before asserting controller movement.
+  await controllerPage.evaluate(()=>window.__releasePad.neutral());
+  await controllerPage.waitForTimeout(250);
 
-  await axisPulse(controllerPage,0,.92);
-  const analogFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  assert.equal(analogFocus,'1','analog RIGHT did not move exactly one rider card');
+  await controllerPage.evaluate(()=>window.__releasePad.axis(1,.92));
+  await controllerPage.waitForFunction(()=>document.activeElement?.dataset?.filterIndex==='0',null,{timeout:5000});
+  await controllerPage.evaluate(()=>window.__releasePad.axis(1,0));
+  await controllerPage.waitForTimeout(120);
+
+  await controllerPage.evaluate(()=>window.__releasePad.axis(0,.92));
+  await controllerPage.waitForFunction(()=>document.activeElement?.dataset?.filterIndex==='1',null,{timeout:5000});
+  await controllerPage.evaluate(()=>window.__releasePad.axis(0,0));
   await controllerPage.waitForTimeout(180);
-  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),'1','single analog pulse double-navigated');
+  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),'1','single analog navigation double-moved after release');
 
-  await pulse(controllerPage,15);
-  const dpadFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  assert.equal(dpadFocus,'2','D-pad RIGHT did not move exactly one rider card');
+  await controllerPage.evaluate(()=>window.__releasePad.press(15));
+  await controllerPage.waitForFunction(()=>document.activeElement?.dataset?.filterIndex==='2',null,{timeout:5000});
+  await controllerPage.evaluate(()=>window.__releasePad.release(15));
+  await controllerPage.waitForTimeout(120);
+  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),'2','single D-pad navigation double-moved after release');
 
   await pulse(controllerPage,0);
   await controllerPage.waitForFunction(()=>!document.querySelector('#ride-mode-step')?.hidden,null,{timeout:10000});

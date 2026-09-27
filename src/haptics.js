@@ -125,6 +125,7 @@ export function createHaptics({getActiveGamepad=null,enabled=true,intensity=HAPT
   }
 
   function play(pattern,{lock=true,intensity:amount=1}={}){
+    if(!hapticsEnabled)return false;
     const scale=preferenceScale();
     if(scale<=0)return false;
     const safe=safePattern(pattern,amount,scale);

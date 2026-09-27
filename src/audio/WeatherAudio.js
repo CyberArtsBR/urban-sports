@@ -2,20 +2,23 @@ import {makeNoiseBuffer} from './AudioMixer.js';
 const clamp=(value,min=0,max=1)=>Math.max(min,Math.min(max,Number(value)||0));
 
 export function createWeatherAudio({mixer,emitSemantic=()=>{}}={}){
-  let graph=null,noise=null,lastUpdate=-1,disposed=false;
+  let graph=null,thunderNoise=null,lastUpdate=-1,disposed=false;
   const activeThunder=new Set();
 
   function ensure(){
     if(graph||disposed)return graph;
     const context=mixer?.getContext?.(),mix=mixer?.getGraph?.();
     if(!context||!mix)return null;
-    noise=makeNoiseBuffer(context,4.1,32941);
-    const layer=(type,frequency,q=.4)=>{
+    const layer=(seed,duration,type,frequency,q=.4)=>{
       const source=context.createBufferSource(),filter=context.createBiquadFilter(),gain=context.createGain();
-      source.buffer=noise;source.loop=true;filter.type=type;filter.frequency.value=frequency;filter.Q.value=q;gain.gain.value=0;
+      source.buffer=makeNoiseBuffer(context,duration,seed);source.loop=true;filter.type=type;filter.frequency.value=frequency;filter.Q.value=q;gain.gain.value=0;
       source.connect(filter);filter.connect(gain);gain.connect(mix.sfxBus);source.start();return {source,filter,gain};
     };
-    graph={rain:layer('highpass',1500,.34),wind:layer('lowpass',430,.42)};
+    thunderNoise=makeNoiseBuffer(context,4.43,32941);
+    graph={
+      rain:layer(51293,4.73,'highpass',1500,.34),
+      wind:layer(88417,6.19,'lowpass',430,.42)
+    };
     return graph;
   }
 
@@ -31,7 +34,7 @@ export function createWeatherAudio({mixer,emitSemantic=()=>{}}={}){
     const g=ensure(),context=mixer?.getContext?.(),mix=mixer?.getGraph?.();
     if(!g||!context||!mix||activeThunder.size>=2||globalThis.document?.hidden)return false;
     const source=context.createBufferSource(),filter=context.createBiquadFilter(),gain=context.createGain(),t=context.currentTime;
-    source.buffer=noise;filter.type='lowpass';filter.frequency.setValueAtTime(360,t);filter.frequency.exponentialRampToValueAtTime(70,t+3.0);
+    source.buffer=thunderNoise;filter.type='lowpass';filter.frequency.setValueAtTime(360,t);filter.frequency.exponentialRampToValueAtTime(70,t+3.0);
     const peak=Math.min(.72,clamp(intensity)*.72*clamp(intensityScale));
     gain.gain.setValueAtTime(.0001,t);gain.gain.exponentialRampToValueAtTime(Math.max(.001,peak),t+.08);gain.gain.exponentialRampToValueAtTime(.12,t+.75);gain.gain.exponentialRampToValueAtTime(.001,t+3.35);
     source.connect(filter);filter.connect(gain);gain.connect(mix.sfxBus);activeThunder.add(source);
@@ -47,7 +50,7 @@ export function createWeatherAudio({mixer,emitSemantic=()=>{}}={}){
     for(const source of activeThunder){try{source.stop();source.disconnect();}catch{}}
     activeThunder.clear();
     for(const layer of graph?[graph.rain,graph.wind]:[]){try{layer.source.stop();layer.source.disconnect();layer.filter.disconnect();layer.gain.disconnect();}catch{}}
-    graph=null;noise=null;
+    graph=null;thunderNoise=null;
   }
   return {update,playThunder,silence,reset,diagnostics,dispose};
 }

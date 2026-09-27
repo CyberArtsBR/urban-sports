@@ -1869,7 +1869,16 @@ window.chimpionsUrbanSports.pollSkateboardEvents=()=>consumeSkateboardEvents(sta
 if(runtimeTestMode){
   window.__urbanReleaseTest=Object.freeze({
     forceCrash:(kind='test')=>crash(kind),
-    showCrashResults:()=>showCrashResults('release-test')
+    showCrashResults:()=>showCrashResults('release-test'),
+    switchBuiltinAvatar:async index=>{
+      const builtins=catalog.filter(entry=>entry&&!entry.localOnly);
+      if(!builtins.length)return false;
+      const normalized=((Math.trunc(Number(index)||0)%builtins.length)+builtins.length)%builtins.length;
+      const entry=builtins[normalized];
+      await setAvatar(entry);
+      return selectedAvatar?.id===entry.id;
+    },
+    builtinAvatarCount:()=>catalog.filter(entry=>entry&&!entry.localOnly).length
   });
 }
 

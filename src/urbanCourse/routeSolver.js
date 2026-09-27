@@ -25,17 +25,19 @@ export function solveCourseSectionRoute({
     checkpoints.push({z:p.decisionZ,x:p.safeX});
   }
   checkpoints.sort((a,b)=>b.z-a.z);
-  let previous={z:startZ,x:startX};
+  let previous=null;
   let maxRequiredLateralTransition=0;
   let tightestReachRatio=0;
   let impossibleCheckpoint=null;
   for(const point of checkpoints){
-    const required=Math.abs(point.x-previous.x);
-    const reachable=maxHumanReachableLateralDelta(point.z-previous.z,speed);
-    const ratio=reachable>1e-6?required/reachable:(required>1e-6?Infinity:0);
-    maxRequiredLateralTransition=Math.max(maxRequiredLateralTransition,required);
-    tightestReachRatio=Math.max(tightestReachRatio,ratio);
-    if(!impossibleCheckpoint&&required>reachable+.001)impossibleCheckpoint={...point,required,reachable};
+    if(previous){
+      const required=Math.abs(point.x-previous.x);
+      const reachable=maxHumanReachableLateralDelta(point.z-previous.z,speed);
+      const ratio=reachable>1e-6?required/reachable:(required>1e-6?Infinity:0);
+      maxRequiredLateralTransition=Math.max(maxRequiredLateralTransition,required);
+      tightestReachRatio=Math.max(tightestReachRatio,ratio);
+      if(!impossibleCheckpoint&&required>reachable+.001)impossibleCheckpoint={...point,required,reachable};
+    }
     previous=point;
   }
   return Object.freeze({

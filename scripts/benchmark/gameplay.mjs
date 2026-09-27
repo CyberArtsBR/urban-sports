@@ -26,35 +26,71 @@ async function completeStartSelectionIfNeeded(page){
   const avatar=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
     if(!dialog?.open)return {ok:false,reason:'Selector is not open'};
-    const card=dialog.querySelector('.chimpion-card.is-selected:not(.is-upload-avatar):not([aria-disabled="true"])')||dialog.querySelector('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])');
+    const card=dialog.querySelector('.chimpion-card.is-selected:not(.is-upload-avatar):not([aria-disabled="true"])')||
+      dialog.querySelector('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])');
     if(!card)return {ok:false,reason:'No Chimpion card is rendered'};
     card.click();
     return {ok:true,avatarId:card.dataset.avatarId||null};
   });
   if(!avatar.ok)return {status:'PENDING',reason:avatar.reason};
 
+  // Urban v2 completes rider selection directly unless gameplay supplies a
+  // genuine Skateboard setup contract. Keep legacy ride-step support here only
+  // so performance comparisons can still drive an older baseline build.
   try{
     await page.waitForFunction(()=>{
-      const step=document.querySelector('#ride-mode-step');
-      return !!step&&!step.hidden;
-    },undefined,{timeout:5000});
-  }catch{return {status:'PENDING',reason:'Ride-mode step did not open after selecting a Chimpion'};}
+      const dialog=document.querySelector('#chimpion-selector');
+      const setup=document.querySelector('#skateboard-setup-step');
+      const legacy=document.querySelector('#ride-mode-step');
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      return !dialog?.open||
+        (!!setup&&!setup.hidden)||
+        (!!legacy&&!legacy.hidden)||
+        d?.mode==='countdown'||
+        d?.mode==='playing'||
+        !!document.querySelector('.session-tutorial:not([hidden])');
+    },undefined,{timeout:20_000});
+  }catch{return {status:'PENDING',reason:'Rider selection did not advance to gameplay or a setup step'};}
 
-  const ride=await page.evaluate(()=>{
+  const next=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
-    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-    const current=String(d?.rideMode||'snowboard').toLowerCase();
-    const button=
-      dialog?.querySelector('.ride-mode-card.is-selected')||
-      dialog?.querySelector('.ride-mode-card[data-ride-mode="'+current+'"]')||
-      dialog?.querySelector('.ride-mode-card');
-    if(!button)return {ok:false,reason:'No ride-mode control is rendered'};
-    const rideMode=button.dataset.rideMode||null;
-    button.click();
-    return {ok:true,rideMode};
+    if(!dialog?.open)return {ok:true,flow:'direct-rider'};
+
+    const setup=document.querySelector('#skateboard-setup-step');
+    if(setup&&!setup.hidden){
+      const button=setup.querySelector('.skateboard-setup-card:not([disabled])');
+      if(!button)return {ok:false,reason:'Gameplay setup step has no enabled profile'};
+      const setupId=button.dataset.setupId||null;
+      button.click();
+      return {ok:true,flow:'gameplay-setup',setupId};
+    }
+
+    const legacy=document.querySelector('#ride-mode-step');
+    if(legacy&&!legacy.hidden){
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      const current=String(d?.rideMode||'snowboard').toLowerCase();
+      const button=
+        legacy.querySelector('.ride-mode-card.is-selected')||
+        legacy.querySelector('.ride-mode-card[data-ride-mode="'+current+'"]')||
+        legacy.querySelector('.ride-mode-card');
+      if(!button)return {ok:false,reason:'Legacy baseline ride step has no enabled control'};
+      const rideMode=button.dataset.rideMode||null;
+      button.click();
+      return {ok:true,flow:'legacy-ride',rideMode};
+    }
+
+    return {ok:true,flow:'runtime-transition'};
   });
-  if(!ride.ok)return {status:'PENDING',reason:ride.reason};
-  return {status:'PASS',selectionRequired:true,avatarId:avatar.avatarId,rideMode:ride.rideMode};
+  if(!next.ok)return {status:'PENDING',reason:next.reason};
+
+  return {
+    status:'PASS',
+    selectionRequired:true,
+    avatarId:avatar.avatarId,
+    flow:next.flow,
+    setupId:next.setupId||null,
+    rideMode:next.rideMode||null
+  };
 }
 
 async function clickStart(page){

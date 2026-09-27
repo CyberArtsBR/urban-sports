@@ -194,12 +194,27 @@ try{
   await touchPage.locator('#touch-pause').dispatchEvent('pointerdown',{pointerId:45,pointerType:'touch'});
   await touchPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='paused';},null,{timeout:5000});
 
-  const orientation=await touchPage.evaluate(()=>{
+  const landscapeLayout=await touchPage.evaluate(()=>{
+    const steer=document.querySelector('#touch-steer-zone')?.getBoundingClientRect();
+    const pause=document.querySelector('#touch-pause')?.getBoundingClientRect();
+    return {
+      steerLeft:steer?.left??-1,
+      pauseRight:pause?innerWidth-pause.right:-1
+    };
+  });
+  assert(landscapeLayout.steerLeft>=8,'touch steering ignored the left safe inset');
+  assert(landscapeLayout.pauseRight>=8,'touch pause ignored the right safe inset');
+
+  await touchPage.setViewportSize({width:390,height:844});
+  await touchPage.waitForTimeout(120);
+  const portraitHint=await touchPage.evaluate(()=>{
     const hint=document.querySelector('.touch-orientation-hint');
+    if(!hint)return null;
     const css=getComputedStyle(hint);
     return {display:css.display,visibility:css.visibility};
   });
-  assert(orientation.display!==undefined,'touch orientation hint is missing');
+  assert(portraitHint&&portraitHint.display!=='none'&&portraitHint.visibility!=='hidden','portrait orientation hint is not visible');
+  await touchPage.setViewportSize({width:844,height:390});
 }finally{
   await touchContext.close();
   await browser.close();
@@ -208,5 +223,5 @@ try{
 console.log(JSON.stringify({
   check:'release-input-browser',
   controller:['start A/Cross','analog navigation','D-pad navigation','no double navigation','B/Circle','Start','pause','settings','selector','disconnect/reconnect','crash','results','results restart'],
-  touch:['steering','jump','trick','Banana Power','pause','pointercancel','multi-touch','orientation layout']
+  touch:['steering','jump','trick','Banana Power','pause','pointercancel','multi-touch','portrait orientation','safe-area inset layout']
 }));

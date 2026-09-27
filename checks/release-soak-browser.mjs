@@ -63,6 +63,15 @@ function snapshotScript(){
   };
 }
 
+async function setSelect(id,value){
+  await page.evaluate(({id,value})=>{
+    const element=document.getElementById(id);
+    if(!element)throw new Error('Missing select #'+id);
+    element.value=value;
+    element.dispatchEvent(new Event('change',{bubbles:true}));
+  },{id,value});
+}
+
 const samples=[];
 try{
   await page.goto(releaseTargetUrl(BASE_URL,{quality:'high',weather:'rain',seed:'release-soak'}),{
@@ -72,11 +81,11 @@ try{
   await page.waitForTimeout(1200);
 
   for(const weather of ['day','rain','storm','night']){
-    await page.locator('#atmosphere-mode').selectOption(weather);
+    await setSelect('atmosphere-mode',weather);
     await page.waitForTimeout(300);
   }
   for(const quality of ['low','medium','high','max','high']){
-    await page.locator('#atmosphere-quality').selectOption(quality);
+    await setSelect('atmosphere-quality',quality);
     await page.waitForTimeout(300);
   }
 
@@ -111,8 +120,8 @@ try{
 
     const nextQuality=['low','medium','high','max'][i%4];
     const nextWeather=['day','rain','storm','night'][i%4];
-    await page.locator('#atmosphere-quality').selectOption(nextQuality);
-    await page.locator('#atmosphere-mode').selectOption(nextWeather);
+    await setSelect('atmosphere-quality',nextQuality);
+    await setSelect('atmosphere-mode',nextWeather);
 
     await page.evaluate(()=>{
       window.__releasePad?.neutral();
@@ -128,8 +137,8 @@ try{
     samples.push(await page.evaluate(snapshotScript));
   }
 
-  await page.locator('#atmosphere-quality').selectOption('high');
-  await page.locator('#atmosphere-mode').selectOption('rain');
+  await setSelect('atmosphere-quality','high');
+  await setSelect('atmosphere-mode','rain');
   await page.waitForTimeout(1000);
   const final=await page.evaluate(snapshotScript);
   samples.push(final);

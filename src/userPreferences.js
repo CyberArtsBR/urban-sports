@@ -97,7 +97,7 @@ export function loadUserPreferences(){
     avatarName:readCompat(KEYS.avatar,LEGACY_KEYS.avatar,''),
     rideMode:normalizedChoice(readCompat(KEYS.rideMode,LEGACY_KEYS.rideMode,'ski'),['ski','snowboard'],'ski'),
     quality:normalizedChoice(readCompat(KEYS.quality,LEGACY_KEYS.quality,'auto'),['auto','high','max','medium','low'],'auto'),
-    cameraMotion:normalizedChoice(readCompat(KEYS.cameraMotion,LEGACY_KEYS.cameraMotion,CAMERA_MOTION.FULL),Object.values(CAMERA_MOTION),CAMERA_MOTION.FULL),
+    cameraMotion:normalizedChoice(readCompat(KEYS.cameraMotion,LEGACY_KEYS.cameraMotion,CAMERA_MOTION.AUTO),Object.values(CAMERA_MOTION),CAMERA_MOTION.AUTO),
     cameraView:normalizedChoice(readCompat(KEYS.cameraView,LEGACY_KEYS.cameraView,CAMERA_VIEW.CHASE),Object.values(CAMERA_VIEW),CAMERA_VIEW.CHASE),
     haptics:readCompat(KEYS.haptics,LEGACY_KEYS.haptics,'1')!=='0',
     locale,

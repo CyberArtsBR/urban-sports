@@ -982,5 +982,19 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   }
 
   configure(currentSettings);
-  return {configure,resize,setContext,render,getDiagnostics,dispose,get active(){return active&&!!composer&&!contextLost;}};
+  return {
+    configure,
+    resize,
+    setContext,
+    render,
+    getDiagnostics,
+    dispose,
+    // "active" means composition is requested and may be (re)built. It must
+    // not require an existing composer, otherwise a fail-open frame that
+    // disposes the HDR composer can never enter render() again to rebuild on
+    // the byte target after black output or context restoration.
+    get active(){
+      return currentSettings.profile===CINEMATIC_PROFILE&&!failed&&!contextLost;
+    }
+  };
 }

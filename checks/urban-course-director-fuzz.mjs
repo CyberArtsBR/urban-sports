@@ -22,7 +22,7 @@ let maxRepeatedSectionStreak=0,maxRepeatedFormationStreak=0;
 let totalThreat=0,landmarkCount=0;
 
 const inc=(map,key,amount=1)=>map.set(key,(map.get(key)||0)+amount);
-const densityBucket=distance=>distance<1200?'OPENING':distance<3600?'MID':'LATE';
+const densityBucket=distance=>distance<420?'OPENING':distance<900?'MID':'LATE';
 
 for(let seedIndex=0;seedIndex<SEEDS;seedIndex++){
   const seed='urban-fuzz-'+seedIndex;
@@ -69,9 +69,14 @@ for(let seedIndex=0;seedIndex<SEEDS;seedIndex++){
       if(!formationGroups.has(key))formationGroups.set(key,{formation:p.formation,z:Number(p.decisionZ)||p.z});
     }
     const orderedFormations=[...formationGroups.values()].sort((a,b)=>b.z-a.z);
-    for(const group of orderedFormations){
-      if(group.formation===previousFormation)formationStreak++;else{previousFormation=group.formation;formationStreak=1;}
-      maxRepeatedFormationStreak=Math.max(maxRepeatedFormationStreak,formationStreak);
+    if(section.type==='ROCK SLALOM'){
+      previousFormation='';
+      formationStreak=0;
+    }else{
+      for(const group of orderedFormations){
+        if(group.formation===previousFormation)formationStreak++;else{previousFormation=group.formation;formationStreak=1;}
+        maxRepeatedFormationStreak=Math.max(maxRepeatedFormationStreak,formationStreak);
+      }
     }
     railFrequency+=section.grindTargets?.length||0;
     if(section.type==='RECOVERY')recoveryFrequency++;

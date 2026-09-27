@@ -14,6 +14,23 @@ export const URBAN_DISTRICT_IDS=Object.freeze([
   'INDUSTRIAL_ZONE','WATERFRONT','ALLEY_DISTRICT','ENTERTAINMENT_NIGHT'
 ]);
 
+const DISTRICT_ALIASES=Object.freeze({
+  DOWNTOWN:'DOWNTOWN',
+  COMMERCIAL:'COMMERCIAL_AVENUE',
+  COMMERCIAL_AVENUE:'COMMERCIAL_AVENUE',
+  CONSTRUCTION:'CONSTRUCTION_DISTRICT',
+  CONSTRUCTION_DISTRICT:'CONSTRUCTION_DISTRICT',
+  PLAZA:'PLAZA',
+  EVENT:'PLAZA',
+  INDUSTRIAL:'INDUSTRIAL_ZONE',
+  INDUSTRIAL_ZONE:'INDUSTRIAL_ZONE',
+  WATERFRONT:'WATERFRONT',
+  ALLEY:'ALLEY_DISTRICT',
+  ALLEY_DISTRICT:'ALLEY_DISTRICT',
+  ENTERTAINMENT:'ENTERTAINMENT_NIGHT',
+  ENTERTAINMENT_NIGHT:'ENTERTAINMENT_NIGHT'
+});
+
 export const URBAN_DISTRICT_PROFILES=Object.freeze({
   DOWNTOWN:Object.freeze({
     catalogAffinities:Object.freeze(['DOWNTOWN','COMMERCIAL']),
@@ -236,6 +253,8 @@ export function createUrbanCourseDirector({seed=null,random:externalRandom=Math.
   let recentSections=[];
   let recentFamilies=[];
   let recentDistricts=[];
+  let recentFeatureKinds=[];
+  let recentObstacleSignatures=[];
   let currentDistrict='DOWNTOWN';
   let districtRemaining=0;
   let previousFamily='RECOVERY_STREET';
@@ -243,8 +262,19 @@ export function createUrbanCourseDirector({seed=null,random:externalRandom=Math.
 
   function pushRecent(list,value,max){list.push(value);if(list.length>max)list.shift();}
 
-  function chooseDistrict(sectionIndex){
-    if(sectionIndex<4){currentDistrict='DOWNTOWN';districtRemaining=Math.max(districtRemaining,4-sectionIndex);return currentDistrict;}
+  function chooseDistrict(sectionIndex,requestedDistrict=null){
+    const requested=DISTRICT_ALIASES[String(requestedDistrict||'').toUpperCase()]||null;
+    if(requested){
+      if(requested!==currentDistrict)pushRecent(recentDistricts,requested,4);
+      currentDistrict=requested;
+      districtRemaining=0;
+      return currentDistrict;
+    }
+    if(sectionIndex<4){
+      currentDistrict='DOWNTOWN';
+      districtRemaining=Math.max(districtRemaining,4-sectionIndex);
+      return currentDistrict;
+    }
     if(districtRemaining>0){districtRemaining--;return currentDistrict;}
     const weights=URBAN_DISTRICT_IDS.map(id=>{
       let weight=1;
@@ -264,6 +294,17 @@ export function createUrbanCourseDirector({seed=null,random:externalRandom=Math.
     if(pendingLanding)return 'RECOVERY_STREET';
     if(sectionIndex<OPENING_SCRIPT.length)return familyFor(OPENING_SCRIPT[sectionIndex]);
     const weights=URBAN_SECTION_FAMILIES.map(family=>scoreFamily(family,{difficultyModel,districtProfile,sectionIndex,random}));
+    const recentFeature=recentFeatureKinds.at(-1);
+    if(recentFeature==='RAMP'){
+      weights[URBAN_SECTION_FAMILIES.indexOf('RAMP_LINE')]*=.48;
+      weights[URBAN_SECTION_FAMILIES.indexOf('SIDEWALK_TRANSFER')]*=.58;
+    }else if(recentFeature==='RAIL'){
+      weights[URBAN_SECTION_FAMILIES.indexOf('RAIL_LINE')]*=.52;
+      weights[URBAN_SECTION_FAMILIES.indexOf('LEDGE_LINE')]*=.62;
+    }else if(recentFeature==='MIXED'){
+      weights[URBAN_SECTION_FAMILIES.indexOf('TECH_LINE')]*=.58;
+      weights[URBAN_SECTION_FAMILIES.indexOf('PLAZA')]*=.68;
+    }
     const last=recentFamilies.at(-1),previous=recentFamilies.at(-2);
     if(last){const i=URBAN_SECTION_FAMILIES.indexOf(last);if(i>=0)weights[i]*=.12;}
     if(previous){const i=URBAN_SECTION_FAMILIES.indexOf(previous);if(i>=0)weights[i]*=.54;}
@@ -317,9 +358,11 @@ export function createUrbanCourseDirector({seed=null,random:externalRandom=Math.
   }
 
   function plan({
-    sectionIndex=0,startZ=0,difficulty=0,speed=0,runTime=0,postMaxTime=0,pendingLanding=false,lastLegacyType='RECOVERY'
+    sectionIndex=0,startZ=0,difficulty=0,speed=0,runTime=0,postMaxTime=0,pendingLanding=false,
+    lastLegacyType='RECOVERY',district:requestedDistrict=null
   }={}){
-    const district=chooseDistrict(sectionIndex);
+    const previousDistrict=currentDistrict;
+    const district=chooseDistrict(sectionIndex,requestedDistrict);
     const districtProfile=URBAN_DISTRICT_PROFILES[district];
     const mode=sectionIndex<OPENING_SCRIPT.length?'FLOW':MODE_SEQUENCE[(sectionIndex+(hash((runSeed||'run')+'|wave')%MODE_SEQUENCE.length))%MODE_SEQUENCE.length];
     const difficultyModel=getUrbanDifficultyModel({
@@ -337,8 +380,8 @@ export function createUrbanCourseDirector({seed=null,random:externalRandom=Math.
       :(random()<.5?-1:1)*difficultyModel.lateralRoutePressure*.9;
     const transition=Object.freeze({
       fromFamily:previousFamily,toFamily:family,
-      fromDistrict:recentDistricts.at(-2)||district,toDistrict:district,
-      districtChanged:(recentDistricts.at(-2)||district)!==district,
+      fromDistrict:previousDistrict,toDistrict:district,
+      districtChanged:previousDistrict!==district,
       landmark
     });
     const result=Object.freeze({
@@ -357,19 +400,28 @@ export function createUrbanCourseDirector({seed=null,random:externalRandom=Math.
     return result;
   }
 
+  function noteGenerated({obstacleSignature='',hasRail=false,hasRamp=false}={}){
+    if(obstacleSignature)pushRecent(recentObstacleSignatures,String(obstacleSignature),5);
+    const feature=hasRail&&hasRamp?'MIXED':hasRail?'RAIL':hasRamp?'RAMP':'STREET';
+    pushRecent(recentFeatureKinds,feature,5);
+  }
+
   function reset({seed:nextSeed=runSeed}={}){
     runSeed=nextSeed==null?null:String(nextSeed);
     random=runSeed==null?externalRandom:createSeededRandom(runSeed+'|urban-course-v2');
     recentSections=[];recentFamilies=[];recentDistricts=[];
+    recentFeatureKinds=[];recentObstacleSignatures=[];
     currentDistrict='DOWNTOWN';districtRemaining=0;previousFamily='RECOVERY_STREET';
     landmarkCountdown=10+(hash((runSeed||'run')+'|landmark')%5);
   }
 
   return {
-    plan,reset,
+    plan,noteGenerated,reset,
     get recentSections(){return [...recentSections];},
     get recentFamilies(){return [...recentFamilies];},
     get recentDistricts(){return [...recentDistricts];},
+    get recentFeatureKinds(){return [...recentFeatureKinds];},
+    get recentObstacleSignatures(){return [...recentObstacleSignatures];},
     get district(){return currentDistrict;},
     get runSeed(){return runSeed;}
   };

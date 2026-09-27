@@ -81,9 +81,12 @@ async function clickStart(page){
     return null;
   });
   if(!action)return pending('No enabled start control was available');
-  const selection=action==='start-screen'
-    ?await completeStartSelectionIfNeeded(page)
-    :{status:'PASS',selectionRequired:false};
+  // Both the initial Start Screen and the in-game/menu Start control may
+  // enter the rider selector. The benchmark runs selector/search cycles before
+  // gameplay, so assuming only the first path needs selection leaves #start
+  // stuck in the selector until the timeout. The helper is safe for either
+  // path: it returns immediately when gameplay already started.
+  const selection=await completeStartSelectionIfNeeded(page);
   if(selection.status!=='PASS')return selection;
   try{
     await page.waitForFunction(()=>{

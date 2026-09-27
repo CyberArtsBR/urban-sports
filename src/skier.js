@@ -241,7 +241,7 @@ function createEquipmentPowerGlow(skis=[],snowboard=null){
   };
 }
 
-export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
+export function createFallbackSkier({rideMode=RIDE_MODE.SKI,skateStance='regular'}={}){
   const root=new THREE.Group();
   root.name='procedural-chimpion';
   const riderVisual=new THREE.Group();
@@ -277,6 +277,7 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
 
   const pose={carve:0,air:0,landing:0,speed:0};
   let currentRideMode=normalizeRideMode(rideMode);
+  const fallbackSkateStance=normalizeSkateStance(skateStance);
 
   function setRideMode(mode){
     currentRideMode=normalizeRideMode(mode);
@@ -286,13 +287,13 @@ export function createFallbackSkier({rideMode=RIDE_MODE.SKI}={}){
     root.userData.rideMode=currentRideMode;
     root.userData.equipmentType=snowboardMode?'skateboard':'skis';
     root.userData.poseMode=snowboardMode?'skateboard-side-stance':'ski-a-pose';
+    root.userData.skateStance=fallbackSkateStance;
     root.userData.trailContacts=snowboardMode?snowboard.trailContacts:skis;
-    // Procedural fallback has no imported-model 180° carrier. Use the
-    // opposite side rotation so its left leg is still the downhill/front foot.
-    body.rotation.y=snowboardMode?-1.50:0;
-    // Keep the head between the sideways stance and downhill instead of
-    // cancelling the body yaw and making it look fully ski-facing.
-    headPivot.rotation.y=snowboardMode?.72:0;
+    // Procedural fallback mirrors the sideways visual for goofy without
+    // touching gameplay axes or authoritative motion.
+    const stanceSign=fallbackSkateStance==='goofy'?-1:1;
+    body.rotation.y=snowboardMode?-1.50*stanceSign:0;
+    headPivot.rotation.y=snowboardMode?.72*stanceSign:0;
   }
 
   root.userData.fallback=true;
@@ -397,6 +398,9 @@ function footBasedSkiPlacement(root,rig){
 }
 
 const SNOWBOARD_SIDE_YAW=1.50;
+function normalizeSkateStance(value='regular'){
+  return String(value||'regular').toLowerCase()==='goofy'?'goofy':'regular';
+}
 
 function footBasedSnowboardPlacement(root,rig){
   const fallback={
@@ -427,16 +431,18 @@ function footBasedSnowboardPlacement(root,rig){
   };
 }
 
-function resolveRegularSnowboardStance(root,modelCarrier,rig){
+function resolveSnowboardStance(root,modelCarrier,rig,stanceMode='regular'){
   const savedYaw=modelCarrier.rotation.y;
+  const stance=normalizeSkateStance(stanceMode);
+  const wantLeftFront=stance==='regular';
   let chosen=null;
   for(const sideSign of [1,-1]){
     const carrierYaw=Math.PI+sideSign*SNOWBOARD_SIDE_YAW;
     modelCarrier.rotation.y=carrierYaw;
     const placement=footBasedSnowboardPlacement(root,rig);
-    const candidate={carrierYaw,sideSign,placement};
+    const candidate={carrierYaw,sideSign,placement,stanceMode:stance};
     if(!chosen)chosen=candidate;
-    if(placement.leftFront){chosen=candidate;break;}
+    if(placement.leftFront===wantLeftFront){chosen=candidate;break;}
   }
   modelCarrier.rotation.y=savedYaw;
   root.updateWorldMatrix(true,true);
@@ -716,7 +722,7 @@ function makeRigController(model,compatibility,rigResolution=resolveAvatarRig(mo
   return update;
 }
 
-export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SKI,requireGameplayRig=false,compatibilityInput=url,signal=null}={}){
+export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SKI,skateStance='regular',requireGameplayRig=false,compatibilityInput=url,signal=null}={}){
   let loadedModel=null,loadedRoot=null;
   const compatibility=assertAvatarPlayable(compatibilityInput);
   try{
@@ -756,7 +762,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
     riderVisual.add(modelCarrier);
 
     const placement=footBasedSkiPlacement(riderVisual,updateRig?.rig);
-    const snowboardStance=resolveRegularSnowboardStance(riderVisual,modelCarrier,updateRig?.rig);
+    const snowboardStance=resolveSnowboardStance(riderVisual,modelCarrier,updateRig?.rig,skateStance);
     const skiEquipmentRoot=new THREE.Group();
     skiEquipmentRoot.name='ski-equipment';
     riderVisual.add(skiEquipmentRoot);
@@ -777,6 +783,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       rig:updateRig?.rig,
       snowboard,
       stance:snowboardStance.placement,
+      stanceMode:snowboardStance.stanceMode,
       sideSign:snowboardStance.sideSign
     });
 
@@ -811,12 +818,14 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
     root.userData.setRideMode=setRideMode;
     root.userData.setPowerGlow=setPowerGlow;
     root.userData.skateAnimator=skateAnimator;
+    root.userData.skateStance=snowboardStance.stanceMode;
     root.userData.animationState='IDLE';
     root.userData.skateAnimationHooks=[
-      'skateState','pushActive','pushProgress','accelerating','acceleration',
-      'powerslideActive','olliePhase','trickType','trickProgress','grabType',
-      'manualType','grindType','grindBoardOrientation','landingQuality',
-      'bananaPowerActive','crashed','reducedMotion'
+      'skateState','skateboardState','pushActive','pushProgress','accelerating','acceleration',
+      'powerslideActive','powerslideAmount','olliePhase','trickType','trickProgress','grabType',
+      'manualType','manualMode','manualBalance','grindType','grinding','grindTrick','grindBalance',
+      'grindBoardOrientation','landingQuality','bananaPowerActive','crashed','crashType',
+      'reducedMotion','roadWetness','roadRoughness'
     ];
     root.userData.updateSkiPose=(state={})=>{
       const requestedMode=normalizeRideMode(state.rideMode??currentRideMode);
@@ -860,7 +869,12 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
           air:!!state.air,
           time:state.time??0,
           trickType:state.trickType??'',
-          trickProgress:state.trickProgress??0
+          trickProgress:state.trickProgress??0,
+          landing,
+          powerslide:state.powerslideAmount??Number(!!state.powerslide),
+          roadRoughness:state.roadRoughness??(Number(state.roadWetness)>0?.16:.28),
+          reducedMotion:!!state.reducedMotion,
+          externalPose:!!skateAnimator?.active
         });
       }else{
         skis.forEach((ski,index)=>{
@@ -888,7 +902,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
     disposeAvatarObject(loadedRoot?.children.length?loadedRoot:loadedModel);
     if(error instanceof AvatarCompatibilityError||isCatalogAvatarUrl(url)||requireGameplayRig)throw error;
     console.info('Using procedural skier until a Chimpion GLB is installed:',error.message);
-    return createFallbackSkier({rideMode});
+    return createFallbackSkier({rideMode,skateStance});
   }
 }
 

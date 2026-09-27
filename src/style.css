@@ -356,7 +356,7 @@ button:disabled{cursor:wait;opacity:.54;filter:saturate(.65)}
 
 
 /* Two-step Chimpion -> ride selector. Reuses the existing selector dialog. */
-.selected-ride-mode{
+.selected-sport-mode{
   display:block;margin-top:3px;font-size:9px;font-style:normal;font-weight:900;letter-spacing:.11em;color:#2b8caf;
 }
 .skateboard-setup-step{

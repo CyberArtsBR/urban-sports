@@ -39,7 +39,14 @@ export function createWorldAudio({mixer,playEvent=()=>false}={}){
   }
   function setZone(next='open'){zone=String(next||'open').toLowerCase();return zone;}
   function reset(){nextAccent=7.5;seed=0x51c17;zone='open';}
-  function diagnostics(){return {initialized:!!graph,persistentLoopCount:graph?3:0,zone,nextAccentSeconds:nextAccent};}
+  function diagnostics(){return {
+    initialized:!!graph,
+    persistentLoopCount:graph?3:0,
+    bufferCount:graph?3:0,
+    activeNodeEstimate:graph?9:0,
+    zone,
+    nextAccentSeconds:nextAccent
+  };}
   function dispose(){disposed=true;for(const layer of graph?Object.values(graph):[]){try{layer.source.stop();layer.source.disconnect();layer.filter.disconnect();layer.gain.disconnect();}catch{}}graph=null;}
   return {update,setZone,reset,diagnostics,dispose};
 }

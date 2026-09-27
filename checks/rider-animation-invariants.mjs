@@ -12,6 +12,7 @@ import {
 import {createSkateboardAnimator} from '../src/rider/SkateboardAnimator.js';
 import {createSkateboardEquipment} from '../src/skateboardEquipment.js';
 import {createRiderController} from '../src/riderController.js';
+import {createImpactVfx} from '../src/impactVfx.js';
 import {getAvatarCompatibility,resolveAvatarRig} from '../src/avatarCompatibility.js';
 import {BUILTIN_AVATAR_NAMES} from '../src/avatarRoster.js';
 
@@ -140,6 +141,20 @@ assert.equal(normalizeSkateTrick('360 FLIP'),SKATE_ANIMATION_STATE.THREE_SIXTY_F
   close(board.motionRoot.rotation.y,0,1e-9,'board yaw reset');
   close(board.motionRoot.rotation.z,0,1e-9,'board roll reset');
   board.dispose();
+}
+
+{
+  const scene=new THREE.Scene();
+  const vfx=createImpactVfx({scene,capacity:64});
+  const dry=vfx.skateEvent({type:'powerslideStart',intensity:1},{speed:18,reducedMotion:false});
+  const reduced=vfx.skateEvent({type:'powerslideStart',intensity:1},{speed:18,reducedMotion:true});
+  assert.ok(dry>reduced,'reduced motion must lower emitted skateboard particle count');
+  assert.ok(vfx.skateEvent({type:'boardScrape',intensity:.8},{speed:12})>0,'board scrape must use bounded spark VFX');
+  assert.equal(vfx.points.geometry.getAttribute('position').count,64,'VFX pool capacity must stay bounded');
+  for(let i=0;i<100;i++)vfx.skateEvent({type:'wheelRoll',intensity:.5},{speed:14,wetness:i%2?.5:0});
+  assert.equal(vfx.points.geometry.getAttribute('position').count,64,'repeated VFX emissions must not grow geometry');
+  vfx.reset();
+  vfx.dispose();
 }
 
 for(const stanceMode of ['regular','goofy']){

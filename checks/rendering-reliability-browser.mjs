@@ -107,15 +107,37 @@ try{
   {
     const context=await browser.newContext({viewport:{width:1280,height:720}});
     const page=await context.newPage();
+    const d=await startGameplay(page,urlFor({renderFail:'half-float'}));
+    const cinematic=d?.renderingQuality?.cinematic||{};
+    assert.equal(d?.mode,'playing','HalfFloat failure must not stop gameplay');
+    assert.equal(d?.renderingQuality?.renderPath,'cinematic-composer','compatible byte composition may remain active');
+    assert.equal(cinematic.renderTargetType,'unsigned-byte-fallback','HalfFloat failure must choose the byte target');
+    assert.equal(cinematic.ambientOcclusion,false,'safe byte fallback must not reconstruct GTAO');
+    assert.equal(cinematic.bloomEnabled,false,'safe byte fallback must not reconstruct HDR bloom');
+    assert.equal(cinematic.volumetricFog,false,'safe byte fallback must not reconstruct GTAO-dependent volumetrics');
+    assert.equal(cinematic.colorGrading,true,'safe byte composition may retain LUT grading');
+    assert.equal(cinematic.sharpenEnabled,true,'safe byte composition may retain sharpening');
+    await context.close();
+  }
+
+  {
+    const context=await browser.newContext({viewport:{width:1280,height:720}});
+    const page=await context.newPage();
     await startGameplay(page,urlFor({renderFail:'black-output'}));
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return (d?.renderingQuality?.cinematic?.blackFallbackCount||0)>=1;
+      const cinematic=d?.renderingQuality?.cinematic;
+      return (cinematic?.blackFallbackCount||0)>=1&&cinematic?.renderTargetType==='unsigned-byte-fallback';
     },null,{timeout:RUN_TIMEOUT});
     const d=await diagnostics(page);
+    const cinematic=d?.renderingQuality?.cinematic||{};
     assert.equal(d?.mode,'playing','black-output recovery must preserve gameplay');
-    assert((d?.renderingQuality?.cinematic?.blackFallbackCount||0)>=1,'black output must trigger same-frame fallback');
-    assert((d?.renderingQuality?.cinematic?.runtimeDegradations||[]).some(entry=>entry?.type==='target-fallback'||entry?.type==='feature-disabled'||entry?.type==='pipeline-disabled'),'black output must record a conservative degradation');
+    assert((cinematic.blackFallbackCount||0)>=1,'black output must trigger same-frame fallback');
+    assert.equal(cinematic.renderTargetType,'unsigned-byte-fallback','black HDR output must rebuild on the compatible byte target');
+    assert.equal(cinematic.ambientOcclusion,false,'black-output byte fallback must disable GTAO');
+    assert.equal(cinematic.bloomEnabled,false,'black-output byte fallback must disable HDR bloom');
+    assert.equal(cinematic.volumetricFog,false,'black-output byte fallback must disable dependent volumetrics');
+    assert((cinematic.runtimeDegradations||[]).some(entry=>entry?.type==='target-fallback'),'black output must record the HalfFloat to byte-target degradation');
     await context.close();
   }
 

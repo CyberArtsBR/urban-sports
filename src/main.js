@@ -55,16 +55,19 @@ import {createGlobalListenerScope} from './globalListeners.js';
 import {createRiderController} from './riderController.js';
 import {createRuntimeDiagnostics} from './runtimeDiagnostics.js';
 import {createImpactVfx} from './impactVfx.js';
+import {createFailOpenRenderer,createOneShotGraphicsFaultInjector} from './renderFailOpen.js';
 
 const userPreferences=loadUserPreferences();
 
 let runtimeTestMode=false;
 let requestedRunSeed=null;
+let requestedGraphicsFault='';
 try{
   const params=new URLSearchParams(globalThis.location?.search||'');
   runtimeTestMode=params.get('test')==='1';
   const seedParam=params.get('seed');
   requestedRunSeed=seedParam?String(seedParam):null;
+  requestedGraphicsFault=runtimeTestMode?String(params.get('graphicsFault')||'').trim().toLowerCase():'';
 }catch{}
 function createRunSeed(){
   if(requestedRunSeed)return requestedRunSeed;
@@ -176,6 +179,17 @@ renderPass=null;
 ssaoPass=null;
 bloomPass=null;
 composerPixelRatio=0;
+
+const graphicsFaultInjector=createOneShotGraphicsFaultInjector(requestedGraphicsFault);
+const renderFailOpen=createFailOpenRenderer({
+  renderer,
+  scene,
+  camera,
+  getComposer:()=>composer,
+  isOptionalEnabled:()=>!!composer||!!graphicsFaultInjector.fault&&!graphicsFaultInjector.consumed,
+  faultInjector:()=>graphicsFaultInjector.inject(),
+  onFault:error=>console.warn('Optional graphics path failed open to direct rendering:',error?.message||error)
+});
 
 const world=new THREE.Group();scene.add(world);
 const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
@@ -1704,7 +1718,7 @@ function render(now){
   renderer.info.reset();
   // Direct rendering is the production-safe path. This guarantees the world is
   // presented even on GPUs/drivers that fail the offscreen composer pipeline.
-  renderer.render(scene,camera);
+  renderFailOpen.render();
   renderFrameHandle=requestAnimationFrame(render);
 }
 renderFrameHandle=requestAnimationFrame(render);
@@ -1741,6 +1755,7 @@ window.chimpionsSki=()=>{
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
+    renderFailOpen:renderFailOpen.getDiagnostics(),
     renderingQuality:{
       profile:quality.active,
       shadowMapsEnabled:!!renderer.shadowMap.enabled,
@@ -1862,6 +1877,7 @@ if(import.meta.hot){
     riderController.dispose();
     impactVfx.dispose?.();
     urbanEnvironment.dispose?.();
+    renderFailOpen.dispose?.();
     ssaoPass?.dispose?.();
     composer?.dispose?.();
     unsubscribeRendererQuality();

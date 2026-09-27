@@ -55,8 +55,13 @@ try{
   });
   await controllerPage.waitForFunction(()=>window.chimpionsUrbanSports?.()?.ready===true||window.chimpionsSki?.()?.ready===true,null,{timeout:60000});
 
-  await pulse(controllerPage,0);
-  await controllerPage.locator('#chimpion-selector').waitFor({state:'visible',timeout:15000});
+  // Hold A/Cross until the start screen actually consumes the controller edge.
+  // Fixed sub-frame pulses are flaky under heavily loaded headless CI and can
+  // miss requestAnimationFrame polling without representing a real regression.
+  await controllerPage.evaluate(()=>window.__releasePad.press(0));
+  await controllerPage.waitForFunction(()=>document.querySelector('#chimpion-selector')?.open===true,null,{timeout:10000});
+  await controllerPage.evaluate(()=>window.__releasePad.release(0));
+  await controllerPage.locator('#chimpion-selector').waitFor({state:'visible',timeout:5000});
 
   const initialFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
   await axisPulse(controllerPage,0,.92,120);

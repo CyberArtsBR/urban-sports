@@ -986,8 +986,10 @@ let physicsSubsteps=0;
 let runPreparing=false;
 let pendingCrashResults=null;
 let roadWetness=0;
-const forwardedSkateboardEvents=[];
 const MAX_FORWARDED_SKATEBOARD_EVENTS=48;
+const forwardedSkateboardEvents=new Array(MAX_FORWARDED_SKATEBOARD_EVENTS);
+let forwardedSkateboardEventWrite=0;
+let forwardedSkateboardEventCount=0;
 
 function skateSurfaceFromEvent(event,wetness=roadWetness){
   const target=String(event?.targetId||'').toLowerCase();
@@ -1000,8 +1002,19 @@ function skateSurfaceFromEvent(event,wetness=roadWetness){
 }
 
 function rememberForwardedSkateboardEvent(event){
-  forwardedSkateboardEvents.push({...event});
-  if(forwardedSkateboardEvents.length>MAX_FORWARDED_SKATEBOARD_EVENTS)forwardedSkateboardEvents.shift();
+  forwardedSkateboardEvents[forwardedSkateboardEventWrite]={...event};
+  forwardedSkateboardEventWrite=(forwardedSkateboardEventWrite+1)%MAX_FORWARDED_SKATEBOARD_EVENTS;
+  forwardedSkateboardEventCount=Math.min(MAX_FORWARDED_SKATEBOARD_EVENTS,forwardedSkateboardEventCount+1);
+}
+function drainForwardedSkateboardEvents(){
+  const count=forwardedSkateboardEventCount;
+  const events=new Array(count);
+  const start=(forwardedSkateboardEventWrite-count+MAX_FORWARDED_SKATEBOARD_EVENTS)%MAX_FORWARDED_SKATEBOARD_EVENTS;
+  for(let index=0;index<count;index++){
+    events[index]=forwardedSkateboardEvents[(start+index)%MAX_FORWARDED_SKATEBOARD_EVENTS];
+  }
+  forwardedSkateboardEventCount=0;
+  return events;
 }
 
 function consumeSkateboardFeedbackEvents(wetness=roadWetness){
@@ -1959,11 +1972,7 @@ window.chimpionsUrbanSports=window.chimpionsSki;
 window.chimpionsUrbanSports.registerGrindTarget=target=>grindSystem.register(target);
 window.chimpionsUrbanSports.unregisterGrindTarget=id=>grindSystem.unregister(id);
 window.chimpionsUrbanSports.getSkateboardGameplay=()=>getSkateboardGameplaySnapshot(state,grindSystem);
-window.chimpionsUrbanSports.pollSkateboardEvents=()=>{
-  const events=forwardedSkateboardEvents.slice();
-  forwardedSkateboardEvents.length=0;
-  return events;
-};
+window.chimpionsUrbanSports.pollSkateboardEvents=()=>drainForwardedSkateboardEvents();
 window.chimpionsUrbanSports.subscribeAudioEvents=listener=>audio.subscribeSemanticEvents?.(listener)||(()=>{});
 window.chimpionsUrbanSports.setHapticIntensity=value=>{
   const next=haptics.setIntensityPreference?.(value)||'high';

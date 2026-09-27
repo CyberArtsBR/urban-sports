@@ -90,11 +90,12 @@ assert.equal(doc.activeElement,outside,'focus restoration regressed');
 const repeatActions=[];
 const repeat=createMenuInputRepeat({adapter:{move:d=>repeatActions.push(d),confirm(){},cancel(){},menu(){}}});
 const neutral={connected:true,axis:0,axisY:0,dpad:{up:false,down:false,left:false,right:false},confirm:false,cancel:false,menu:false};
-repeat.update({...neutral,axisY:.8},0);
-repeat.update({...neutral,axisY:.8},MENU_INPUT_DEFAULTS.initialRepeatDelayMs-1);
-assert.equal(repeatActions.length,1,'analog input double-navigated before repeat delay');
+repeat.update(neutral,0);
+repeat.update({...neutral,axisY:.8},1);
 repeat.update({...neutral,axisY:.8},MENU_INPUT_DEFAULTS.initialRepeatDelayMs);
-assert.equal(repeatActions.length,2,'analog repeat did not fire at configured delay');
+assert.equal(repeatActions.length,1,'analog input double-navigated before repeat delay');
+repeat.update({...neutral,axisY:.8},MENU_INPUT_DEFAULTS.initialRepeatDelayMs+1);
+assert.equal(repeatActions.length,2,'analog repeat did not fire after configured delay');
 
 const avatar=readFileSync(new URL('../src/avatar-system.js',import.meta.url),'utf8');
 const ui=readFileSync(new URL('../src/ui.js',import.meta.url),'utf8');

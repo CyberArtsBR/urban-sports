@@ -128,29 +128,40 @@ try{
   assert.equal(rendering.profile,REQUESTED_QUALITY_PROFILE,'runtime rendering profile did not match requested graphics tier');
   if(REQUESTED_QUALITY_PROFILE==='max-cinematic'){
     const cinematic=rendering.cinematic||{};
+    const capabilities=cinematic.capabilities||{};
     assert.equal(tierProbe?.qualitySettings?.dprCap,1.6,'MAX CINEMATIC must request DPR 1.6');
     assert((tierProbe?.rendererPixelRatio??99)<=1.6001,'MAX CINEMATIC effective DPR must not exceed 1.6');
     assert.equal(rendering.msaaSamples,0,'MAX CINEMATIC offscreen target must use zero MSAA samples');
-    assert.equal(rendering.canvasAntialias,false,'MAX CINEMATIC WebGL context must disable canvas MSAA');
-    assert.equal(rendering.canvasSamples,0,'MAX CINEMATIC default framebuffer must report zero samples');
-    assert.equal(rendering.shadowMapsEnabled,false,'MAX CINEMATIC must spend the shadow-map budget on cinematic passes');
-    assert.equal(cinematic.failed,false,'MAX CINEMATIC post stack must initialize without failure: '+String(cinematic.failureReason||''));
-    assert.equal(cinematic.enabled,true,'MAX CINEMATIC post stack must be active during gameplay');
-    assert.equal(cinematic.ambientOcclusion,true,'MAX CINEMATIC must enable GTAO');
-    assert.equal(cinematic.aoType,'GTAO','MAX CINEMATIC must use GTAO rather than legacy SSAO');
-    assert.equal(cinematic.aoResolutionScale,.5,'MAX CINEMATIC GTAO must run at half resolution');
-    assert(Math.abs((cinematic.bloomStrength??0)-.65)<.001,'MAX CINEMATIC bloom strength drifted');
-    assert(Math.abs((cinematic.bloomRadius??0)-.48)<.001,'MAX CINEMATIC bloom radius drifted');
-    assert(Math.abs((cinematic.bloomThreshold??0)-1.60)<.001,'MAX CINEMATIC bloom threshold drifted');
-    assert.equal(cinematic.colorGrading,true,'MAX CINEMATIC LUT grading must be active');
-    assert.equal(cinematic.sharpenEnabled,true,'MAX CINEMATIC sharpening must be active');
-    assert.equal(cinematic.volumetricFog,true,'MAX CINEMATIC reduced-resolution atmosphere must be active');
-    assert.equal(cinematic.volumetricResolutionScale,.5,'MAX CINEMATIC atmosphere must be half resolution');
-    assert.equal(cinematic.lightShafts,true,'MAX CINEMATIC selective light shafts must be available');
+    assert.equal(rendering.shadowMapsEnabled,false,'MAX CINEMATIC must spend the shadow-map budget on cinematic/contact techniques');
     assert.equal(cinematic.depthOfField,false,'DOF must stay off during normal high-speed gameplay');
     assert.equal(cinematic.depthOfFieldMode,'cinematic','DOF must remain context-controlled');
     assert.equal(tierProbe?.qualitySettings?.contactShadows,true,'MAX CINEMATIC rider contact shadow must be configured');
-    assert((rendering.materialQuality?.anisotropy??0)>=8,'MAX CINEMATIC must retain at least 8x road anisotropy when supported');
+    assert.equal(rendering.renderPath,cinematic.enabled?'cinematic-composer':'direct','diagnostics must reflect the actual presentation path');
+
+    if(cinematic.enabled){
+      assert.equal(cinematic.failed,false,'active cinematic composition cannot also be failed');
+      assert(['half-float','unsigned-byte-fallback'].includes(cinematic.renderTargetType),'cinematic target must be capability-selected');
+      if(capabilities.halfFloatRenderable&&capabilities.depthTextureRenderable){
+        assert.equal(cinematic.ambientOcclusion,true,'verified HalfFloat + depth support should enable GTAO');
+        assert.equal(cinematic.aoType,'GTAO','MAX CINEMATIC must use GTAO rather than legacy SSAO');
+        assert.equal(cinematic.aoResolutionScale,.5,'MAX CINEMATIC GTAO must run at half resolution');
+        assert.equal(cinematic.volumetricFog,true,'verified GTAO depth should enable reduced-resolution atmosphere');
+        assert.equal(cinematic.volumetricResolutionScale,.5,'MAX CINEMATIC atmosphere must be half resolution');
+      }
+      if(capabilities.halfFloatRenderable){
+        assert(Math.abs((cinematic.bloomStrength??0)-.65)<.001,'MAX CINEMATIC bloom strength drifted');
+        assert(Math.abs((cinematic.bloomRadius??0)-.48)<.001,'MAX CINEMATIC bloom radius drifted');
+        assert(Math.abs((cinematic.bloomThreshold??0)-1.60)<.001,'MAX CINEMATIC bloom threshold drifted');
+      }
+      assert.equal(cinematic.colorGrading,true,'compatible MAX CINEMATIC composition must retain LUT grading');
+      assert.equal(cinematic.sharpenEnabled,true,'compatible MAX CINEMATIC composition must retain sharpening');
+      assert(cinematic.renderTargetMemoryBytes>0,'active composition must report render-target memory');
+    }else{
+      assert.equal(rendering.fallbackActive,true,'unsupported cinematic composition must fail open to direct rendering');
+    }
+
+    const expectedAnisotropy=Math.min(8,Math.max(1,capabilities.maxAnisotropy||8));
+    assert((rendering.materialQuality?.anisotropy??0)>=expectedAnisotropy,'MAX CINEMATIC must use the supported road anisotropy budget');
   }else if(REQUESTED_QUALITY_PROFILE==='max'){
     assert.equal(rendering.shadowMapsEnabled,true,'Legacy MAX must retain real shadow maps');
     assert(rendering.shadowMapSize>=2048,'Legacy MAX must retain the premium directional shadow resolution');

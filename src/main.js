@@ -985,6 +985,7 @@ const touchControls=createTouchControls({
   onSteer:value=>gameplayInput.setTouchSteer(value),
   onJump:pressed=>gameplayInput.setTouchJump(pressed),
   onTrick:(type,pressed)=>gameplayInput.setTouchTrick(type,pressed),
+  onSpecial:()=>gameplayInput.requestSpecial(),
   onPause:()=>gameplayInput.requestPause()
 });
 let last=performance.now();

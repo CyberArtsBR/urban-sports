@@ -26,7 +26,7 @@ assert.equal(normalizeRideSpeed(300/3.6,'skateboard'),1,'Skateboard speed normal
 
 assert.equal(normalizeSkateSurface('asphalt'),'dry_asphalt');
 assert.equal(normalizeSkateSurface('wet asphalt'),'wet_asphalt');
-assert.equal(normalizeSkateSurface('rail'),'grind_rail');
+assert.equal(normalizeSkateSurface('rail'),'rail');
 
 const slow=getSkateContinuousMix(.1,0,0,false,'dry_asphalt','none','max',{});
 const fast=getSkateContinuousMix(1,0,0,false,'dry_asphalt','none','max',{});
@@ -87,22 +87,25 @@ const reducedStyle=banana.getStyle();
 assert(reducedStyle.flashScale<=.12,'Reduced motion did not cap Banana flash intensity');
 
 const audio=readFileSync(new URL('../src/audio.js',import.meta.url),'utf8');
+const mixer=readFileSync(new URL('../src/audio/AudioMixer.js',import.meta.url),'utf8');
+const skateAudio=readFileSync(new URL('../src/audio/SkateboardAudio.js',import.meta.url),'utf8');
+const music=readFileSync(new URL('../src/audio/MusicSystem.js',import.meta.url),'utf8');
 const trails=readFileSync(new URL('../src/snowTrails.js',import.meta.url),'utf8');
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const skateVfx=readFileSync(new URL('../src/skateVfx.js',import.meta.url),'utf8');
 
 assert(audio.includes('function playSkateEvent(name,payload={})'),'Authoritative Skateboard event adapter is missing');
-assert(audio.includes('MAX_TRANSIENT_SOURCES=24'),'Transient concurrency cap is missing');
-assert(audio.includes("activeTransientSources.clear()"),'Restart cleanup does not clear transient audio sources');
-assert(audio.includes("'skate-grind-loop':.075"),'Grind loop throttling is missing');
-assert(audio.includes('skateWheelLow')&&audio.includes('skateBearing')&&audio.includes('skateRoad'),'Layered wheel graph is missing');
-assert(audio.includes("skateSurface='dry_asphalt'"),'Surface reset/fallback is missing');
+assert(mixer.includes('MAX_TRANSIENT_SOURCES=24'),'Transient concurrency cap is missing');
+assert(mixer.includes('activeTransientSources.clear()'),'Restart cleanup does not clear transient audio sources');
+assert(mixer.includes("'skate-grind-loop':.075"),'Grind loop throttling is missing');
+assert(mixer.includes('skateWheelLow')&&mixer.includes('skateBearing')&&mixer.includes('skateRoad'),'Layered wheel graph is missing');
+assert(skateAudio.includes("surface='dry_asphalt'"),'Surface reset/fallback is missing');
 assert(audio.includes('setAudioQualityProfile'),'Audio quality profile hook is missing');
-assert(audio.includes('jumpMusicFailed'),'Existing graceful music fallback was removed');
+assert(music.includes('mediaFailed:failed'),'Graceful music fallback diagnostics were removed');
 
 assert(trails.includes('attribute float aPower;'),'Trail shader lacks normal/powered separation');
 assert(trails.includes("powered?(.72+carve*.18):(.10+carve*.18)"),'Normal urban trail is not restrained relative to Banana Power');
-assert(main.includes('audio.setRideMode?.(selectedSportMode)'),'Urban runtime does not select the native Skateboard audio profile');
+assert(main.includes('audio.setSportMode?.(selectedSportMode)'),'Urban runtime does not select the native Skateboard audio profile');
 assert(main.includes('powered:bananaPower.active'),'Banana Power is not wired to powered trail presentation');
 assert(main.includes('wetness:wet'),'Weather wetness is not wired to Skateboard audio');
 assert(main.includes('bananaPowerVfx.markReady()')&&main.includes('bananaPowerVfx.start()')&&main.includes('bananaPowerVfx.end()'),'Banana VFX lifecycle is incomplete');
@@ -113,7 +116,7 @@ assert(skateVfx.includes('reducedMotion?8:22'),'Reduced motion does not reduce p
 console.log(JSON.stringify({
   check:'skate-audio-vfx-invariants',
   audioProfile:'skateboard',
-  surfaces:['dry_asphalt','wet_asphalt','oil','metal','concrete','grind_rail'],
+  surfaces:['dry_asphalt','wet_asphalt','concrete','sidewalk','curb','metal','rail','ledge','puddle','oil'],
   particlePool:'bounded',
   bananaLifecycle:'pass'
 }));

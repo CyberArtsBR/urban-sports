@@ -18,6 +18,7 @@ const guide=readFileSync(guidePath,'utf8');
 
 assert(runner.includes("process.env.BASE_URL"),'Runner must accept BASE_URL');
 assert(runner.includes("DEFAULT_BASE_URL='http://localhost:4173'"),'Runner must have a local default target');
+assert(runner.includes("CONFIG.targetMode==='local'")&&runner.includes("url.searchParams.set('test','1')"),'Local benchmark must use deterministic ?test=1 runtime mode');
 assert(runner.includes("longRunSeconds:numberEnv('LONG_RUN_SECONDS'"),'LONG_RUN_SECONDS must be configurable');
 assert(runner.includes("process.env.RESULTS_PATH"),'Machine-readable results path must be configurable');
 assert(runner.includes("benchmark-results.json"),'Default machine-readable output must be benchmark-results.json');
@@ -27,6 +28,7 @@ assert(runner.includes("requestAnimationFrame"),'Runner must collect low-overhea
 assert(runner.includes("performance.memory"),'Optional browser heap metrics must be supported');
 assert(runner.includes("Network.loadingFinished"),'Transferred bytes should use browser network diagnostics when available');
 assert(runner.includes(".chimpion-card"),'Selector card count must be measured');
+assert(runner.includes("const selection=await completeStartSelectionIfNeeded(page)"),'Benchmark Start must resolve selector flow from every entry point');
 assert(runner.includes("courseDrawCallsEstimate"),'Course draw-call diagnostics must be sampled');
 assert(runner.includes("data-ride-mode"),'Future ride-mode controls must be feature-detected');
 assert(runner.includes("trickState"),'Future trick diagnostics must be feature-detected');

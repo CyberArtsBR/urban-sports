@@ -1,4 +1,5 @@
 import {createSkiEnvironment} from '../environment.js';
+import {createUrbanRuntimeEnvironment} from '../urban/urbanRuntimeEnvironment.js';
 import {createUrbanEnvironment} from '../urban/index.js';
 
 /**
@@ -15,7 +16,9 @@ export function createEnvironmentSystem({
   quality=null,
   urbanOptions={}
 }={}){
-  const environment=createSkiEnvironment({scene,world,renderer,camera,mode});
+  const environment=mode==='urban'
+    ? createUrbanRuntimeEnvironment({scene,renderer,quality:quality||{}})
+    : createSkiEnvironment({scene,world,renderer,camera,mode});
   const urbanEnvironment=createUrbanEnvironment({
     parent:world,
     renderer,
@@ -69,7 +72,7 @@ export function createEnvironmentSystem({
     return Object.freeze({
       systemId:'EnvironmentSystem',
       mode,
-      compatibilityBackend:'createSkiEnvironment',
+      compatibilityBackend:mode==='urban'?'createUrbanRuntimeEnvironment':'createSkiEnvironment',
       urban:urbanEnvironment.getDiagnostics?.()||null,
       legacyQuality:environment.getQualityDiagnostics?.()||null
     });

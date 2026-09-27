@@ -60,6 +60,11 @@ async function completeStartSelectionIfNeeded(page){
 async function clickStart(page){
   const diag=await readDiagnostics(page);
   if(diag?.mode==='playing')return {status:'PASS',alreadyPlaying:true};
+  // MAX on CI's software renderer can spend tens of seconds completing the
+  // first rider parse + selector handoff. Production/public targets keep the
+  // configured timeout; local deterministic benchmarks get enough headroom to
+  // measure the run instead of misclassifying slow startup as a functional fail.
+  const startReadyTimeoutMs=CONFIG.targetMode==='local'?Math.max(CONFIG.readyTimeoutMs,90_000):CONFIG.readyTimeoutMs;
   const started=Date.now();
   const frameStart=await frameMark(page);
   const before=await runtimeSnapshot(page,'start-sequence-before');
@@ -72,21 +77,22 @@ async function clickStart(page){
     return null;
   });
   if(!action)return pending('No enabled start control was available');
-  const selection=action==='start-screen'
-    ?await completeStartSelectionIfNeeded(page)
-    :{status:'PASS',selectionRequired:false};
+  // Both entry points can route back through SELECT_RIDER when no avatar has
+  // been committed yet. Always resolve the post-click state instead of assuming
+  // the menu Start button goes directly to gameplay.
+  const selection=await completeStartSelectionIfNeeded(page);
   if(selection.status!=='PASS')return selection;
   try{
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       const tutorial=document.querySelector('.session-tutorial:not([hidden])');
       return !!tutorial||d?.mode==='countdown'||d?.mode==='playing';
-    },undefined,{timeout:20000});
+    },undefined,{timeout:startReadyTimeoutMs});
     await dismissTutorial(page);
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';
-    },undefined,{timeout:CONFIG.readyTimeoutMs});
+    },undefined,{timeout:startReadyTimeoutMs});
   }catch{
     return pending('Start control was invoked but gameplay did not reach mode=playing');
   }

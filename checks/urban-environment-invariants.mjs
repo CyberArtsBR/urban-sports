@@ -54,6 +54,13 @@ for(let step=0;step<20*60*4;step++){
 }
 
 const highAfterStream=inventory(environment.group);
+for(let restart=0;restart<50;restart++){
+  environment.reset();
+  const sample=inventory(environment.group);
+  assert.equal(sample.objects,initial.objects,'50-reset stress created scene objects');
+  assert.equal(sample.drawCalls,initial.drawCalls,'50-reset stress changed draw-call topology');
+  assert.equal(sample.allocatedInstances,initial.allocatedInstances,'50-reset stress grew instance capacity');
+}
 const lowDiagnostics=environment.setQualityProfile('low');
 const low=inventory(environment.group);
 assert(low.activeInstances<=highAfterStream.activeInstances,'low quality must not increase active urban instances');
@@ -80,4 +87,4 @@ assert.equal(disposedGeometries.size,geometries.size,'dispose releases all owned
 assert.equal(disposedMaterials.size,materials.size,'dispose releases all owned urban materials');
 assert.equal(disposedTextures.size,textures.size,'dispose releases all owned procedural textures');
 
-console.log(JSON.stringify({check:'urban-environment-invariants',budgets:{drawCalls:{actual:initial.drawCalls,max:DRAW_CALL_BUDGET},activeInstances:{actual:initial.activeInstances,peak:peakActive,max:ACTIVE_INSTANCE_BUDGET},allocatedInstances:{actual:initial.allocatedInstances,max:ALLOCATED_INSTANCE_BUDGET}},streamedMinutes:20,disposed:{geometries:disposedGeometries.size,materials:disposedMaterials.size,textures:disposedTextures.size}}));
+console.log(JSON.stringify({check:'urban-environment-invariants',budgets:{drawCalls:{actual:initial.drawCalls,max:DRAW_CALL_BUDGET},activeInstances:{actual:initial.activeInstances,peak:peakActive,max:ACTIVE_INSTANCE_BUDGET},allocatedInstances:{actual:initial.allocatedInstances,max:ALLOCATED_INSTANCE_BUDGET}},streamedMinutes:20,restartStress:50,disposed:{geometries:disposedGeometries.size,materials:disposedMaterials.size,textures:disposedTextures.size}}));

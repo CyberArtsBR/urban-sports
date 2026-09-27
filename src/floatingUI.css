@@ -243,7 +243,7 @@ body.bullet-time-active::after{
   background:
     linear-gradient(90deg,rgba(3,20,34,.24),rgba(3,20,34,.48) 28%,rgba(3,20,34,.70) 52%,rgba(3,20,34,.72)),
     linear-gradient(180deg,rgba(2,15,27,.08),rgba(2,15,27,.20)),
-    url('/start/chimpions-ski-start.jpg') center/cover no-repeat;
+    url('/start/chimpions-urban-sports-start.webp') center/cover no-repeat;
   filter:saturate(1.05) contrast(1.02);
   transform:scale(1.015);
 }

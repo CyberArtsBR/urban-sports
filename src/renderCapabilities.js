@@ -143,3 +143,85 @@ export function applyFailureSimulation(capabilities,failures=new Set()){
   }
   return next;
 }
+
+export function probeRenderingCapabilities(renderer,{simulation=getRenderFailureSimulation()}={}){
+  const gl=renderer?.getContext?.()||null;
+  if(!gl){
+    return applyFailureSimulation(applyGpuClassSimulation({
+      webgl2:false,
+      contextLost:true,
+      unsignedByteRenderable:false,
+      halfFloatRenderable:false,
+      halfFloatLinear:false,
+      floatRenderable:false,
+      depthTextureRenderable:false,
+      maxTextureSize:0,
+      maxRenderbufferSize:0,
+      maxSamples:0,
+      maxAnisotropy:1,
+      fragmentHighp:false,
+      gpuTimerSupported:false,
+      precision:{},
+      extensions:{},
+      probes:{},
+      simulatedGpuClass:null,
+      simulationLabel:null,
+      simulationDisclaimer:null
+    },simulation.gpuClass),simulation.failures);
+  }
+
+  const extensions=extensionSet(gl);
+  const probes={
+    unsignedByte:testTarget(renderer,{type:THREE.UnsignedByteType,filter:THREE.LinearFilter}),
+    halfFloatNearest:testTarget(renderer,{type:THREE.HalfFloatType,filter:THREE.NearestFilter}),
+    halfFloatLinear:testTarget(renderer,{type:THREE.HalfFloatType,filter:THREE.LinearFilter}),
+    floatNearest:testTarget(renderer,{type:THREE.FloatType,filter:THREE.NearestFilter}),
+    depthTexture:testTarget(renderer,{type:THREE.UnsignedByteType,filter:THREE.NearestFilter,depthTexture:true})
+  };
+  const precision={
+    vertexHigh:precisionInfo(gl,gl.VERTEX_SHADER,gl.HIGH_FLOAT),
+    fragmentHigh:precisionInfo(gl,gl.FRAGMENT_SHADER,gl.HIGH_FLOAT),
+    fragmentMedium:precisionInfo(gl,gl.FRAGMENT_SHADER,gl.MEDIUM_FLOAT)
+  };
+  const base={
+    webgl2:!!renderer.capabilities?.isWebGL2,
+    contextLost:!!gl.isContextLost?.(),
+    unsignedByteRenderable:!!probes.unsignedByte.ok,
+    halfFloatRenderable:!!probes.halfFloatNearest.ok,
+    halfFloatLinear:!!probes.halfFloatLinear.ok,
+    floatRenderable:!!probes.floatNearest.ok,
+    depthTextureRenderable:!!probes.depthTexture.ok,
+    maxTextureSize:Number(gl.getParameter(gl.MAX_TEXTURE_SIZE))||0,
+    maxRenderbufferSize:Number(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE))||0,
+    maxSamples:Number(gl.getParameter(gl.MAX_SAMPLES))||0,
+    maxAnisotropy:(()=>{try{return renderer.capabilities?.getMaxAnisotropy?.()||1;}catch{return 1;}})(),
+    fragmentHighp:(precision.fragmentHigh?.precision||0)>0,
+    gpuTimerSupported:!!extensions.EXT_disjoint_timer_query_webgl2,
+    precision,
+    extensions,
+    probes,
+    simulatedGpuClass:null,
+    simulationLabel:null,
+    simulationDisclaimer:null
+  };
+  return applyFailureSimulation(applyGpuClassSimulation(base,simulation.gpuClass),simulation.failures);
+}
+
+export function chooseCinematicTarget(capabilities,{preferHalfFloat=true,forceByte=false}={}){
+  if(!capabilities?.unsignedByteRenderable&&!capabilities?.halfFloatRenderable){
+    return {supported:false,type:null,label:'none',linear:false,reason:'no-renderable-offscreen-target'};
+  }
+  if(preferHalfFloat&&!forceByte&&capabilities?.halfFloatRenderable){
+    return {
+      supported:true,
+      type:THREE.HalfFloatType,
+      label:'half-float',
+      linear:!!capabilities.halfFloatLinear,
+      reason:capabilities.halfFloatLinear?'half-float-linear':'half-float-nearest'
+    };
+  }
+  if(capabilities?.unsignedByteRenderable){
+    return {supported:true,type:THREE.UnsignedByteType,label:'unsigned-byte-fallback',linear:true,reason:'compatible-byte-target'};
+  }
+  return {supported:false,type:null,label:'none',linear:false,reason:'no-compatible-target'};
+}

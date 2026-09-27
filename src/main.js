@@ -1750,6 +1750,7 @@ window.chimpionsSki=()=>{
     }
   }
   const pooledObjects=Object.values(coursePool).reduce((sum,pool)=>sum+pool.length,0);
+  const cinematicDiagnostics=cinematicRendering?.getDiagnostics?.()||null;
   return {
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
@@ -1759,18 +1760,21 @@ window.chimpionsSki=()=>{
       effectiveDpr:renderer.getPixelRatio(),
       canvasAntialias:renderer.getContext().getContextAttributes?.()?.antialias===true,
       canvasSamples:(()=>{try{const gl=renderer.getContext();return gl.getParameter(gl.SAMPLES)||0;}catch{return 0;}})(),
-      postResolution:cinematicRendering?.getDiagnostics?.().postResolutionScale??0,
-      renderTargetType:cinematicRendering?.getDiagnostics?.().renderTargetType??'direct-backbuffer',
-      msaaSamples:cinematicRendering?.getDiagnostics?.().msaaSamples??(quality.active==='max-cinematic'?0:null),
+      renderPath:quality.active==='max-cinematic'&&cinematicDiagnostics?.enabled?'cinematic-composer':'direct',
+      fallbackActive:quality.active==='max-cinematic'&&!cinematicDiagnostics?.enabled,
+      postResolution:cinematicDiagnostics?.postResolutionScale??0,
+      renderTargetType:cinematicDiagnostics?.renderTargetType??'direct-backbuffer',
+      renderTargetMemoryBytes:cinematicDiagnostics?.renderTargetMemoryBytes??0,
+      msaaSamples:cinematicDiagnostics?.msaaSamples??(quality.active==='max-cinematic'?0:null),
       shadowMapsEnabled:!!renderer.shadowMap.enabled,
       shadowMapSize:environment.weatherBindings?.sun?.shadow?.mapSize?.x??0,
       shadowDistance:environment.weatherBindings?.sun?.shadow?.camera?.far??0,
       ssaoEnabled:false,
       ssaoKernelRadius:0,
-      bloomStrength:cinematicRendering?.getDiagnostics?.().bloomStrength??0,
-      bloomRadius:cinematicRendering?.getDiagnostics?.().bloomRadius??0,
-      bloomThreshold:cinematicRendering?.getDiagnostics?.().bloomThreshold??0,
-      cinematic:cinematicRendering?.getDiagnostics?.()||null,
+      bloomStrength:cinematicDiagnostics?.bloomStrength??0,
+      bloomRadius:cinematicDiagnostics?.bloomRadius??0,
+      bloomThreshold:cinematicDiagnostics?.bloomThreshold??0,
+      cinematic:cinematicDiagnostics,
       gpuFrameTiming:gpuTimer.getDiagnostics(),
       contactShadow:riderContactShadow.getDiagnostics?.()||null,
       anisotropy:urbanEnvironment.materials?.getDiagnostics?.()?.anisotropy??0,

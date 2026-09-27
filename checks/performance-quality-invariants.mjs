@@ -107,10 +107,10 @@ assert(core.includes('activeSnowLayerParticles'),'benchmark must sample effectiv
 assert(main.includes('createCollisionBroadphase'),'main runtime must use longitudinal collision broadphase');
 assert(main.includes('quality.observeFrame'),'AUTO quality must observe runtime frame timing');
 assert(!workflow.includes('$(run_preview'),'workflow must not start a long-lived preview inside command substitution');
-assert(workflow.includes('continue-on-error: true'),'benchmark profiles should preserve partial results');
+assert(workflow.includes('fail-fast: false'),'parallel benchmark profiles should preserve partial results');
 assert(workflow.includes('if: always()'),'benchmark artifacts must survive partial profile failures');
-assert(workflow.includes('QUALITY_PROFILE=max'),'performance workflow must benchmark the MAX profile');
-assert(workflow.includes('MAX_OUTCOME'),'performance workflow must enforce the MAX benchmark result');
+assert(workflow.includes('quality: max'),'performance workflow must benchmark the MAX profile');
+assert(workflow.includes('benchmark-max.json')&&workflow.includes('needs.benchmark.result'),'performance workflow must enforce MAX output and matrix success');
 assert(graphicsWorkflow.includes('quality: [low, medium, high, max]'),'graphics browser matrix must exercise the MAX profile');
 
 console.log(JSON.stringify({

@@ -19,8 +19,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install
-      - run: npm run check
+      - run: npm ci
+      - run: npm run check:fast
+      - run: npm run check:standard
       - run: npm run build
       - run: node checks/assets.mjs
       - run: npx playwright install --with-deps chromium
@@ -35,4 +36,5 @@ jobs:
             sleep 1
           done
           node checks/desktop-browser.mjs
+          node checks/urban-ui-accessibility-browser.mjs
           npm run smoke:production

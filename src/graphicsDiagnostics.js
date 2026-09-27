@@ -1,4 +1,4 @@
-const PROFILE_NAMES=Object.freeze(['low','medium','auto','high','max']);
+const PROFILE_NAMES=Object.freeze(['low','medium','auto','high','max-cinematic','max']);
 
 const LOW=Object.freeze({
   // Full EffectComposer-frame telemetry is ~214 calls after LOW restarts.
@@ -66,11 +66,19 @@ const MAX=Object.freeze({
   urbanInstances:3100
 });
 
+const MAX_CINEMATIC=Object.freeze({
+  ...MAX,
+  rendererCalls:520,
+  rendererTextures:224,
+  materialCount:420
+});
+
 export const GRAPHICS_QUALITY_BUDGETS=Object.freeze({
   low:LOW,
   medium:MEDIUM,
   auto:MEDIUM,
   high:HIGH,
+  'max-cinematic':MAX_CINEMATIC,
   max:MAX
 });
 

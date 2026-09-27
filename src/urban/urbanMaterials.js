@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const ASPHALT_TEXTURE_SIZE=1024;
-const ANISOTROPY_TARGET=Object.freeze({max:16,high:8,medium:4,low:2});
+const ANISOTROPY_TARGET=Object.freeze({'max-cinematic':8,max:16,high:8,medium:4,low:2});
 let asphaltSourceCache=null;
 
 function qualityName(value='high'){
@@ -322,7 +322,7 @@ export function createUrbanMaterials({renderer=null,quality='high'}={}){
       texture.anisotropy=anisotropy;
       texture.needsUpdate=true;
     }
-    materials.asphalt.bumpScale=activeQuality==='max'?.040:activeQuality==='high'?.034:activeQuality==='medium'?.028:.022;
+    materials.asphalt.bumpScale=(activeQuality==='max'||activeQuality==='max-cinematic')?.040:activeQuality==='high'?.034:activeQuality==='medium'?.028:.022;
     return {profile:activeQuality,anisotropy,asphaltTextureSize:ASPHALT_TEXTURE_SIZE};
   }
   function getDiagnostics(){

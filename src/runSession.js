@@ -4,6 +4,7 @@ const BASE_TRANSIENT_STATE=Object.freeze({
   time:0,
   bananas:0,
   maxRunSpeed:0,
+  maxSkateGameplaySpeed:0,
   bestCombo:0,
   speedTier:0,
   speedTierTime:0,

@@ -9,7 +9,7 @@ import {
   clampGameplayObjectX,
   gameplayObjectCenterLimit
 } from './environmentCorridor.js';
-import {composeUrbanCourseSection,URBAN_SECTION_TYPES} from './urbanCourse/index.js';
+import {composeUrbanCourseSection,createUrbanCourseDirector,URBAN_SECTION_TYPES} from './urbanCourse/index.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const lerp=(a,b,t)=>a+(b-a)*t;
@@ -52,7 +52,7 @@ function placementCenterLimit(kind){
   return Math.min(base,tuned);
 }
 
-export const COURSE_TYPES=[
+export const LEGACY_COURSE_GEOMETRY_TYPES=[
   'OPEN CARVE',
   'GATE',
   'BANANA LINE',
@@ -62,6 +62,10 @@ export const COURSE_TYPES=[
   'ROCK SLALOM',
   'LOG JUMP'
 ];
+
+// Backward-compatible export for collision/streaming contracts. Authored course
+// semantics now come from the Urban director; these names are geometry adapters.
+export const COURSE_TYPES=LEGACY_COURSE_GEOMETRY_TYPES;
 
 // Urban-native gameplay semantics sit on top of the proven legacy safety families.
 // Keep COURSE_TYPES stable for collision/streaming compatibility while exposing the
@@ -101,15 +105,12 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
   let lastUrbanType='';
   const safeRoute=createSafeRouteTracker(0,null);
   const runDirector=createExpertRunDirector({random:()=>random()});
+  const urbanDirector=createUrbanCourseDirector({seed:runSeed,random:()=>random()});
+  let activeUrbanPlan=null;
 
   // Bands guide macro route choices only. Physical hazards themselves are
   // placed continuously so the player cannot memorize a seven-column grid.
   const bands=[-1,-.68,-.34,0,.34,.68,1];
-  const opening=[
-    'OPEN CARVE','BANANA LINE','GATE','FOREST',
-    'LOG JUMP','RECOVERY','ROCK SLALOM','OPEN CARVE','GATE','RAMP','RECOVERY'
-  ];
-
   const rand=(min,max)=>min+(max-min)*random();
   const weightedIndex=weights=>{
     let total=weights.reduce((sum,value)=>sum+value,0);
@@ -199,8 +200,11 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
 
   function desiredSafe(z,base=0,range=4.4){
     const band=contentX(z,pickBand(),.86);
+    const lateralPressure=activeUrbanPlan?.difficulty?.lateralRoutePressure??.5;
+    const authoredRange=range*lerp(.82,1.16,lateralPressure);
+    const routeBias=Number(activeUrbanPlan?.routeBias)||0;
     return clamp(
-      band*.48+base*.34+Math.sin(sectionIndex*.77-z*.017)*range,
+      band*.46+base*.32+Math.sin(sectionIndex*.77-z*.017)*authoredRange+routeBias,
       -T.SAFE_ROUTE_HALF_WIDTH,
       T.SAFE_ROUTE_HALF_WIDTH
     );
@@ -246,6 +250,22 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       const index=FORMATION_TYPES.indexOf(previous);
       if(index>=0)weights[index]*=.62;
     }
+    const complexity=activeUrbanPlan?.difficulty?.formationComplexity??.5;
+    const recoveryStreet=activeUrbanPlan?.family==='RECOVERY_STREET';
+    if(recoveryStreet){
+      for(const dense of DENSE_FORMATIONS){
+        const index=FORMATION_TYPES.indexOf(dense);
+        if(index>=0)weights[index]*=.22;
+      }
+      weights[FORMATION_TYPES.indexOf('ISOLATED')]*=1.55;
+      weights[FORMATION_TYPES.indexOf('DIAGONAL')]*=.72;
+    }else{
+      weights[FORMATION_TYPES.indexOf('OFFSET_GATE')]*=lerp(.92,1.24,complexity);
+      weights[FORMATION_TYPES.indexOf('DIAGONAL')]*=lerp(.90,1.30,complexity);
+      weights[FORMATION_TYPES.indexOf('SCATTER')]*=lerp(.86,1.18,complexity);
+      weights[FORMATION_TYPES.indexOf('ISOLATED')]*=lerp(1.16,.86,complexity);
+    }
+
     if(denseFormationStreak>=2){
       for(const dense of DENSE_FORMATIONS){
         const index=FORMATION_TYPES.indexOf(dense);
@@ -445,7 +465,9 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     // Scale longitudinal breathing room with speed while preserving each
     // section family's authored intensity.
     const speedScale=lerp(.94,1.20,speed01);
-    return rand(min,max)*speedScale*scale;
+    const reactionPressure=activeUrbanPlan?.difficulty?.reactionWindow??.5;
+    const authoredScale=lerp(1.06,.97,reactionPressure);
+    return rand(min,max)*speedScale*scale*authoredScale;
   }
 
   function addSpecialHazard(placements,startZ,length,safeHint=0,chance=.64,progress=0,postMaxPressure=0){
@@ -757,61 +779,51 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     return {type:'movement-bait',count};
   }
 
-  function chooseType(difficulty,runPlan=null){
-    if(sectionIndex<opening.length)return opening[sectionIndex];
-    if(lastType==='RAMP'||lastType==='LOG JUMP')return 'RECOVERY';
-    if(runPlan?.phase==='RECOVERY')return 'RECOVERY';
 
-    const transitions={
-      'RECOVERY':['OPEN CARVE','GATE','FOREST','BANANA LINE','LOG JUMP'],
-      'OPEN CARVE':['GATE','FOREST','ROCK SLALOM','BANANA LINE','RAMP','LOG JUMP'],
-      'GATE':['OPEN CARVE','FOREST','ROCK SLALOM','BANANA LINE','RAMP','LOG JUMP'],
-      'BANANA LINE':['OPEN CARVE','GATE','FOREST','RAMP','LOG JUMP'],
-      'FOREST':['OPEN CARVE','GATE','ROCK SLALOM','RAMP','LOG JUMP'],
-      'ROCK SLALOM':['OPEN CARVE','GATE','FOREST','RAMP','LOG JUMP']
-    };
-    const options=[...(transitions[lastType]||['OPEN CARVE'])];
-
-    if(difficulty>.16&&lastType!=='RECOVERY'&&random()<(.52+difficulty*.18))options.push('LOG JUMP');
-    if(lastType!=='RECOVERY'&&random()<(.14+difficulty*.10))options.push('RAMP');
-
-    if(runPlan?.preferredSections?.length){
-      const repeats=1+Math.floor((runPlan.intensity||0)*2);
-      const postPressure=clamp(Number(runPlan.postMaxPressure)||0,0,1);
-      const preferred=postPressure>.45
-        ?runPlan.preferredSections.filter(type=>type!=='RAMP'&&type!=='LOG JUMP')
-        :runPlan.preferredSections;
-      for(let repeat=0;repeat<repeats;repeat++)options.push(...(preferred.length?preferred:runPlan.preferredSections));
-    }
-
-    if(difficulty>.45)options.push('FOREST','ROCK SLALOM');
-    if(difficulty>.62)options.push('FOREST','ROCK SLALOM','RAMP');
-    if(difficulty>.78)options.push('LOG JUMP','RAMP','FOREST','ROCK SLALOM');
-
-    if(lastType==='RECOVERY'&&difficulty>.58&&random()<(.46+difficulty*.24)){
-      options.push('RAMP','LOG JUMP','RAMP');
-    }
-    if(runPlan?.phase==='TRICK'&&lastType!=='RAMP'&&lastType!=='LOG JUMP'){
-      options.push('RAMP','LOG JUMP');
-    }
-    if(runPlan?.phase==='EXPERT'){
-      const expertPost=clamp(Number(runPlan.postMaxPressure)||0,0,1);
-      options.push('ROCK SLALOM','FOREST','GATE');
-      if(expertPost<=.45)options.push('LOG JUMP');
-    }
-
-    // Sustained top-speed pressure must increase actual playable density, not
-    // merely swap the phase label. Bias toward dense non-jump families so the
-    // post-300 sparse-gap pass has room to add fair, route-safe hazards.
-    const postMaxPressure=clamp(Number(runPlan?.postMaxPressure)||0,0,1);
-    if(postMaxPressure>0){
-      const repeats=1+Math.floor(postMaxPressure*3);
-      for(let i=0;i<repeats;i++){
-        options.push('FOREST','ROCK SLALOM','GATE','OPEN CARVE');
+  function addUrbanRiskRewardLine(placements,startZ,length,safeHint,plan,currentSpeed){
+    const risk=plan?.riskReward;
+    if(!risk?.enabled||plan?.family==='RECOVERY_STREET')return 0;
+    const tier=clamp(Math.round(Number(risk.tier)||1),1,3);
+    const direction=Math.sign(Number(risk.side)||1);
+    const count=tier>=3?3:tier>=2?2:1;
+    const spacing=Math.max(11,Math.min(18,(Math.max(34,length)-24)/(count+1)));
+    let cursor={x:clamp(safeHint,-T.SAFE_ROUTE_HALF_WIDTH,T.SAFE_ROUTE_HALF_WIDTH),z:startZ};
+    let added=0;
+    for(let i=0;i<count;i++){
+      const z=Math.max(startZ-length+10,startZ-18-i*spacing);
+      let nearestSafe=cursor.x,nearestDistance=Infinity;
+      for(const placement of placements){
+        if(!Number.isFinite(placement?.safeX)||!Number.isFinite(placement?.z))continue;
+        const dz=Math.abs(placement.z-z);
+        if(dz<nearestDistance){nearestDistance=dz;nearestSafe=placement.safeX;}
+      }
+      const reach=maxHumanReachableLateralDelta(z-cursor.z,currentSpeed);
+      const target=clamp(
+        nearestSafe+direction*(2.8+tier*.72),
+        -T.COURSE_OBJECT_HALF_WIDTH,
+        T.COURSE_OBJECT_HALF_WIDTH
+      );
+      const x=clamp(target,cursor.x-reach*.82,cursor.x+reach*.82);
+      const clear=!placements.some(placement=>
+        PHYSICAL_HAZARDS.has(placement.kind)&&
+        Math.abs(placement.z-z)<3.8&&
+        Math.abs(placement.x-x)<1.65
+      );
+      if(clear){
+        placements.push(banana(z,x,nearestSafe,{
+          riskReward:tier,
+          rewardPoints:Math.round((70+tier*42)*(Number(risk.rewardScale)||1)),
+          rewardRoute:true,
+          urbanRiskLine:true,
+          riskRouteKind:risk.kind,
+          urbanFamily:plan.family,
+          urbanDistrict:plan.district
+        }));
+        cursor={x,z};
+        added++;
       }
     }
-
-    return options[Math.floor(random()*options.length)]||'OPEN CARVE';
+    return added;
   }
 
   function estimateThreatCost(placement,currentSpeed,plan){
@@ -1201,7 +1213,7 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
   function next({startZ,difficulty=0,speed,postMaxTime=0,runTime=0,performance=null,district=null}){
     const currentSpeed=effectiveSpeed(speed,difficulty);
     const sectionStartSafeX=safeRoute.previousSafeX??0;
-    const runPlan=runDirector.plan({
+    const baseRunPlan=runDirector.plan({
       runTime,
       difficulty,
       speed:currentSpeed,
@@ -1211,8 +1223,59 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       sectionIndex,
       performance
     });
-    const type=chooseType(difficulty,runPlan);
-    const hazardProgress=clamp(difficulty*.55+getSpeedProgress(currentSpeed)*.45,0,1);
+    const urbanPlan=urbanDirector.plan({
+      sectionIndex,
+      startZ,
+      difficulty,
+      speed:currentSpeed,
+      runTime,
+      postMaxTime,
+      pendingLanding:!!pendingLanding,
+      lastLegacyType:lastType,
+      district
+    });
+    activeUrbanPlan=urbanPlan;
+    const authoredIntensity=clamp(
+      urbanPlan.difficulty.longitudinalHazardDensity*.34+
+      urbanPlan.difficulty.lateralRoutePressure*.28+
+      urbanPlan.difficulty.formationComplexity*.38,
+      0,
+      1
+    );
+    const runPlan={
+      ...baseRunPlan,
+      intensity:clamp(baseRunPlan.intensity*.74+authoredIntensity*.26,0,1),
+      expertPressure:clamp(
+        baseRunPlan.expertPressure*.76+
+        urbanPlan.difficulty.edgePressure*.13+
+        urbanPlan.difficulty.routeCommitment*.11,
+        0,
+        1
+      ),
+      threatBudget:{
+        ...baseRunPlan.threatBudget,
+        reactionSpacingScale:clamp(
+          (baseRunPlan.threatBudget?.reactionSpacingScale??1)*
+          lerp(1.035,.985,urbanPlan.difficulty.reactionWindow),
+          .96,
+          1.24
+        ),
+        routeCommitment:urbanPlan.difficulty.routeCommitment,
+        rewardBias:clamp(
+          (baseRunPlan.threatBudget?.rewardBias??.5)+(urbanPlan.riskReward.enabled?.10:0),
+          0,
+          1
+        )
+      }
+    };
+    const type=urbanPlan.legacyType;
+    const hazardProgress=clamp(
+      difficulty*.46+
+      getSpeedProgress(currentSpeed)*.38+
+      urbanPlan.difficulty.longitudinalHazardDensity*.16,
+      0,
+      1
+    );
     const elapsedPostMax=Math.max(0,Number(postMaxTime)||0);
     const postMaxPressure=elapsedPostMax>0
       ?clamp(
@@ -1523,6 +1586,15 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       }
     }
 
+    addUrbanRiskRewardLine(
+      placements,
+      startZ,
+      length,
+      safeRoute.previousSafeX??sectionStartSafeX,
+      urbanPlan,
+      currentSpeed
+    );
+
     // Fill the whole section with additional irregular hazards at every speed.
     // The helper explicitly rejects obvious horizontal rows / vertical columns
     // and preserves the tracked safe route rather than drawing a visible lane.
@@ -1613,13 +1685,21 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       sectionIndex,
       runSeed,
       runPhase:runPlan.phase,
-      district,
+      district:urbanPlan.district,
       previousUrbanType:lastUrbanType,
+      forcedUrbanType:urbanPlan.sectionType,
+      directorPlan:urbanPlan,
       startSafeX:sectionStartSafeX,
       endSafeX:safeRoute.previousSafeX,
       courseHalfWidth:T.COURSE_OBJECT_HALF_WIDTH,
       safeRouteHalfWidth:T.SAFE_ROUTE_HALF_WIDTH,
       landing:pendingLanding
+    });
+
+    urbanDirector.noteGenerated({
+      obstacleSignature:physicalKinds.join('+'),
+      hasRail:urbanSection.grindTargets.length>0,
+      hasRamp:placements.some(item=>item.kind==='ramp')
     });
 
     runDirector.noteSection({
@@ -1640,6 +1720,10 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       urbanType:urbanSection.type,
       urbanSectionId:urbanSection.id,
       urban:urbanSection.metadata,
+      urbanDirector:urbanPlan,
+      courseFamily:urbanPlan.family,
+      district:urbanPlan.district,
+      difficultyModel:urbanPlan.difficulty,
       grindTargets:urbanSection.grindTargets,
       grindValidation:urbanSection.grindValidation,
       grindRenderDescriptors:urbanSection.grindRenderDescriptors,
@@ -1691,7 +1775,9 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       recentFormations=[];
       denseFormationStreak=0;
       lastUrbanType='';
+      activeUrbanPlan=null;
       runDirector.reset();
+      urbanDirector.reset({seed:runSeed});
       safeRoute.reset(0,null);
     },
     get lastType(){return lastType;},
@@ -1701,6 +1787,8 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     get pendingLanding(){return pendingLanding;},
     get recentRunPhases(){return runDirector.recentPhases;},
     get recentExpertPatterns(){return runDirector.recentPatterns;},
+    get recentUrbanFamilies(){return urbanDirector.recentFamilies;},
+    get urbanDistrict(){return urbanDirector.district;},
     get lastUrbanType(){return lastUrbanType;},
     get runSeed(){return runSeed;},
     get mastery(){return runDirector.mastery;}

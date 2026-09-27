@@ -18,4 +18,14 @@ export {
   getGrindTargetRenderDescriptors
 } from './grindTargets.js';
 
+export {
+  URBAN_SECTION_FAMILIES,
+  URBAN_DISTRICT_IDS,
+  URBAN_DISTRICT_PROFILES,
+  URBAN_SECTION_FAMILY_BY_TYPE,
+  getUrbanDifficultyModel,
+  createUrbanCourseDirector
+} from './urbanCourseDirector.js';
+
+export {solveCourseSectionRoute} from './routeSolver.js';
 export {composeUrbanCourseSection,isUrbanPhysicalPlacement} from './urbanCourseSection.js';

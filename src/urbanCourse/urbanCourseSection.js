@@ -1,4 +1,4 @@
-import {makeUrbanSectionMetadata,selectUrbanSection} from './urbanSectionCatalog.js';
+import {getUrbanSectionDefinition,makeUrbanSectionMetadata,selectUrbanSection} from './urbanSectionCatalog.js';
 import {createGrindTargets,getGrindTargetRenderDescriptors,validateGrindTargets} from './grindTargets.js';
 
 const PHYSICAL=new Set(['tree','rock','log','wideLog','oil','ramp']);
@@ -29,10 +29,10 @@ export function isUrbanPhysicalPlacement(placement){return PHYSICAL.has(placemen
 
 export function composeUrbanCourseSection({
   legacyType,placements=[],startZ,endZ,length,speed,difficulty,sectionIndex=0,runSeed='',
-  runPhase='',district=null,previousUrbanType='',startSafeX=0,endSafeX=0,
-  courseHalfWidth=13.45,safeRouteHalfWidth=10.35,landing=null
+  runPhase='',district=null,previousUrbanType='',forcedUrbanType=null,directorPlan=null,
+  startSafeX=0,endSafeX=0,courseHalfWidth=13.45,safeRouteHalfWidth=10.35,landing=null
 }={}){
-  const definition=selectUrbanSection({
+  const definition=(forcedUrbanType&&getUrbanSectionDefinition(forcedUrbanType))||selectUrbanSection({
     legacyType,sectionIndex,difficulty,speed,runPhase,runSeed,district,previousUrbanType
   });
   const id=(runSeed||'run')+':urban:'+sectionIndex+':'+definition.id;
@@ -41,10 +41,22 @@ export function composeUrbanCourseSection({
     placement.urbanHazard=semantic(placement.kind,definition.id);
     placement.urbanType=definition.id;
     placement.urbanSectionId=id;
+    if(directorPlan?.family)placement.urbanFamily=directorPlan.family;
+    if(directorPlan?.district)placement.urbanDistrict=directorPlan.district;
   }
   const safeRoute=safeSummary(placements,startSafeX,endSafeX,safeRouteHalfWidth);
-  const metadata=makeUrbanSectionMetadata(definition,{
-    sectionId:id,legacyType,length,speed,difficulty,district,safeRoute
+  const baseMetadata=makeUrbanSectionMetadata(definition,{
+    sectionId:id,legacyType,length,speed,difficulty,district:directorPlan?.district||district,safeRoute
+  });
+  const metadata=Object.freeze({
+    ...baseMetadata,
+    family:directorPlan?.family||null,
+    district:directorPlan?.district||district||null,
+    difficultyModel:directorPlan?.difficulty||null,
+    transition:directorPlan?.transition||null,
+    riskReward:directorPlan?.riskReward||null,
+    landmark:directorPlan?.landmark||null,
+    environmentHooks:directorPlan?.environmentHooks||null
   });
   const grindTargets=createGrindTargets({
     sectionId:id,definition,placements,startZ,endZ,difficulty,
@@ -64,7 +76,10 @@ export function composeUrbanCourseSection({
     technicalSequence:definition.specialOpportunities.includes('TECHNICAL_SEQUENCE'),
     largeAir:definition.specialOpportunities.includes('LARGE_AIR'),
     lineChoice:definition.specialOpportunities.includes('LINE_CHOICE'),
-    safeBypass:true
+    safeBypass:true,
+    optionalRiskLine:!!directorPlan?.riskReward?.enabled,
+    riskTier:Number(directorPlan?.riskReward?.tier)||0,
+    landmark:!!directorPlan?.landmark
   });
   return Object.freeze({
     id,type:definition.id,definition,metadata,grindTargets,grindValidation,

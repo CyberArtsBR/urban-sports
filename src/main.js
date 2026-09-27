@@ -1,27 +1,23 @@
 import * as THREE from 'three';
-import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
-import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
-import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
-import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
-import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {createCinematicRendering,createRiderContactShadow} from './cinematicRendering.js';
 import './style.css';
 import './floatingUI.css';
 import {createMountainWeather} from './mountainWeather.js';
-import {createFallbackSkier,loadRiderAsset} from './skier.js';
-import {readPad} from './input.js';
+import {createFallbackSkier,getRiderAssetPerformanceDiagnostics,loadRiderAsset} from './skier.js';
+import {configureControllerInput,readPad} from './input.js';
 import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
-import {createSkiAudio} from './audio.js';
-import {createSkiEnvironment} from './environment.js';
-import {createUrbanEnvironment,createUrbanObstacle} from './urban/index.js';
+import {createAudioSystem} from './systems/audioSystem.js';
+import {createEnvironmentSystem} from './systems/environmentSystem.js';
+import {createUrbanObstacle} from './urban/index.js';
 import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
 import {progressSpeed,stepCarving,updateJumpAssist,tryManualJump,stepAir,launchRamp} from './skiPhysics.js';
-import {consumeSkateboardEvents,createGrindSystem,emitSkateboardEvent,getSkateboardDisplaySpeedRange,getSkateboardGameplaySnapshot,launchSkateboardRamp,resetSkateboardState,skateboardDisplaySpeed,skateboardDisplaySpeedKmh,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
+import {consumeSkateboardEvents,createGrindSystem,emitSkateboardEvent,getSkateboardDisplaySpeedRange,getSkateboardGameplaySnapshot,launchSkateboardRamp,recordSkateboardLandingStatistic,resetSkateboardState,skateboardGameplaySpeed,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
 import {createCourseDirector,getCourseDifficulty} from './course.js';
 import {terrainHeight,sampleSkiGround,displaceTerrainChunk,dampTerrainContact} from './terrainContact.js';
-import {createSkiCamera} from './skiCamera.js';
+import {createCameraSystem} from './systems/cameraSystem.js';
 import {createGameFeedback} from './gameFeedback.js';
 import {createStartCameraSequence,START_CAMERA_FRONT_HOLD_MS,START_CAMERA_ROTATE_MS} from './startCameraSequence.js';
 import {createStartCrowd} from './startCrowd.js';
@@ -39,35 +35,61 @@ import {createTrickSystem} from './trickSystem.js';
 import {announceTrickStart,resetTrickScoring,scoreTrickCompletion,scoreTrickFailure} from './trickScoring.js';
 import {createHaptics} from './haptics.js';
 import {RIDE_MODE,getRideProfile,normalizeRideMode,speedToKmh} from './rideMode.js';
-import {SPORT_MODE,getSportProfile,getLegacyRideModeForSport,normalizeSportMode} from './sportMode.js';
+import {SPORT_ID,getSportDefinition} from './sportDefinition.js';
+import {createSportController} from './sportController.js';
+import {getSkateboardSetupProfile,listSkateboardSetupProfiles,selectorRideModeForSkateboardSetup,skateboardSetupFromSelectorRideMode} from './skateboardSetup.js';
+import {progressWorldSpeed} from './worldProgression.js';
 import {GAME_IDENTITY} from './gameIdentity.js';
 import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} from './playerOrientation.js';
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
+import {createGpuTimer} from './gpuTimer.js';
+import {createTimingSeries,instrumentShadowMap} from './renderTimings.js';
 import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
-import {CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference} from './userPreferences.js';
-import {GAME_FLOW,createGameFlow} from './gameFlow.js';
-import {createRunSession,createRunState} from './runSession.js';
+import {
+  CAMERA_MOTION,CAMERA_VIEW,loadBestScore,loadUserPreferences,
+  saveAvatarPreference,saveBestScore,saveCameraMotionPreference,saveCameraViewPreference,
+  saveHapticIntensityPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference,saveSportPreference,
+  saveUiScalePreference,saveHighContrastPreference,saveReducedMotionPreference,saveReducedVfxPreference,saveReducedFlashesPreference,
+  saveCameraShakePreference,saveControllerDeadzonePreference,saveSteeringSensitivityPreference,saveHapticsIntensityPreference,
+  saveCaptionsPreference,saveLocalePreference
+} from './userPreferences.js';
+import {GAME_FLOW,createRunController} from './runController.js';
+import {RUN_STATE_OWNERSHIP} from './stateOwnership.js';
 import {createBananaPowerSystem} from './bananaPowerSystem.js';
 import {createCollisionRuntime} from './collisionRuntime.js';
 import {createGlobalListenerScope} from './globalListeners.js';
 import {createRiderController} from './riderController.js';
 import {createRuntimeDiagnostics} from './runtimeDiagnostics.js';
 import {createImpactVfx} from './impactVfx.js';
+import {CONTROL_COPY} from './controlCopy.js';
+import {createLocalization} from './localization.js';
+import {applyAccessibilityPreferences} from './uiAccessibility.js';
+import {createProgressionReplayService} from './progression/index.js';
+import {recordLandingFeedbackStats,recordLandingOutcome} from './landingStats.js';
+import {createOneShotGraphicsFaultInjector} from './renderFailOpen.js';
 
 const userPreferences=loadUserPreferences();
+const localization=createLocalization({locale:userPreferences.locale});
+let accessibilityPreferences={...userPreferences};
+applyAccessibilityPreferences(accessibilityPreferences);
+configureControllerInput({deadzone:userPreferences.controllerDeadzone});
 
 let runtimeTestMode=false;
 let requestedRunSeed=null;
+let activeChallengeSeed=null;
+let requestedGraphicsFault='';
 try{
   const params=new URLSearchParams(globalThis.location?.search||'');
   runtimeTestMode=params.get('test')==='1';
   const seedParam=params.get('seed');
   requestedRunSeed=seedParam?String(seedParam):null;
+  requestedGraphicsFault=runtimeTestMode?String(params.get('graphicsFault')||'').trim().toLowerCase():'';
 }catch{}
 function createRunSeed(){
   if(requestedRunSeed)return requestedRunSeed;
+  if(activeChallengeSeed)return activeChallengeSeed;
   try{
     const values=new Uint32Array(2);
     globalThis.crypto?.getRandomValues?.(values);
@@ -96,16 +118,16 @@ app.innerHTML=`
     <section class="card" aria-labelledby="game-title">
       <div class="badge">🌆 URBAN ARCADE</div>
       <h1 class="logo" id="game-title">CHIMPIONS <span>URBAN SPORTS</span></h1>
-      <p class="tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
+      <p class="tagline" data-i18n="menu.tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
       <div class="selected-avatar" id="selected-avatar">
         <span class="selected-avatar-image" id="selected-avatar-image">🐵</span>
-        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD · 150–300 KM/H</em></span>
+        <span><small data-i18n="menu.yourRider">YOUR RIDER</small><strong id="selected-avatar-name" data-i18n="menu.loadingRider">Loading Chimpions…</strong><em id="selected-sport-mode" class="selected-sport-mode">SKATEBOARD</em></span>
       </div>
       <div class="menu-actions">
-        <button class="secondary" id="choose" aria-label="Choose Chimpion" disabled>CHOOSE CHIMPION</button>
-        <button class="primary" id="start" aria-label="Start riding" disabled>LOADING CHIMPION…</button>
+        <button class="secondary" id="choose" aria-label="Choose Chimpion" data-i18n="menu.chooseRider" disabled>CHOOSE CHIMPION</button>
+        <button class="primary" id="start" aria-label="Start riding" data-i18n="menu.loadingRider" disabled>LOADING CHIMPION…</button>
       </div>
-      <div class="tip">A / D or LEFT STICK / D-PAD · CARVE &nbsp; · &nbsp; SPACE / A · CROSS · JUMP &nbsp; · &nbsp; ESC / START · MENU · PAUSE</div>
+      <div class="tip">${CONTROL_COPY.carve} · STEER &nbsp; · &nbsp; ${CONTROL_COPY.jump} · JUMP &nbsp; · &nbsp; ${CONTROL_COPY.pause} · PAUSE</div>
     </section>
   </div>
 `;
@@ -116,10 +138,10 @@ const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,280);
 camera.position.set(0,6.1,10.5);
 camera.lookAt(0,1,-12);
-const skiCamera=createSkiCamera(camera);
+const cameraSystem=createCameraSystem(camera);
 const reducedMotionMedia=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')||null;
 let cameraViewMode=Object.values(CAMERA_VIEW).includes(userPreferences.cameraView)?userPreferences.cameraView:CAMERA_VIEW.CHASE;
-skiCamera.setViewMode(cameraViewMode);
+cameraSystem.setViewMode(cameraViewMode);
 document.documentElement.dataset.cameraView=cameraViewMode;
 let cameraMotionMode=userPreferences.cameraMotion;
 if(cameraMotionMode===CAMERA_MOTION.AUTO){
@@ -129,33 +151,26 @@ function applyCameraMotionPreference(mode=cameraMotionMode){
   cameraMotionMode=[CAMERA_MOTION.FULL,CAMERA_MOTION.FIXED,CAMERA_MOTION.REDUCED].includes(mode)
     ?mode
     :CAMERA_MOTION.FULL;
-  skiCamera.setMotionMode?.(cameraMotionMode);
+  cameraSystem.setMotionMode?.(cameraMotionMode);
   document.documentElement.dataset.cameraMotion=cameraMotionMode;
   return cameraMotionMode;
 }
 applyCameraMotionPreference();
+cameraSystem.setMotionAmount?.(userPreferences.cameraShake);
 
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
-let composer=null,renderPass=null,bloomPass=null,ssaoPass=null,composerPixelRatio=0;
-
-function applyBloomQuality(){
-  if(!bloomPass)return;
-  const profile=quality.active;
-  bloomPass.strength=profile==='max'?.72:profile==='high'?.62:profile==='medium'?.48:.35;
-  bloomPass.radius=profile==='max'?.42:profile==='high'?.38:profile==='medium'?.34:.28;
-  bloomPass.threshold=profile==='max'?1.15:profile==='high'?1.22:profile==='medium'?1.35:1.55;
-}
+const gpuTimer=createGpuTimer(renderer);
+const directRenderTimer=createTimingSeries();
+const shadowRenderTimer=createTimingSeries();
+const restoreShadowInstrumentation=instrumentShadowMap(renderer,shadowRenderTimer);
+let cinematicRendering=null;
 
 function applyRendererResolution(){
   const next=quality.getPixelRatio(devicePixelRatio);
   if(Math.abs(renderer.getPixelRatio()-next)>.005)renderer.setPixelRatio(next);
-  if(composer&&Math.abs(composerPixelRatio-next)>.005){
-    composer.setPixelRatio(next);
-    composerPixelRatio=next;
-  }
-  applyBloomQuality();
+  cinematicRendering?.resize?.(innerWidth,innerHeight,next);
 }
 applyRendererResolution();
 renderer.setSize(innerWidth,innerHeight);
@@ -163,40 +178,37 @@ renderer.shadowMap.enabled=false;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
 app.prepend(renderer.domElement);
 
-// Stability hotfix: render the production gameplay scene directly with the
-// WebGLRenderer. The composed post-processing path can produce a black frame on
-// real client GPUs even when gameplay/HUD continue normally. Keep the pass
-// variables null so quality/diagnostic code remains compatible, but do not
-// allocate or execute EffectComposer until the pipeline is revalidated across
-// production hardware.
-composer=null;
-renderPass=null;
-ssaoPass=null;
-bloomPass=null;
-composerPixelRatio=0;
+// Direct rendering remains the universal safety path. MAX CINEMATIC is optional
+// and fail-open: any capability, pass, framebuffer or output-health failure
+// immediately returns control to renderer.render(scene,camera).
+cinematicRendering=createCinematicRendering({renderer,scene,camera,settings:quality.getSettings()});
+const graphicsFaultInjector=createOneShotGraphicsFaultInjector(requestedGraphicsFault);
+const renderFailOpenState={
+  optionalDisabled:false,directFrames:0,composedFrames:0,fallbackFrames:0,faultCount:0,lastFault:'',lastPath:'unrendered'
+};
 
 const world=new THREE.Group();scene.add(world);
-const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
-const urbanEnvironment=createUrbanEnvironment({
-  parent:world,
+const environmentSystem=createEnvironmentSystem({
+  scene,
+  world,
   renderer,
+  camera,
+  mode:GAME_IDENTITY.environment,
   quality:quality.getSettings(),
-  seed:'chimpions-urban-main',
-  roadWidth:27.5,
-  sidewalkWidth:3.2,
-  segmentLength:28,
-  segmentCount:20,
-  recycleNear:36,
-  farZ:-520
+  urbanOptions:{
+    seed:'chimpions-urban-main',
+    roadWidth:27.5,
+    sidewalkWidth:3.2,
+    segmentLength:28,
+    segmentCount:20,
+    recycleNear:36,
+    farZ:-520
+  }
 });
-// The gameplay heightfield is itself rendered as asphalt so it follows the
-// exact collision/landing surface. Keep the urban module's sidewalks, curbs,
-// markings and city props, but avoid drawing a second flat asphalt plane.
-if(urbanEnvironment.components?.road?.meshes?.[0]){
-  urbanEnvironment.components.road.meshes[0].visible=false;
-}
+const {environment,urbanEnvironment}=environmentSystem;
 const unsubscribeRendererQuality=quality.subscribe(applyRendererResolution);
 const unsubscribeRendererResolution=quality.subscribeResolution(applyRendererResolution);
 const groundMat=urbanEnvironment.materials.asphalt;
@@ -424,8 +436,27 @@ const skiTrails=createSkiTrails({world,terrainHeight,capacity:192,surface:'urban
 let trailTimer=0;
 
 const player=new THREE.Group();scene.add(player);
+const riderContactShadow=createRiderContactShadow({scene});
 player.position.set(0,.12,2.2);
 const impactVfx=createImpactVfx({scene,capacity:224});
+let lastSkateVfxEventId=0;
+function emitPendingSkateVfx(){
+  const events=state.skate?.events||[];
+  for(const event of events){
+    const id=Number(event?.id)||0;
+    if(id<=lastSkateVfxEventId)continue;
+    impactVfx.skateEvent?.(event,{
+      x:state.x,
+      y:Math.max(.10,(state.y||0)+.12),
+      z:player.position.z,
+      direction:Math.sign(state.vx)||state.crashDirection||1,
+      speed:state.speed,
+      wetness:roadWetness,
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
+    });
+    lastSkateVfxEventId=Math.max(lastSkateVfxEventId,id);
+  }
+}
 
 // Banana Power is displayed directly on the rider equipment as emissive LED light.
 const trickVisualPivot=new THREE.Group();
@@ -434,7 +465,7 @@ player.add(trickVisualPivot);
 const riderController=createRiderController({visualRoot:trickVisualPivot,disposeRider:disposeAvatarObject});
 const tricks=createTrickSystem({visualTarget:trickVisualPivot});
 const grindSystem=createGrindSystem();
-const startCamera=createStartCameraSequence({camera,skiCamera,player});
+const startCamera=createStartCameraSequence({camera,skiCamera:cameraSystem,player});
 const startCrowd=createStartCrowd({world,terrainHeight});
 const startGate=createStartGateScene({world,terrainHeight,theme:'urban'});
 const START_COUNTDOWN_DURATION_MS=runtimeTestMode?180:2700;
@@ -445,11 +476,19 @@ let startCountdownStarted=false;
 let catalog=[],selectedAvatar=null,selector=null,ready=false;
 let selectorReady=false;
 let avatarCommitted=false;
-let selectedSportMode=normalizeSportMode(GAME_IDENTITY.defaultSport||SPORT_MODE.SKATEBOARD);
-let selectedRideMode=getLegacyRideModeForSport(selectedSportMode);
+const sportController=createSportController({
+  initialSport:userPreferences.sportMode||GAME_IDENTITY.defaultSport||SPORT_ID.SKATEBOARD
+});
+let selectedSportMode=sportController.sportId;
+let selectedSkateboardSetup=skateboardSetupFromSelectorRideMode(userPreferences.rideMode||RIDE_MODE.SKI);
+let selectedRideMode=sportController.legacyRideMode;
+saveSportPreference(selectedSportMode);
 let initialSelectionFlow=false;
 const initialRideProfile=getRideProfile(selectedRideMode);
-const state=createRunState({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:0});
+const progression=createProgressionReplayService({reducedVfx:!!accessibilityPreferences.reducedVfx});
+const runController=createRunController({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:progression.getBestDistance()});
+const {state,runSession,gameFlow}=runController;
+state.skateSetup=selectedSkateboardSetup;
 resetSkateboardState(state);
 const CURB_GRIND_X=SKI_TUNING.PLAYER_BOUNDARY_HALF_WIDTH+.72;
 for(const side of [-1,1]){
@@ -465,14 +504,14 @@ for(const side of [-1,1]){
   });
 }
 state.runSeed=createRunSeed();
-const runSession=createRunSession({state});
-const gameFlow=createGameFlow({state,initial:GAME_FLOW.START});
 const runtimeListeners=createGlobalListenerScope();
 
-const audio=createSkiAudio();
+const audio=createAudioSystem({sportDefinition:sportController.definition});
 const mountainWeather=createMountainWeather({app,scene,camera,renderer,environment,audio});
 audio.setRideMode?.(selectedRideMode);
-const haptics=createHaptics({enabled:userPreferences.haptics});
+audio.setSportMode?.(selectedSportMode);
+const haptics=createHaptics({enabled:userPreferences.haptics,intensity:userPreferences.hapticIntensity});
+haptics.setIntensity?.(userPreferences.hapticsIntensity);
 const ui=createGameUI({
   audio,
   haptics,
@@ -493,14 +532,15 @@ const ui=createGameUI({
     audio.update({mode:'menu'});
     window.location.assign(startScreen.gameSelectionUrl);
   },
-  onShowTutorial:()=>{void showSessionTutorial({force:true});}
+  onShowTutorial:()=>{void showSessionTutorial({force:true});},
+  localization
 });
 
 const CAMERA_VIEW_ORDER=[CAMERA_VIEW.CHASE,CAMERA_VIEW.FIXED,CAMERA_VIEW.HIGH_FAR,CAMERA_VIEW.FIRST_PERSON];
 const CAMERA_MOTION_ORDER=[CAMERA_MOTION.FULL,CAMERA_MOTION.FIXED,CAMERA_MOTION.REDUCED];
 function setCameraView(mode,{persist=true,announce=false}={}){
   cameraViewMode=Object.values(CAMERA_VIEW).includes(mode)?mode:CAMERA_VIEW.CHASE;
-  skiCamera.setViewMode(cameraViewMode);
+  cameraSystem.setViewMode(cameraViewMode);
   document.documentElement.dataset.cameraView=cameraViewMode;
   ui.setCameraViewMode?.(cameraViewMode);
   if(persist)saveCameraViewPreference(cameraViewMode);
@@ -556,7 +596,9 @@ const getRuntimeDiagnostics=createRuntimeDiagnostics({
   runSession,
   bananaPower,
   collisionRuntime,
-  riderController
+  riderController,
+  sportController,
+  stateOwnership:RUN_STATE_OWNERSHIP
 });
 function updateBananaPowerVisual(time=0){
   const charged=state.specialReady||state.specialActiveTime>0;
@@ -584,6 +626,29 @@ ui.configureSettings?.({
   onHapticsChange:enabled=>{
     haptics.setEnabled?.(enabled);
     saveHapticsPreference(enabled);
+  },
+  onHapticIntensityChange:intensity=>{
+    haptics.setIntensityPreference?.(intensity);
+    saveHapticIntensityPreference(intensity);
+  },
+  preferences:userPreferences,
+  onPreferenceChange:(key,value,preferences)=>{
+    accessibilityPreferences={...accessibilityPreferences,...preferences};
+    switch(key){
+      case 'uiScale':saveUiScalePreference(value);break;
+      case 'highContrast':saveHighContrastPreference(value);break;
+      case 'reducedMotion':saveReducedMotionPreference(value);break;
+      case 'reducedVfx':saveReducedVfxPreference(value);break;
+      case 'reducedFlashes':saveReducedFlashesPreference(value);break;
+      case 'cameraShake':saveCameraShakePreference(value);cameraSystem.setMotionAmount?.(value);break;
+      case 'controllerDeadzone':saveControllerDeadzonePreference(value);configureControllerInput({deadzone:value});break;
+      case 'steeringSensitivity':saveSteeringSensitivityPreference(value);gameplayInput?.setSteeringSensitivity?.(value);break;
+      case 'hapticsIntensity':saveHapticsIntensityPreference(value);haptics.setIntensity?.(value);break;
+      case 'captions':saveCaptionsPreference(value);break;
+      case 'locale':saveLocalePreference(value);localization.setLocale(value);break;
+      default:break;
+    }
+    applyAccessibilityPreferences(accessibilityPreferences);
   }
 });
 let currentRenderingSettings=quality.getSettings();
@@ -661,19 +726,12 @@ function applyRenderingQuality(settings=quality.getSettings()){
   applyStartShadowPolicy(realShadows);
   applyRiderShadowPolicy();
 
-  if(ssaoPass){
-    const aoEnabled=profile==='max'&&settings.contactAO!==false;
-    ssaoPass.enabled=aoEnabled;
-    ssaoPass.kernelRadius=Math.max(8,Number(settings.aoKernelRadius)||18);
-    ssaoPass.minDistance=.0025;
-    ssaoPass.maxDistance=.12;
-    if(renderPass)renderPass.enabled=!aoEnabled;
-  }
-  applyBloomQuality();
+  cinematicRendering?.configure?.(settings);
+  if(profile==='max-cinematic')cinematicRendering?.resize?.(innerWidth,innerHeight,renderer.getPixelRatio());
 }
 function applyRuntimeQuality(settings=quality.getSettings()){
-  environment.applyQuality?.(settings);
-  urbanEnvironment.setQualityProfile?.(settings);
+  environmentSystem.applyQuality(settings);
+  audio.setAudioQualityProfile?.(settings.profile);
   applyRenderingQuality(settings);
 }
 const unsubscribeRuntimeQuality=quality.subscribe(applyRuntimeQuality,{immediate:true});
@@ -684,6 +742,7 @@ const scorePresentation=createScorePresentation({hud:document.querySelector('.hu
 const SESSION_TUTORIAL_KEY='chimpions-urban-sports-tutorial-seen-v1';
 let sessionTutorialVisible=false;
 let sessionTutorialResolve=null;
+let sessionTutorialPreviousFocus=null;
 let tutorialPreviousButtons=[];
 let tutorialAwaitNeutral=true;
 
@@ -693,6 +752,7 @@ sessionTutorialRoot.hidden=true;
 sessionTutorialRoot.setAttribute('role','dialog');
 sessionTutorialRoot.setAttribute('aria-modal','true');
 sessionTutorialRoot.setAttribute('aria-label','Chimpions Urban Sports how to play tutorial');
+sessionTutorialRoot.tabIndex=-1;
 sessionTutorialRoot.innerHTML=`
   <div class="session-tutorial-stage">
     <div class="session-tutorial-bg" aria-hidden="true"></div>
@@ -722,6 +782,8 @@ function markSessionTutorialSeen(){
 }
 function dismissSessionTutorial(){
   if(!sessionTutorialVisible)return false;
+  const focusTarget=sessionTutorialPreviousFocus;
+  sessionTutorialPreviousFocus=null;
   sessionTutorialVisible=false;
   sessionTutorialRoot.hidden=true;
   document.body.classList.remove('session-tutorial-active');
@@ -732,6 +794,11 @@ function dismissSessionTutorial(){
   const resolve=sessionTutorialResolve;
   sessionTutorialResolve=null;
   resolve?.(true);
+  requestAnimationFrame(()=>{
+    if(focusTarget?.isConnected&&!focusTarget.disabled&&!focusTarget.closest?.('[hidden]')){
+      try{focusTarget.focus?.({preventScroll:true});}catch{focusTarget.focus?.();}
+    }
+  });
   return true;
 }
 function showSessionTutorial({force=false}={}){
@@ -740,9 +807,11 @@ function showSessionTutorial({force=false}={}){
   if(!force&&!gameFlow.enter(GAME_FLOW.TUTORIAL,{reason:'session-tutorial'}))return Promise.resolve(false);
   gameplayInput?.resetTransient?.();
   touchControls?.reset?.();
+  sessionTutorialPreviousFocus=document.activeElement;
   sessionTutorialVisible=true;
   sessionTutorialRoot.hidden=false;
   document.body.classList.add('session-tutorial-active');
+  try{sessionTutorialRoot.focus({preventScroll:true});}catch{sessionTutorialRoot.focus();}
   tutorialPreviousButtons=[];
   tutorialAwaitNeutral=true;
   return new Promise(resolve=>{sessionTutorialResolve=resolve;});
@@ -785,6 +854,7 @@ const startScreen=createStartScreen({
     // The selected rider is interaction-critical and should not compete with crowd parsing.
     return true;
   },
+  localization,
   assetUrl:'/start/chimpions-urban-sports-start.webp',
   transitionMs:runtimeTestMode?0:300
 });
@@ -792,17 +862,14 @@ startScreen.setReady(false);
 ui.setAvatarLoading(true);
 
 function syncRideModePresentation(){
-  const rideProfile=getRideProfile(selectedRideMode);
-  const sportProfile=getSportProfile(selectedSportMode);
-  const label=document.getElementById('selected-ride-mode');
-  if(label){
-    const range=selectedSportMode===SPORT_MODE.SKATEBOARD
-      ?getSkateboardDisplaySpeedRange()
-      :{minKmh:speedToKmh(rideProfile.baseSpeed),maxKmh:speedToKmh(rideProfile.maxSpeed)};
-    label.textContent=sportProfile.label+' · '+range.minKmh+'–'+range.maxKmh+' KM/H';
-  }
+  const sportProfile=getSportDefinition(selectedSportMode);
+  const label=document.getElementById('selected-sport-mode');
+  if(label)label.textContent=selectedSportMode===SPORT_ID.SKATEBOARD
+    ?sportProfile.uiCopy.label+' · '+getSkateboardSetupProfile(selectedSkateboardSetup).label
+    :sportProfile.uiCopy.label;
   document.body.dataset.rideMode=selectedRideMode;
   document.body.dataset.sportMode=selectedSportMode;
+  document.body.dataset.skateboardSetup=selectedSkateboardSetup;
 }
 
 function applyRideProfileToState(mode,{resetSpeed=false}={}){
@@ -823,7 +890,7 @@ function audioTrickType(type){
 }
 
 function announceTrickAudio(event){
-  if(event&&selectedSportMode===SPORT_MODE.SKATEBOARD)emitSkateboardEvent(state,'trickStart',{trick:event.type,source:event.source||state.jumpSource||'air'});
+  if(event&&selectedSportMode===SPORT_ID.SKATEBOARD)emitSkateboardEvent(state,'trickStart',{trick:event.type,source:event.source||state.jumpSource||'air'});
   const type=audioTrickType(event?.type);
   if(!type||!event)return;
   audio.playTrickStart?.(type,event.id);
@@ -831,7 +898,7 @@ function announceTrickAudio(event){
 }
 
 function resolveTrickAudio(event){
-  if(event&&selectedSportMode===SPORT_MODE.SKATEBOARD)emitSkateboardEvent(state,event.success?'trickLand':'trickFail',{trick:event.type,points:event.points||0,combo:state.combo||0});
+  if(event&&selectedSportMode===SPORT_ID.SKATEBOARD)emitSkateboardEvent(state,event.success?'trickLand':'trickFail',{trick:event.type,points:event.points||0,combo:state.combo||0});
   const type=audioTrickType(event?.type);
   if(!type||!event)return;
   if(event.success){
@@ -845,21 +912,40 @@ function resolveTrickAudio(event){
 
 let avatarRequest=0;
 let avatarLoadController=null;
-async function setAvatar(entry,rideMode=selectedRideMode){
+let validatedLocalCandidate=null;
+
+function releaseValidatedLocalCandidate(except=null){
+  const candidate=validatedLocalCandidate;
+  validatedLocalCandidate=null;
+  if(candidate?.rider&&candidate.rider!==except)disposeAvatarObject(candidate.rider);
+}
+function takeValidatedLocalCandidate(sourceUrl){
+  const candidate=validatedLocalCandidate;
+  if(!candidate||candidate.sourceUrl!==sourceUrl)return null;
+  validatedLocalCandidate=null;
+  return candidate.rider||null;
+}
+async function setAvatar(entry,rideMode=selectorRideModeForSkateboardSetup(selectedSkateboardSetup)){
   if(!entry)return;
-  // Skateboard uses the snowboard ride mode only for the shared speed/avatar/
-  // equipment compatibility contract. Native handling lives in skateboardPhysics.
-  const nextRideMode=getLegacyRideModeForSport(selectedSportMode);
+  const nextSkateboardSetup=selectedSportMode===SPORT_ID.SKATEBOARD
+    ?skateboardSetupFromSelectorRideMode(rideMode)
+    :selectedSkateboardSetup;
+  // Keep the legacy ride mode only for avatar/equipment/world compatibility.
+  // The visible selector controls native Street/Park skateboard handling.
+  const nextRideMode=sportController.legacyRideMode;
 
   if(avatarCommitted&&selectedAvatar?.id===entry.id&&riderController.rider){
     selectedRideMode=nextRideMode;
-    saveRideModePreference(selectedRideMode);
+    selectedSkateboardSetup=nextSkateboardSetup;
+    state.skateSetup=selectedSkateboardSetup;
+    saveRideModePreference(selectorRideModeForSkateboardSetup(selectedSkateboardSetup));
     if(!entry.localOnly)saveAvatarPreference(entry.name);
     audio.setRideMode?.(selectedRideMode);
+    audio.setSportMode?.(selectedSportMode);
     riderController.setRideMode(selectedRideMode);
     applyRideProfileToState(selectedRideMode,{resetSpeed:state.mode==='menu'});
     syncRideModePresentation();
-    selector?.setSelected(entry,selectedRideMode);
+    selector?.setSelected(entry,selectedSkateboardSetup);
     return;
   }
 
@@ -873,12 +959,16 @@ async function setAvatar(entry,rideMode=selectedRideMode){
   try{
     const sourceUrl=entry.localOnly?entry.localObjectUrl:'/'+entry.url;
     const avatarLoadStarted=performance.now();
-    const nextSkier=await loadRiderAsset(sourceUrl,{
-      rideMode:nextRideMode,
-      requireGameplayRig:!!entry.localOnly,
-      compatibilityInput:entry.name,
-      signal:loadController.signal
-    });
+    let nextSkier=entry.localOnly?takeValidatedLocalCandidate(sourceUrl):null;
+    if(!entry.localOnly)releaseValidatedLocalCandidate();
+    if(!nextSkier){
+      nextSkier=await loadRiderAsset(sourceUrl,{
+        rideMode:nextRideMode,
+        requireGameplayRig:!!entry.localOnly,
+        compatibilityInput:entry.name,
+        signal:loadController.signal
+      });
+    }
     performanceTelemetry.recordAvatarLoad(performance.now()-avatarLoadStarted);
     if(request!==avatarRequest){disposeAvatarObject(nextSkier);return;}
     riderController.replace(nextSkier);
@@ -887,14 +977,17 @@ async function setAvatar(entry,rideMode=selectedRideMode){
     selectedAvatar=entry;
     avatarCommitted=true;
     selectedRideMode=nextRideMode;
-    saveRideModePreference(selectedRideMode);
+    selectedSkateboardSetup=nextSkateboardSetup;
+    state.skateSetup=selectedSkateboardSetup;
+    saveRideModePreference(selectorRideModeForSkateboardSetup(selectedSkateboardSetup));
     if(!entry.localOnly)saveAvatarPreference(entry.name);
     audio.setRideMode?.(selectedRideMode);
+    audio.setSportMode?.(selectedSportMode);
     riderController.setRideMode(selectedRideMode);
     applyRideProfileToState(selectedRideMode,{resetSpeed:state.mode==='menu'});
     ui.setAvatar(entry);
     syncRideModePresentation();
-    selector?.setSelected(entry,selectedRideMode);
+    selector?.setSelected(entry,selectedSkateboardSetup);
   }catch(error){
     if(error?.name!=='AbortError')throw error;
   }finally{
@@ -907,12 +1000,13 @@ async function setAvatar(entry,rideMode=selectedRideMode){
   }
 }
 async function validateLocalAvatarEntry(entry){
+  releaseValidatedLocalCandidate();
   const candidate=await loadRiderAsset(entry.localObjectUrl,{
     rideMode:selectedRideMode,
     requireGameplayRig:true,
     compatibilityInput:entry.name
   });
-  disposeAvatarObject(candidate);
+  validatedLocalCandidate={sourceUrl:entry.localObjectUrl,rider:candidate};
   return true;
 }
 
@@ -920,20 +1014,29 @@ function installAvatarSelector(initialAvatar){
   selector=createAvatarSelector({
     catalog,
     onValidateLocalAvatar:validateLocalAvatarEntry,
-    onSelect:async(entry,rideMode)=>{
-      await setAvatar(entry,rideMode);
-      // Phase 2: any ride-card confirmation launches the current Urban sport.
-      // The presentation branch will replace the legacy Ski/Snowboard wording.
+    onSelect:async(entry,setupId)=>{
+      const nextSetup=setupId||selectedSkateboardSetup;
+      await setAvatar(entry,selectorRideModeForSkateboardSetup(nextSetup));
       initialSelectionFlow=false;
       setTimeout(()=>beginRun(),0);
     },
     selectedId:initialAvatar.id,
-    selectedRideMode
+    selectedRideMode:selectorRideModeForSkateboardSetup(selectedSkateboardSetup),
+    skateboardSetup:{
+      profiles:listSkateboardSetupProfiles().map(profile=>({
+        id:profile.id,label:profile.label,
+        description:profile.id==='park'?'More air control and ramp pop.':'Precise street steering, manuals and grinds.',
+        icon:'🛹',available:true
+      })),
+      activeProfileId:selectedSkateboardSetup
+    },
+    localization
   });
   runtimeListeners.on(selector.dialog,'close',()=>{
+    releaseValidatedLocalCandidate(riderController.rider);
     if(initialSelectionFlow)initialSelectionFlow=false;
   });
-  selector.setSelected(initialAvatar,selectedRideMode);
+  selector.setSelected(initialAvatar,selectedSkateboardSetup);
   selectorReady=true;
   ready=!!riderController.rider;
   startScreen.setReady(ready);
@@ -962,40 +1065,130 @@ function installAvatarSelector(initialAvatar){
 
 resetAirborneScoring(state);
 resetTrickScoring(state);
-try{state.best=Number(localStorage.getItem('chimpions-ski-best'))||0}catch{}
+state.best=Math.max(loadBestScore(0),progression.getBestDistance());
 courseDirector=createCourseDirector({routeCenter});
 resetCourse(0);
 const gameplayInput=createGameplayInput();
+gameplayInput.setSteeringSensitivity?.(userPreferences.steeringSensitivity);
 const keys=gameplayInput.keys;
 const touchControls=createTouchControls({
   onSteer:value=>gameplayInput.setTouchSteer(value),
   onJump:pressed=>gameplayInput.setTouchJump(pressed),
   onTrick:(type,pressed)=>gameplayInput.setTouchTrick(type,pressed),
-  onPause:()=>gameplayInput.requestPause()
+  onSpecial:()=>gameplayInput.requestSpecial(),
+  onPause:()=>gameplayInput.requestPause(),
+  localization
 });
 let last=performance.now();
 let physicsSubsteps=0;
 let runPreparing=false;
 let pendingCrashResults=null;
 let roadWetness=0;
+const MAX_FORWARDED_SKATEBOARD_EVENTS=48;
+const forwardedSkateboardEvents=new Array(MAX_FORWARDED_SKATEBOARD_EVENTS);
+let forwardedSkateboardEventWrite=0;
+let forwardedSkateboardEventCount=0;
+
+function skateSurfaceFromEvent(event,wetness=roadWetness){
+  const target=String(event?.targetId||'').toLowerCase();
+  if(/rail|bar|pipe/.test(target))return 'rail';
+  if(/ledge/.test(target))return 'ledge';
+  if(/curb/.test(target))return 'curb';
+  if((state.oilSlipTime||0)>0)return 'oil';
+  if(Number(wetness)>.22)return 'wet_asphalt';
+  return 'dry_asphalt';
+}
+function rememberForwardedSkateboardEvent(event){
+  forwardedSkateboardEvents[forwardedSkateboardEventWrite]={...event};
+  forwardedSkateboardEventWrite=(forwardedSkateboardEventWrite+1)%MAX_FORWARDED_SKATEBOARD_EVENTS;
+  forwardedSkateboardEventCount=Math.min(MAX_FORWARDED_SKATEBOARD_EVENTS,forwardedSkateboardEventCount+1);
+}
+function drainForwardedSkateboardEvents(){
+  const count=forwardedSkateboardEventCount;
+  const events=new Array(count);
+  const start=(forwardedSkateboardEventWrite-count+MAX_FORWARDED_SKATEBOARD_EVENTS)%MAX_FORWARDED_SKATEBOARD_EVENTS;
+  for(let index=0;index<count;index++){
+    events[index]=forwardedSkateboardEvents[(start+index)%MAX_FORWARDED_SKATEBOARD_EVENTS];
+  }
+  forwardedSkateboardEventCount=0;
+  return events;
+}
+function consumeSkateboardFeedbackEvents(wetness=roadWetness){
+  if(selectedSportMode!==SPORT_ID.SKATEBOARD)return [];
+  const events=consumeSkateboardEvents(state);
+  for(const event of events){
+    rememberForwardedSkateboardEvent(event);
+    const type=String(event.type||'');
+    const lower=type.toLowerCase();
+    const surface=skateSurfaceFromEvent(event,wetness);
+    const payload={...event,surface};
+    if(lower==='tailpop'){
+      audio.playSkateEvent?.(type,{...payload,audio:false});
+      if(!event.ramp)haptics.ollie?.(.78,{nollie:!!event.nollie});
+      continue;
+    }
+    if(lower==='land'||lower==='hardland'||lower==='trickstart'||lower==='trickland'||lower==='trickfail')continue;
+    if(lower==='powerslidestart'){
+      audio.playSkateEvent?.(type,payload);
+      haptics.powerslide?.('start',.72);
+      continue;
+    }
+    if(lower==='powerslideloop'){
+      audio.playSkateEvent?.(type,{...payload,audio:false});
+      continue;
+    }
+    if(lower==='powerslideend'){
+      audio.playSkateEvent?.(type,payload);
+      haptics.powerslide?.('end',.55);
+      continue;
+    }
+    if(lower==='grindstart'){
+      audio.playSkateEvent?.(type,{...payload,type:event.trick||'50-50',intensity:.78});
+      haptics.grind?.('start',.78);
+      continue;
+    }
+    if(lower==='grindloop'){
+      audio.playSkateEvent?.(type,{...payload,type:event.trick||'50-50',intensity:.62,audio:false});
+      continue;
+    }
+    if(lower==='grindend'){
+      audio.playSkateEvent?.(type,{...payload,type:event.trick||'50-50',intensity:.68});
+      haptics.grind?.('end',.68);
+      continue;
+    }
+    if(lower==='manualstart'||lower==='manualend')audio.playSkateEvent?.(type,{...payload,intensity:.42});
+  }
+  return events;
+}
+
 
 function resetRunState(){
   if(state.rideMode!==selectedRideMode)applyRideProfileToState(selectedRideMode);
   const rideProfile=getRideProfile(state.rideMode);
   runSession.reset({rideProfile});
   state.runSeed=createRunSeed();
+  progression.startRun({
+    runSeed:state.runSeed,
+    sport:selectedSportMode,
+    setup:selectedSkateboardSetup||state.rideMode||'default',
+    rider:selectedAvatar?.id||selectedAvatar?.name||'unknown'
+  });
   bananaPower.reset();
   riderController.setRideMode(state.rideMode);
   audio.setRideMode?.(state.rideMode);
+  audio.setSportMode?.(selectedSportMode);
   resetAirborneScoring(state);
   resetTrickScoring(state);
   tricks.reset();
   grindSystem.reset();
+  state.skateSetup=selectedSkateboardSetup;
   resetSkateboardState(state);
+  lastSkateVfxEventId=0;
+  riderController.resetPose?.();
   audio.resetRun?.();
   haptics.reset?.();
   player.position.set(0,.12,2.2);resetPlayerOrientation(player);
-  state.crashActive=false;state.crashMotion=null;state.crashTime=0;pendingCrashResults=null;impactVfx.reset();
+  state.crashActive=false;state.crashMotion=null;state.crashTime=0;state.crashVisualCause='';pendingCrashResults=null;impactVfx.reset();
   startCountdownStarted=false;
   startCrowd.reset();startGate.reset();
   trailTimer=0;skiTrails.reset();
@@ -1004,11 +1197,10 @@ function resetRunState(){
     tile.position.z=8-index*28;
     displaceTerrainChunk(tile.geometry,tile.position.z);
   });
-  environment.reset();
-  urbanEnvironment.reset?.();
+  environmentSystem.reset();
   Object.assign(state,sampleSkiGround(terrainHeight,0,player.position.z,0,riderController.trackSpacing));
   state.y=.12+state.centerGround;player.position.y=state.y;
-  courseFrame=0;resetCourse(0);skiCamera.reset();startCamera.reset();feedback.reset();
+  courseFrame=0;resetCourse(0);cameraSystem.reset();startCamera.reset();feedback.reset();
   scorePresentation.reset({
     score:state.score??0,
     combo:state.combo??0,
@@ -1054,7 +1246,7 @@ async function beginRun(){
     audio.play('menu',.38);
     if(!gameFlow.enter(GAME_FLOW.COUNTDOWN,{reason:'begin-run'}))return false;
     resetRunState();
-    ui.prepareRun({best:state.best,speed:selectedSportMode===SPORT_MODE.SKATEBOARD?skateboardDisplaySpeed(state.speed,state.rideMode):state.speed});
+    ui.prepareRun({best:state.best,speed:selectedSportMode===SPORT_ID.SKATEBOARD?skateboardGameplaySpeed(state):state.speed});
     if(runtimeTestMode){
       // CI / browser audits use ?test=1. Keep production presentation intact
       // while making automated release gates deterministic and independent of
@@ -1091,6 +1283,7 @@ function showCrashResults(reason='timer'){
   pendingCrashResults=null;
   ui.showResults(results,0);
   gameFlow.enter(GAME_FLOW.RESULTS,{reason});
+  audio.setMixSnapshot?.('results');
   return true;
 }
 
@@ -1107,7 +1300,11 @@ function crash(kind='tree',item=null){
   const runDistance=Math.floor(state.distance);
   const previousBest=state.best;
   const newBest=runDistance>previousBest;
+  const maxSpeedKmh=selectedSportMode===SPORT_ID.SKATEBOARD
+    ?Math.round(Math.max(state.maxSkateGameplaySpeed||0,skateboardGameplaySpeed(state))*3.6)
+    :speedToKmh(state.maxRunSpeed||state.speed);
   const isTrickCrash=kind==='trick';
+  const wasGrinding=!!state.grinding;
   if(isTrickCrash)state.failedTricksCount=(state.failedTricksCount||0)+1;
   state.lastMistakeTime=state.time;
   state.trickCrash=isTrickCrash;
@@ -1122,6 +1319,16 @@ function crash(kind='tree',item=null){
     (state.speed-crashProfile.baseSpeed)/Math.max(.001,crashProfile.maxSpeed-crashProfile.baseSpeed),
     0,1
   );
+  const lateralRatio=Math.abs(Number(state.vx)||0)/Math.max(1,Math.abs(Number(state.speed)||0));
+  state.crashVisualCause=isTrickCrash
+    ?'trick_failure'
+    :kind==='landing'
+      ?'failed_landing'
+      :wasGrinding
+        ?'grind_failure'
+        :lateralRatio>.28
+          ?'lateral_impact'
+          :crashSpeed01>.72?'high_speed_collision':'frontal_impact';
   const crashJitter=Math.sin((state.time+state.distance*.013)*12.9898)*.5+.5;
   state.crashMotion={
     active:true,
@@ -1150,17 +1357,19 @@ function crash(kind='tree',item=null){
       z:item?.position.z??player.position.z,
       direction:state.crashDirection,
       speed:state.speed,
-      severity:.68+crashSpeed01*.32
+      severity:.68+crashSpeed01*.32,
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
     });
   }
   bananaPower.deactivate();
   breakSkillCombo(state);
   if(!gameFlow.enter(GAME_FLOW.CRASHED,{reason:kind}))return;
-  state.best=Math.max(state.best,runDistance);
+  const progressionResult=progression.finishRun(state,{maxSpeed:maxSpeedKmh,crashCause:state.crashType});
+  state.best=Math.max(state.best,runDistance,progression.getBestDistance());
   ui.setMode('crashed');
   const crashFeedback=feedback.onCrash({kind:state.crashType,velocity:state.crashVelocity});
   if(!isTrickCrash)haptics.crash(state.crashType,crashFeedback?.hapticStrength);
-  try{localStorage.setItem('chimpions-ski-best',state.best)}catch{}
+  saveBestScore(state.best);
   pendingCrashResults={
     distance:runDistance,
     score:state.score,
@@ -1169,12 +1378,12 @@ function crash(kind='tree',item=null){
     newBest,
     crashType:state.crashType,
     time:state.time,
-    maxSpeedKmh:selectedSportMode===SPORT_MODE.SKATEBOARD
-      ?skateboardDisplaySpeedKmh(state.maxRunSpeed||state.speed,state.rideMode)
-      :speedToKmh(state.maxRunSpeed||state.speed),
+    maxSpeedKmh,
     bestCombo:state.bestCombo||0,
+    sportMode:selectedSportMode,
     rideMode:state.rideMode,
     runSeed:state.runSeed,
+    challengeResult:progressionResult.challengeResult,
     nearMisses:state.nearMisses||0,
     tricksLanded:state.tricksLanded||0,
     tricksFailed:state.tricksFailed||0,
@@ -1205,6 +1414,7 @@ function update(dt,frameMs=dt*1000){
   const pad=readPad(navigator.getGamepads?.()||[]);
   const actions=gameplayInput.read(pad);
   haptics.setActiveGamepad?.(pad.activeGamepad);
+  ui.updateControllerConnection?.(pad);
   if(startScreen.isActive){
     startScreen.updateController(pad);
     return;
@@ -1231,7 +1441,7 @@ function update(dt,frameMs=dt*1000){
   const jumpPressed=wasPlaying&&state.mode==='playing'&&actions.jumpPressed;
   const jumpHeld=actions.jumpHeld;
   const rawTrickIntent=jumpPressed?actions.trickIntent:null;
-  const nativeSkateboard=selectedSportMode===SPORT_MODE.SKATEBOARD;
+  const nativeSkateboard=selectedSportMode===SPORT_ID.SKATEBOARD;
   let worldDistance=0;
   const realFrameDt=dt;
   let simulationFrameDt=realFrameDt;
@@ -1251,7 +1461,8 @@ function update(dt,frameMs=dt*1000){
     updateAirborneScoring(state);
     state.frame++;
     courseFrame=state.frame;
-    progressSpeed(state,dt);
+    if(nativeSkateboard)progressWorldSpeed(state,dt);
+    else progressSpeed(state,dt);
     state.maxRunSpeed=Math.max(state.maxRunSpeed||0,state.speed);
     if(!state.maxSpeedReached&&state.speed>=state.maxSpeed-.12)state.maxSpeedReached=true;
     if(state.maxSpeedReached)state.postMaxHazardTime+=dt;
@@ -1283,13 +1494,39 @@ function update(dt,frameMs=dt*1000){
       :stepCarving(state,steer,controlDt);
     if(carveStep?.edgeScrape){
       const edgeFeedback=feedback.onEdgeContact(carveStep.edgeScrape.intensity,state.time);
-      if(edgeFeedback?.play)haptics.edgeScrape?.(edgeFeedback.hapticStrength);
+      if(edgeFeedback?.play){
+        haptics.edgeScrape?.(edgeFeedback.hapticStrength);
+        impactVfx.skateEvent?.(
+          {type:'boardScrape',intensity:carveStep.edgeScrape.intensity},
+          {
+            x:state.x,
+            y:Math.max(.10,(state.y||0)+.08),
+            z:player.position.z,
+            direction:Math.sign(state.vx)||1,
+            speed:state.speed,
+            wetness:roadWetness,
+            reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
+          }
+        );
+      }
     }
     const contactTarget=sampleSkiGround(terrainHeight,state.x,player.position.z-state.travel,state.heading,riderController.trackSpacing);
     dampTerrainContact(contactTarget,state,dt);
     const groundY=.12+state.centerGround;
 
     const pressedThisStep=step===0&&jumpPressed;
+    progression.captureInput({
+      steer,
+      verticalIntent:actions.verticalIntent,
+      trickModifier:actions.trickModifier,
+      jumpPressed:pressedThisStep,
+      jumpHeld,
+      trickIntent:pressedThisStep?actions.trickIntent:null,
+      airborneTrickIntent:pressedThisStep?actions.airborneTrickIntent:null,
+      specialPressed:step===0&&actions.specialPressed,
+      cameraPressed:step===0&&actions.cameraPressed,
+      cameraMotionPressed:step===0&&actions.cameraMotionPressed
+    },dt);
     if(nativeSkateboard)updateSkateboardManual(state,{verticalIntent:actions.verticalIntent,dt:controlDt,powered:bananaPower.active});
     if(nativeSkateboard)updateSkateboardJumpAssist(state,pressedThisStep,dt,jumpHeld);
     else updateJumpAssist(state,pressedThisStep,dt,jumpHeld);
@@ -1376,13 +1613,15 @@ function update(dt,frameMs=dt*1000){
     if(nativeSkateboard&&state.grinding){
       grindSystem.step(state,dt,{steer,powered:bananaPower.active});
     }else{
-      landing=nativeSkateboard?stepSkateboardAir(state,dt,groundY):stepAir(state,dt,groundY);
+      landing=nativeSkateboard
+        ?stepSkateboardAir(state,dt,groundY,{trickComplete:!!completedTrick||activeTrick.state!=='TRICK',wetness:roadWetness})
+        :stepAir(state,dt,groundY);
     }
     if(landing.landed){
-      if(landing.quality==='clean'){
-        state.cleanLandings=(state.cleanLandings||0)+1;
+      if(nativeSkateboard){
+        recordSkateboardLandingStatistic(state,landing);
       }else{
-        state.lastMistakeTime=state.time;
+        recordLandingOutcome(state,landing);
       }
       const trickLanding=tricks.land({jumpSource:landingSource});
       if(nativeSkateboard&&landing.failed&&state.mode==='playing'){
@@ -1394,8 +1633,7 @@ function update(dt,frameMs=dt*1000){
       }else if(state.mode==='playing'){
         const feedbackLanding=landing.quality==='sketchy'?{...landing,quality:'rough'}:landing;
         const landingFeedback=feedback.onLanding(feedbackLanding,{jumpSource:landingSource,verticalVelocity:landing.impact});
-        if(landingFeedback?.quality==='clean')state.cleanLandings=(state.cleanLandings||0)+1;
-        if(landingFeedback?.dramatic&&landingFeedback?.quality!=='hard')state.strongLandings=(state.strongLandings||0)+1;
+        recordLandingFeedbackStats(state,landingFeedback);
         haptics.land(landingFeedback?.hapticStrength??Math.min(1,(Number(landing.impact)||0)/18),landing.quality);
       }
     }
@@ -1418,12 +1656,25 @@ function update(dt,frameMs=dt*1000){
       rightGround:state.rightGround,
       centerGround:state.centerGround,
       skateboardState:state.skate?.animationState||'idle',
+      pushActive:state.skate?.animationState==='push',
       powerslide:!!state.skate?.powerslide,
+      powerslideAmount:state.skate?.powerslideAmount||0,
+      slip:state.skate?.slip||0,
+      olliePhase:state.skate?.olliePhase||'',
       manualMode:state.skate?.manualMode||'',
+      manualBalance:state.skate?.manualBalance||0,
       grinding:!!state.grinding,
+      grindType:state.skate?.grindState==='active'?(grindSystem.snapshot().trick||'grind'):'',
       grindTrick:grindSystem.snapshot().trick,
+      grindBalance:state.skate?.grindBalance||0,
+      landingQuality:state.skate?.lastLanding||state.landingQuality||'',
       trickType:activeTrick.type||'',
-      trickProgress:activeTrick.progress||0
+      trickProgress:activeTrick.progress||0,
+      crashed:!!state.crashActive,
+      crashType:state.crashVisualCause||state.crashType||'',
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED,
+      roadWetness,
+      roadRoughness:roadWetness>.2 ? .16 : .28
     });
     if(!state.air&&!ridingRamp){
       trailTimer-=dt;
@@ -1568,6 +1819,7 @@ function update(dt,frameMs=dt*1000){
 
       crash(item.userData.kind,item);
     }
+    progression.captureCheckpoint(state);
     }
     performanceTelemetry.record('physics',performance.now()-physicsStarted);
     syncCourseVisuals();
@@ -1591,6 +1843,8 @@ function update(dt,frameMs=dt*1000){
     // Cinematic crash motion is integrated below so it continues behind results.
   }
 
+  emitPendingSkateVfx();
+
   let crashCinematicDt=dt;
   if(state.crashActive){
     state.crashTime+=dt;
@@ -1599,6 +1853,21 @@ function update(dt,frameMs=dt*1000){
     crashCinematicDt=dt*crashTimeScale;
     const crashGround=terrainHeight(player.position.x,player.position.z-state.travel)+.12;
     updateCrashOrientation(player,state,crashCinematicDt,crashGround);
+    riderController.updatePose({
+      dt:crashCinematicDt,
+      steer:state.edge,
+      air:false,
+      landing:state.landingPulse,
+      speed:state.speed,
+      rideMode:state.rideMode,
+      time:state.time,
+      skateboardState:'crash',
+      crashed:true,
+      crashType:state.crashVisualCause||state.crashType||'collision',
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED,
+      roadWetness,
+      roadRoughness:roadWetness>.2 ? .16 : .28
+    });
     state.crashVisualX=player.position.x;
     state.crashVisualY=player.position.y;
     state.crashVisualZ=player.position.z;
@@ -1621,12 +1890,18 @@ function update(dt,frameMs=dt*1000){
   const worldSpeed=worldDistance/dt;
   const environmentUpdateStarted=performance.now();
   const environmentDt=state.mode==='paused'?0:simulationFrameDt;
-  environment.update(environmentDt,worldSpeed,state.x,state.y,player.position.z,state.speed,state.edge,state.air,state.landingPulse,state.mode==='playing',.12+state.centerGround,state.time,state.rideMode,riderController.trailContacts);
-  urbanEnvironment.update?.(environmentDt,worldSpeed);
+  environmentSystem.update(environmentDt,worldSpeed,state.x,state.y,player.position.z,state.speed,state.edge,state.air,state.landingPulse,state.mode==='playing',.12+state.centerGround,state.time,state.rideMode,riderController.trailContacts);
   mountainWeather.update(environmentDt,state);
   const urbanWeather=mountainWeather.getState?.();
   const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
   roadWetness=wet;
+  cinematicRendering?.setContext?.({
+    weather:urbanWeather,mode:state.mode,sun:environment.weatherBindings?.sun||null,time:state.time
+  });
+  riderContactShadow.update({
+    enabled:currentRenderingSettings?.contactShadows===true,
+    player,state,terrainHeight
+  });
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 
@@ -1636,7 +1911,7 @@ function update(dt,frameMs=dt*1000){
     bananaPowerProgress:state.bananaPowerProgress,
     specialReady:state.specialReady,
     specialActiveTime:state.specialActiveTime,
-    speed:nativeSkateboard?skateboardDisplaySpeed(state.speed,state.rideMode):state.speed,
+    speed:nativeSkateboard?skateboardGameplaySpeed(state):state.speed,
     best:state.best,
     air:state.air,
     mode:state.mode
@@ -1649,8 +1924,13 @@ function update(dt,frameMs=dt*1000){
     trickEvent:state.trickEvent??null
   });
   audio.playClear?.(state.clearEvent??null);
+  consumeSkateboardFeedbackEvents(wet);
+  const skateState=state.skate||{};
+  const audioSurface=(state.oilSlipTime||0)>0?'oil':(wet>.22?'wet_asphalt':'dry_asphalt');
+  const grindAudioState=grindSystem.snapshot();
+  const audioMode=gameFlow.is(GAME_FLOW.RESULTS)?'results':state.mode;
   audio.update({
-    mode:state.mode,
+    mode:audioMode,
     speed:state.speed,
     baseSpeed:state.baseSpeed,
     maxSpeed:state.maxSpeed,
@@ -1666,7 +1946,23 @@ function update(dt,frameMs=dt*1000){
     intensity:state.difficulty,
     jumpSource:state.jumpSource,
     specialActive:bananaPower.active,
-    time:state.time
+    time:state.time,
+    surface:audioSurface,
+    wetness:wet,
+    grip:skateState.lateralGrip??state.grip??1,
+    lateralSlip:skateState.slip??0,
+    powerslide:skateState.powerslideAmount??0,
+    slideAmount:skateState.powerslideAmount??skateState.slip??0,
+    manual:skateState.manualMode||'none',
+    landingState:skateState.olliePhase||'idle',
+    district:'downtown',
+    grind:grindAudioState.active?{
+      active:true,
+      intensity:.58+Math.min(.32,Math.abs(Number(grindAudioState.balance)||0)*.32),
+      type:grindAudioState.trick||'50-50',
+      surface:skateSurfaceFromEvent({targetId:grindAudioState.targetId},wet),
+      balance:grindAudioState.balance||0
+    }:{active:false,intensity:0}
   });
   haptics.update?.(dt,{
     mode:state.mode,
@@ -1678,6 +1974,10 @@ function update(dt,frameMs=dt*1000){
     oilSlipTime:state.oilSlipTime,
     groundRoll:state.groundRoll,
     groundPitch:state.groundPitch,
+    slip:skateState.slip??0,
+    powerslide:skateState.powerslideAmount??0,
+    wetness:wet,
+    grinding:!!state.grinding,
     time:state.time
   });
   feedback.update(state,dt);
@@ -1697,14 +1997,43 @@ function render(now){
       const cameraMoving=startCamera.update(state,now);
       if(!cameraMoving)startRaceCountdown();
     }else if(!startCountdownStarted)startRaceCountdown();
-  }else if(state.mode!=='paused')skiCamera.update(state,dt);
+  }else if(state.mode!=='paused')cameraSystem.update(state,dt);
   const firstPersonBody=riderController.rider?.userData?.firstPersonBody;
   if(firstPersonBody)firstPersonBody.visible=cameraViewMode!==CAMERA_VIEW.FIRST_PERSON||
     (state.mode!=='playing'&&state.mode!=='paused'&&state.mode!=='crashed');
   renderer.info.reset();
-  // Direct rendering is the production-safe path. This guarantees the world is
-  // presented even on GPUs/drivers that fail the offscreen composer pipeline.
-  renderer.render(scene,camera);
+  gpuTimer.begin();
+  try{
+    let composed=false;
+    if(cinematicRendering?.active&&!renderFailOpenState.optionalDisabled){
+      try{
+        const injected=graphicsFaultInjector.inject();
+        if(injected)throw injected;
+        composed=!!cinematicRendering.render(dt);
+        if(composed){
+          renderFailOpenState.composedFrames++;
+          renderFailOpenState.lastPath='optional';
+        }
+      }catch(error){
+        renderFailOpenState.optionalDisabled=true;
+        renderFailOpenState.fallbackFrames++;
+        renderFailOpenState.faultCount++;
+        renderFailOpenState.lastFault=String(error?.code||error?.message||error||'optional-render-failure');
+        cinematicRendering?.disable?.(renderFailOpenState.lastFault);
+        console.warn('Optional graphics path failed open to direct rendering:',renderFailOpenState.lastFault);
+      }
+    }
+    if(!composed){
+      const directStarted=performance.now();
+      try{
+        renderer.render(scene,camera);
+        renderFailOpenState.directFrames++;
+        renderFailOpenState.lastPath=renderFailOpenState.optionalDisabled?'direct-disabled':'direct';
+      }finally{directRenderTimer.record(performance.now()-directStarted);}
+    }
+  }finally{
+    gpuTimer.end();
+  }
   renderFrameHandle=requestAnimationFrame(render);
 }
 renderFrameHandle=requestAnimationFrame(render);
@@ -1737,20 +2066,41 @@ window.chimpionsSki=()=>{
     }
   }
   const pooledObjects=Object.values(coursePool).reduce((sum,pool)=>sum+pool.length,0);
+  const cinematicDiagnostics=cinematicRendering?.getDiagnostics?.()||null;
   return {
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
+    ...getRiderAssetPerformanceDiagnostics(),
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
+    renderFailOpen:{...renderFailOpenState,graphicsFault:graphicsFaultInjector.fault,graphicsFaultConsumed:graphicsFaultInjector.consumed},
+    weatherState:mountainWeather.getState?.()||null,
+    audioDiagnostics:audio.getDiagnostics?.()||null,
+    hapticsDiagnostics:haptics.diagnostics?.()||null,
+    runtimeListenerCount:runtimeListeners.size,
     renderingQuality:{
       profile:quality.active,
+      effectiveDpr:renderer.getPixelRatio(),
+      canvasAntialias:renderer.getContext().getContextAttributes?.()?.antialias===true,
+      renderPath:quality.active==='max-cinematic'&&cinematicDiagnostics?.enabled?'cinematic-composer':'direct',
+      fallbackActive:quality.active==='max-cinematic'&&!cinematicDiagnostics?.enabled,
+      postResolution:cinematicDiagnostics?.postResolutionScale??0,
+      renderTargetType:cinematicDiagnostics?.renderTargetType??'direct-backbuffer',
+      renderTargetMemoryBytes:cinematicDiagnostics?.renderTargetMemoryBytes??0,
+      msaaSamples:cinematicDiagnostics?.msaaSamples??(quality.active==='max-cinematic'?0:null),
       shadowMapsEnabled:!!renderer.shadowMap.enabled,
       shadowMapSize:environment.weatherBindings?.sun?.shadow?.mapSize?.x??0,
       shadowDistance:environment.weatherBindings?.sun?.shadow?.camera?.far??0,
-      ssaoEnabled:!!ssaoPass?.enabled,
-      ssaoKernelRadius:ssaoPass?.kernelRadius??0,
-      bloomStrength:bloomPass?.strength??0,
-      bloomRadius:bloomPass?.radius??0,
-      bloomThreshold:bloomPass?.threshold??0,
+      ssaoEnabled:false,
+      ssaoKernelRadius:0,
+      bloomStrength:cinematicDiagnostics?.bloomStrength??0,
+      bloomRadius:cinematicDiagnostics?.bloomRadius??0,
+      bloomThreshold:cinematicDiagnostics?.bloomThreshold??0,
+      cinematic:cinematicDiagnostics,
+      gpuFrameTiming:gpuTimer.getDiagnostics(),
+      directRenderCpuTiming:directRenderTimer.getDiagnostics(),
+      shadowCpuTiming:shadowRenderTimer.getDiagnostics(),
+      contactShadow:riderContactShadow.getDiagnostics?.()||null,
+      anisotropy:urbanEnvironment.materials?.getDiagnostics?.()?.anisotropy??0,
       materialQuality:urbanEnvironment.materials?.getDiagnostics?.()||null,
       atmosphere:mountainWeather.getLightingDiagnostics?.()||null
     },
@@ -1762,6 +2112,7 @@ window.chimpionsSki=()=>{
     cameraReducedMotion:document.documentElement.dataset.cameraMotion==='reduced',
     hapticsEnabled:haptics.isEnabled?.()!==false,
     inputState:gameplayInput.getDiagnostics(),
+    progression:progression.diagnostics(),
     touchControlsPresent:!!touchControls.root,
     qualityProfile:quality.active,
     qualityMode:quality.current,
@@ -1837,7 +2188,9 @@ window.chimpionsSki=()=>{
     selectedAvatar:selectedAvatar?.name||'',
     selectedAvatarLocal:!!selectedAvatar?.localOnly,
     sportMode:selectedSportMode,
-    sportLabel:getSportProfile(selectedSportMode).label,
+    sportLabel:getSportDefinition(selectedSportMode).uiCopy.label,
+    skateboardSetup:selectedSkateboardSetup,
+    skateboardSetupLabel:getSkateboardSetupProfile(selectedSkateboardSetup).label,
     rideMode:selectedRideMode,
     baseSpeed:getRideProfile(selectedRideMode).baseSpeed,
     maxSpeed:getRideProfile(selectedRideMode).maxSpeed,
@@ -1849,8 +2202,52 @@ window.chimpionsUrbanSports=window.chimpionsSki;
 window.chimpionsUrbanSports.registerGrindTarget=target=>grindSystem.register(target);
 window.chimpionsUrbanSports.unregisterGrindTarget=id=>grindSystem.unregister(id);
 window.chimpionsUrbanSports.getSkateboardGameplay=()=>getSkateboardGameplaySnapshot(state,grindSystem);
-window.chimpionsUrbanSports.pollSkateboardEvents=()=>consumeSkateboardEvents(state);
-
+window.chimpionsUrbanSports.pollSkateboardEvents=()=>drainForwardedSkateboardEvents();
+window.chimpionsUrbanSports.subscribeAudioEvents=listener=>audio.subscribeSemanticEvents?.(listener)||(()=>{});
+window.chimpionsUrbanSports.setHapticIntensity=value=>{
+  const next=haptics.setIntensityPreference?.(value)||'high';
+  haptics.setEnabled?.(next!=='off');
+  saveHapticIntensityPreference(next);
+  saveHapticsPreference(next!=='off');
+  return next;
+};
+window.chimpionsUrbanSports.getCurrentChallenge=()=>progression.getCurrentChallenge();
+window.chimpionsUrbanSports.getRunHistory=()=>progression.getRunHistory();
+window.chimpionsUrbanSports.getPersonalRecords=()=>progression.getRecords();
+window.chimpionsUrbanSports.getReplayAvailability=()=>progression.getReplayAvailability();
+window.chimpionsUrbanSports.getReplay=mode=>progression.getReplay(mode);
+window.chimpionsUrbanSports.exportReplay=mode=>{const replay=progression.getReplay(mode);return replay?progression.serializeReplay(replay):null;};
+window.chimpionsUrbanSports.selectGhost=mode=>progression.selectGhost(mode);
+window.chimpionsUrbanSports.getGhostSelection=()=>progression.getGhostSelection();
+window.chimpionsUrbanSports.getProgressionDiagnostics=()=>progression.diagnostics();
+window.chimpionsUrbanSports.activateDailyChallenge=()=>{
+  const challenge=progression.activateChallenge(progression.getCurrentChallenge());
+  activeChallengeSeed=challenge.seed;
+  return challenge;
+};
+window.chimpionsUrbanSports.clearChallenge=()=>{activeChallengeSeed=null;progression.clearChallenge();};
+window.chimpionsUrbanSports.createShareCode=(metadata={})=>progression.encodeShareCode({
+  seed:metadata.seed||state.runSeed||createRunSeed(),
+  sport:metadata.sport||selectedSportMode,
+  setup:metadata.setup||selectedSkateboardSetup||state.rideMode||'default',
+  challengeVersion:metadata.challengeVersion||progression.getActiveChallenge()?.challengeVersion||'none'
+});
+window.chimpionsUrbanSports.decodeShareCode=code=>progression.decodeShareCode(code);
+if(runtimeTestMode){
+  window.__urbanReleaseTest=Object.freeze({
+    forceCrash:(kind='test')=>crash(kind),
+    showCrashResults:()=>showCrashResults('release-test'),
+    switchBuiltinAvatar:async index=>{
+      const builtins=catalog.filter(entry=>entry&&!entry.localOnly);
+      if(!builtins.length)return false;
+      const normalized=((Math.trunc(Number(index)||0)%builtins.length)+builtins.length)%builtins.length;
+      const entry=builtins[normalized];
+      await setAvatar(entry,selectorRideModeForSkateboardSetup(selectedSkateboardSetup));
+      return selectedAvatar?.id===entry.id;
+    },
+    builtinAvatarCount:()=>catalog.filter(entry=>entry&&!entry.localOnly).length
+  });
+}
 
 if(import.meta.hot){
   import.meta.hot.dispose(()=>{
@@ -1859,16 +2256,20 @@ if(import.meta.hot){
     avatarLoadController?.abort();
     avatarLoadController=null;
     runtimeListeners.dispose();
+    audio.dispose?.();
     riderController.dispose();
     impactVfx.dispose?.();
-    urbanEnvironment.dispose?.();
-    ssaoPass?.dispose?.();
-    composer?.dispose?.();
+    environmentSystem.dispose?.();
+    riderContactShadow.dispose?.();
+    cinematicRendering?.dispose?.();
+    gpuTimer.dispose?.();
+    restoreShadowInstrumentation?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();
     selector?.dispose?.();
     delete window.chimpionsSki;
     delete window.chimpionsUrbanSports;
+    delete window.__urbanReleaseTest;
   });
 }

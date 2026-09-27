@@ -19,6 +19,7 @@ export function createGlobalListenerScope(){
   return {
     on,
     dispose,
-    get disposed(){return disposed;}
+    get disposed(){return disposed;},
+    get size(){return removers.length;}
   };
 }

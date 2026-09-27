@@ -35,7 +35,7 @@ A supported extension alone is not treated as proof that a render-target combina
 | MAX | direct renderer | DPR cap 2.00 | budgeted 2048 directional | none |
 | MAX CINEMATIC | composer when verified, direct fallback otherwise | DPR cap 1.60 | contact shadow | capability-gated GTAO, bloom, LUT, sharpen, atmosphere/light shafts; presentation-only DOF |
 
-AUTO uses HIGH / MEDIUM / LOW only. It never promotes into MAX or MAX CINEMATIC. Adaptive resolution changes independently of profile transitions and uses hysteresis/cooldowns.
+AUTO uses HIGH / MEDIUM / LOW only. It never promotes into MAX or MAX CINEMATIC. Adaptive resolution changes independently of profile transitions and uses hysteresis/cooldowns. MAX CINEMATIC also clamps only its internal post resolution when verified GPU texture/renderbuffer limits or the 128 MiB offscreen-target memory budget require it; this does not switch gameplay quality tiers.
 
 ## Fallback matrix
 
@@ -55,7 +55,7 @@ AUTO uses HIGH / MEDIUM / LOW only. It never promotes into MAX or MAX CINEMATIC.
 | WebGL context lost | composition stops; browser context restoration is allowed |
 | Context restored | capability reprobe, two direct frames first, conservative byte target rebuild |
 
-No optional effect is allowed to stop gameplay state or require a page reload.
+No optional effect is allowed to stop gameplay state or require a page reload. Quality changes, including entering/leaving MAX CINEMATIC, are applied at runtime.
 
 ## Shadow budget
 

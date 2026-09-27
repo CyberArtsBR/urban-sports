@@ -8,7 +8,7 @@ import './style.css';
 import './floatingUI.css';
 import {createMountainWeather} from './mountainWeather.js';
 import {createFallbackSkier,loadRiderAsset} from './skier.js';
-import {readPad} from './input.js';
+import {configureControllerInput,readPad} from './input.js';
 import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
 import {createSkiAudio} from './audio.js';
@@ -18,7 +18,7 @@ import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
 import {createGameUI} from './ui.js';
 import {progressSpeed,stepCarving,updateJumpAssist,tryManualJump,stepAir,launchRamp} from './skiPhysics.js';
-import {consumeSkateboardEvents,createGrindSystem,emitSkateboardEvent,getSkateboardDisplaySpeedRange,getSkateboardGameplaySnapshot,launchSkateboardRamp,resetSkateboardState,skateboardDisplaySpeed,skateboardDisplaySpeedKmh,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
+import {consumeSkateboardEvents,createGrindSystem,emitSkateboardEvent,getSkateboardGameplaySnapshot,launchSkateboardRamp,resetSkateboardState,skateboardDisplaySpeed,skateboardDisplaySpeedKmh,stepSkateboardAir,stepSkateboardSteering,trySkateboardOllie,updateSkateboardJumpAssist,updateSkateboardManual} from './skateboardPhysics.js';
 import {createCourseDirector,getCourseDifficulty} from './course.js';
 import {terrainHeight,sampleSkiGround,displaceTerrainChunk,dampTerrainContact} from './terrainContact.js';
 import {createSkiCamera} from './skiCamera.js';
@@ -46,7 +46,13 @@ import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
 import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
-import {CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference} from './userPreferences.js';
+import {
+  CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,
+  saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference,
+  saveUiScalePreference,saveHighContrastPreference,saveReducedMotionPreference,saveReducedVfxPreference,saveReducedFlashesPreference,
+  saveCameraShakePreference,saveControllerDeadzonePreference,saveSteeringSensitivityPreference,saveHapticsIntensityPreference,
+  saveCaptionsPreference,saveLocalePreference
+} from './userPreferences.js';
 import {GAME_FLOW,createGameFlow} from './gameFlow.js';
 import {createRunSession,createRunState} from './runSession.js';
 import {createBananaPowerSystem} from './bananaPowerSystem.js';
@@ -55,8 +61,14 @@ import {createGlobalListenerScope} from './globalListeners.js';
 import {createRiderController} from './riderController.js';
 import {createRuntimeDiagnostics} from './runtimeDiagnostics.js';
 import {createImpactVfx} from './impactVfx.js';
+import {createLocalization} from './localization.js';
+import {applyAccessibilityPreferences} from './uiAccessibility.js';
 
 const userPreferences=loadUserPreferences();
+const localization=createLocalization({locale:userPreferences.locale});
+let accessibilityPreferences={...userPreferences};
+applyAccessibilityPreferences(accessibilityPreferences);
+configureControllerInput({deadzone:userPreferences.controllerDeadzone});
 
 let runtimeTestMode=false;
 let requestedRunSeed=null;
@@ -99,7 +111,7 @@ app.innerHTML=`
       <p class="tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
       <div class="selected-avatar" id="selected-avatar">
         <span class="selected-avatar-image" id="selected-avatar-image">🐵</span>
-        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD · 150–300 KM/H</em></span>
+        <span><small>YOUR RIDER</small><strong id="selected-avatar-name">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD</em></span>
       </div>
       <div class="menu-actions">
         <button class="secondary" id="choose" aria-label="Choose Chimpion" disabled>CHOOSE CHIMPION</button>
@@ -134,6 +146,7 @@ function applyCameraMotionPreference(mode=cameraMotionMode){
   return cameraMotionMode;
 }
 applyCameraMotionPreference();
+skiCamera.setMotionAmount?.(userPreferences.cameraShake);
 
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
@@ -472,7 +485,7 @@ const runtimeListeners=createGlobalListenerScope();
 const audio=createSkiAudio();
 const mountainWeather=createMountainWeather({app,scene,camera,renderer,environment,audio});
 audio.setRideMode?.(selectedRideMode);
-const haptics=createHaptics({enabled:userPreferences.haptics});
+const haptics=createHaptics({enabled:userPreferences.haptics,intensity:userPreferences.hapticsIntensity});
 const ui=createGameUI({
   audio,
   haptics,
@@ -493,7 +506,8 @@ const ui=createGameUI({
     audio.update({mode:'menu'});
     window.location.assign(startScreen.gameSelectionUrl);
   },
-  onShowTutorial:()=>{void showSessionTutorial({force:true});}
+  onShowTutorial:()=>{void showSessionTutorial({force:true});},
+  localization
 });
 
 const CAMERA_VIEW_ORDER=[CAMERA_VIEW.CHASE,CAMERA_VIEW.FIXED,CAMERA_VIEW.HIGH_FAR,CAMERA_VIEW.FIRST_PERSON];
@@ -584,6 +598,40 @@ ui.configureSettings?.({
   onHapticsChange:enabled=>{
     haptics.setEnabled?.(enabled);
     saveHapticsPreference(enabled);
+  },
+  preferences:userPreferences,
+  onPreferenceChange:(key,value,preferences)=>{
+    accessibilityPreferences={...accessibilityPreferences,...preferences};
+    switch(key){
+      case 'uiScale':saveUiScalePreference(value);break;
+      case 'highContrast':saveHighContrastPreference(value);break;
+      case 'reducedMotion':saveReducedMotionPreference(value);break;
+      case 'reducedVfx':saveReducedVfxPreference(value);break;
+      case 'reducedFlashes':saveReducedFlashesPreference(value);break;
+      case 'cameraShake':
+        saveCameraShakePreference(value);
+        skiCamera.setMotionAmount?.(value);
+        break;
+      case 'controllerDeadzone':
+        saveControllerDeadzonePreference(value);
+        configureControllerInput({deadzone:value});
+        break;
+      case 'steeringSensitivity':
+        saveSteeringSensitivityPreference(value);
+        gameplayInput?.setSteeringSensitivity?.(value);
+        break;
+      case 'hapticsIntensity':
+        saveHapticsIntensityPreference(value);
+        haptics.setIntensity?.(value);
+        break;
+      case 'captions':saveCaptionsPreference(value);break;
+      case 'locale':
+        saveLocalePreference(value);
+        localization.setLocale(value);
+        break;
+      default:break;
+    }
+    applyAccessibilityPreferences(accessibilityPreferences);
   }
 });
 let currentRenderingSettings=quality.getSettings();
@@ -785,6 +833,7 @@ const startScreen=createStartScreen({
     // The selected rider is interaction-critical and should not compete with crowd parsing.
     return true;
   },
+  localization,
   assetUrl:'/start/chimpions-urban-sports-start.webp',
   transitionMs:runtimeTestMode?0:300
 });
@@ -792,15 +841,9 @@ startScreen.setReady(false);
 ui.setAvatarLoading(true);
 
 function syncRideModePresentation(){
-  const rideProfile=getRideProfile(selectedRideMode);
   const sportProfile=getSportProfile(selectedSportMode);
   const label=document.getElementById('selected-ride-mode');
-  if(label){
-    const range=selectedSportMode===SPORT_MODE.SKATEBOARD
-      ?getSkateboardDisplaySpeedRange()
-      :{minKmh:speedToKmh(rideProfile.baseSpeed),maxKmh:speedToKmh(rideProfile.maxSpeed)};
-    label.textContent=sportProfile.label+' · '+range.minKmh+'–'+range.maxKmh+' KM/H';
-  }
+  if(label)label.textContent=sportProfile.label;
   document.body.dataset.rideMode=selectedRideMode;
   document.body.dataset.sportMode=selectedSportMode;
 }
@@ -920,20 +963,21 @@ function installAvatarSelector(initialAvatar){
   selector=createAvatarSelector({
     catalog,
     onValidateLocalAvatar:validateLocalAvatarEntry,
-    onSelect:async(entry,rideMode)=>{
-      await setAvatar(entry,rideMode);
-      // Phase 2: any ride-card confirmation launches the current Urban sport.
-      // The presentation branch will replace the legacy Ski/Snowboard wording.
+    onSelect:async entry=>{
+      await setAvatar(entry);
+      // Current Skateboard gameplay has no gameplay-owned STREET/PARK contract,
+      // so one rider confirmation starts the run without a fake setup step.
       initialSelectionFlow=false;
       setTimeout(()=>beginRun(),0);
     },
     selectedId:initialAvatar.id,
-    selectedRideMode
+    selectedRideMode,
+    localization
   });
   runtimeListeners.on(selector.dialog,'close',()=>{
     if(initialSelectionFlow)initialSelectionFlow=false;
   });
-  selector.setSelected(initialAvatar,selectedRideMode);
+  selector.setSelected(initialAvatar);
   selectorReady=true;
   ready=!!riderController.rider;
   startScreen.setReady(ready);
@@ -966,12 +1010,15 @@ try{state.best=Number(localStorage.getItem('chimpions-ski-best'))||0}catch{}
 courseDirector=createCourseDirector({routeCenter});
 resetCourse(0);
 const gameplayInput=createGameplayInput();
+gameplayInput.setSteeringSensitivity?.(userPreferences.steeringSensitivity);
 const keys=gameplayInput.keys;
 const touchControls=createTouchControls({
   onSteer:value=>gameplayInput.setTouchSteer(value),
   onJump:pressed=>gameplayInput.setTouchJump(pressed),
   onTrick:(type,pressed)=>gameplayInput.setTouchTrick(type,pressed),
-  onPause:()=>gameplayInput.requestPause()
+  onSpecial:()=>gameplayInput.requestSpecial(),
+  onPause:()=>gameplayInput.requestPause(),
+  localization
 });
 let last=performance.now();
 let physicsSubsteps=0;
@@ -1205,6 +1252,7 @@ function update(dt,frameMs=dt*1000){
   const pad=readPad(navigator.getGamepads?.()||[]);
   const actions=gameplayInput.read(pad);
   haptics.setActiveGamepad?.(pad.activeGamepad);
+  ui.updateControllerConnection?.(pad);
   if(startScreen.isActive){
     startScreen.updateController(pad);
     return;

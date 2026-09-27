@@ -16,6 +16,23 @@ const browser=await launchReleaseBrowser();
 const context=await browser.newContext({viewport:{width:1280,height:720}});
 
 await context.addInitScript(()=>{
+  const nativeAdd=EventTarget.prototype.addEventListener;
+  const nativeRemove=EventTarget.prototype.removeEventListener;
+  const listenerStats={adds:0,removes:0};
+  EventTarget.prototype.addEventListener=function(...args){
+    listenerStats.adds++;
+    return nativeAdd.apply(this,args);
+  };
+  EventTarget.prototype.removeEventListener=function(...args){
+    listenerStats.removes++;
+    return nativeRemove.apply(this,args);
+  };
+  Object.defineProperty(window,'__releaseListenerStats',{
+    value:listenerStats,
+    configurable:false,
+    enumerable:false
+  });
+
   const state={connected:true,buttons:Array.from({length:16},()=>({pressed:false,value:0})),axes:[0,0]};
   const pad={
     index:0,id:'Release QA Virtual Gamepad',mapping:'standard',
@@ -54,7 +71,14 @@ function snapshotScript(){
     pooledCourseObjects:d?.pooledCourseObjects,
     runtimeListenerCount:d?.runtimeListenerCount,
     persistentLoopCount:d?.audioDiagnostics?.persistentLoopCount??0,
+    activeTransientCount:d?.audioDiagnostics?.activeTransientCount??0,
+    maxTransientCount:d?.audioDiagnostics?.maxTransientCount??0,
+    audioBufferCount:d?.audioDiagnostics?.bufferCount??0,
+    recentAudioEventCount:d?.audioDiagnostics?.recentEventCount??0,
     audioUnlocked:d?.audioDiagnostics?.unlocked??null,
+    listenerAdds:window.__releaseListenerStats?.adds??0,
+    listenerRemoves:window.__releaseListenerStats?.removes??0,
+    listenerNet:(window.__releaseListenerStats?.adds??0)-(window.__releaseListenerStats?.removes??0),
     domNodes:document.getElementsByTagName('*').length,
     heap:performance.memory?.usedJSHeapSize??null,
     quality:d?.qualityProfile,
@@ -174,7 +198,16 @@ try{
   assert(stability.ok,'soak detected monotonic graphics growth: '+JSON.stringify(stability.violations));
 
   assert.equal(final.runtimeListenerCount,warm.runtimeListenerCount,'scoped event listener count grew during soak');
+  const listenerNetGrowth=final.listenerNet-warm.listenerNet;
+  const listenerAddGrowth=final.listenerAdds-warm.listenerAdds;
+  assert(listenerNetGrowth<=8,'active EventTarget listener estimate grew beyond soak budget: '+listenerNetGrowth);
+  assert(listenerAddGrowth<=16,'new EventTarget listener registrations grew beyond soak budget: '+listenerAddGrowth);
+
   assert(final.persistentLoopCount<=warm.persistentLoopCount+2,'persistent WebAudio loop count grew during soak');
+  const maxTransientSeen=Math.max(...samples.map(sample=>Number(sample.activeTransientCount)||0));
+  const transientCap=Math.max(1,...samples.map(sample=>Number(sample.maxTransientCount)||0));
+  assert(maxTransientSeen<=transientCap,'WebAudio transient source cap was exceeded');
+  assert(final.audioBufferCount<=warm.audioBufferCount+4,'WebAudio buffer cache grew unexpectedly during soak');
   assert(final.domNodes<=warm.domNodes+120,'DOM node count grew beyond soak budget');
 
   let heapGrowth=null;
@@ -195,7 +228,11 @@ try{
     samples:samples.length,
     graphicsStability:stability,
     listenerGrowth:final.runtimeListenerCount-warm.runtimeListenerCount,
+    eventTargetListenerNetGrowth:listenerNetGrowth,
+    eventTargetListenerAddGrowth:listenerAddGrowth,
     audioLoopGrowth:final.persistentLoopCount-warm.persistentLoopCount,
+    maxActiveAudioTransients:maxTransientSeen,
+    audioBufferGrowth:final.audioBufferCount-warm.audioBufferCount,
     domGrowth:final.domNodes-warm.domNodes,
     heapGrowthBytes:heapGrowth,
     finalCanvas:canvas

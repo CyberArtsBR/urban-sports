@@ -131,56 +131,56 @@ try{
   await controllerPage.evaluate(()=>window.__releasePad.release(9));
   await controllerPage.waitForFunction(()=>document.activeElement?.id==='resume-game',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.neutral());
-  await controllerPage.waitForTimeout(180);
+  await waitControllerPolls(controllerPage,3);
 
   await controllerPage.evaluate(()=>window.__releasePad.press(13));
   await controllerPage.waitForFunction(()=>document.activeElement?.id==='restart-pause',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(13));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
   assert.equal(await controllerPage.evaluate(()=>document.activeElement?.id),'restart-pause','D-pad down skipped or double-navigated');
 
   await controllerPage.evaluate(()=>window.__releasePad.axis(1,.92));
   await controllerPage.waitForFunction(()=>document.activeElement?.id==='settings-pause',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.axis(1,0));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
   assert.equal(await controllerPage.evaluate(()=>document.activeElement?.id),'settings-pause','analog down did not navigate one settings row');
 
   await controllerPage.evaluate(()=>window.__releasePad.press(0));
   await controllerPage.locator('#settings-overlay').waitFor({state:'visible',timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(0));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
 
   await controllerPage.evaluate(()=>window.__releasePad.press(1));
   await controllerPage.locator('#settings-overlay').waitFor({state:'hidden',timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(1));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
 
   await controllerPage.evaluate(()=>window.__releasePad.press(1));
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(1));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
 
   await controllerPage.evaluate(()=>{
     window.__releasePad.press(9);
     window.__releasePad.connect(false);
   });
-  await controllerPage.waitForTimeout(100);
+  await waitControllerPolls(controllerPage,2);
   await controllerPage.evaluate(()=>window.__releasePad.connect(true));
-  await controllerPage.waitForTimeout(180);
+  await waitControllerPolls(controllerPage,3);
   assert.equal((await runtime(controllerPage))?.mode,'playing','held Start leaked through reconnect quarantine');
   await controllerPage.evaluate(()=>window.__releasePad.release(9));
-  await controllerPage.waitForTimeout(180);
+  await waitControllerPolls(controllerPage,3);
   await controllerPage.evaluate(()=>window.__releasePad.press(9));
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='paused';},null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(9));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
 
   // Return to gameplay, force the real crash path in test mode, surface the
   // results UI, and prove controller confirm restarts from results.
   await controllerPage.evaluate(()=>window.__releasePad.press(1));
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(1));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
   const crashTriggered=await controllerPage.evaluate(()=>{
     if(typeof window.__urbanReleaseTest?.forceCrash!=='function')return false;
     window.__urbanReleaseTest.forceCrash('test');
@@ -193,7 +193,7 @@ try{
   await controllerPage.locator('#result-overlay').waitFor({state:'visible',timeout:5000});
   await controllerPage.waitForFunction(()=>document.activeElement?.id==='restart-result',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.neutral());
-  await controllerPage.waitForTimeout(180);
+  await waitControllerPolls(controllerPage,3);
   await controllerPage.evaluate(()=>window.__releasePad.press(0));
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:30000});
   await controllerPage.evaluate(()=>window.__releasePad.release(0));

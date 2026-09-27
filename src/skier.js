@@ -35,6 +35,22 @@ function cacheRiderSource(key,buffer){
     riderSourceCacheBytes-=oldest?.bytes||0;
   }
 }
+const RIDER_PARSE_WINDOW=64;
+const riderParseTimes=[];
+function recordRiderParse(durationMs){
+  const value=Number(durationMs);
+  if(!Number.isFinite(value)||value<0)return;
+  riderParseTimes.push(value);
+  if(riderParseTimes.length>RIDER_PARSE_WINDOW)riderParseTimes.shift();
+}
+function percentile(values,p){
+  if(!values.length)return 0;
+  const sorted=[...values].sort((a,b)=>a-b);
+  const index=(sorted.length-1)*p;
+  const lo=Math.floor(index),hi=Math.ceil(index);
+  if(lo===hi)return sorted[lo];
+  return sorted[lo]+(sorted[hi]-sorted[lo])*(index-lo);
+}
 export function getRiderAssetCacheDiagnostics(){
   return {
     entries:riderSourceCache.size,
@@ -42,6 +58,17 @@ export function getRiderAssetCacheDiagnostics(){
     maxEntries:MAX_RIDER_SOURCE_CACHE_ENTRIES,
     maxBytes:MAX_RIDER_SOURCE_CACHE_BYTES,
     policy:'compressed-source-only'
+  };
+}
+export function getRiderAssetPerformanceDiagnostics(){
+  const average=riderParseTimes.length?riderParseTimes.reduce((sum,value)=>sum+value,0)/riderParseTimes.length:0;
+  return {
+    glbParseSamples:riderParseTimes.length,
+    glbParseAverageMs:Math.round(average*1000)/1000,
+    glbParseP95Ms:Math.round(percentile(riderParseTimes,.95)*1000)/1000,
+    glbParseMaxMs:Math.round((riderParseTimes.length?Math.max(...riderParseTimes):0)*1000)/1000,
+    riderSourceCacheEntries:riderSourceCache.size,
+    riderSourceCacheBytes:riderSourceCacheBytes
   };
 }
 export function clearRiderAssetCache(){
@@ -91,7 +118,13 @@ async function loadRiderGltf(url,{signal=null}={}){
   const buffer=await getRiderSourceBuffer(url,{signal});
   if(/^blob:|^data:/i.test(String(url)))inspectGlbContainerBytes(buffer);
   throwIfAborted(signal);
-  const gltf=await riderLoader.parseAsync(buffer,resourceBaseUrl(url));
+  const parseStarted=globalThis.performance?.now?.()??Date.now();
+  let gltf;
+  try{
+    gltf=await riderLoader.parseAsync(buffer,resourceBaseUrl(url));
+  }finally{
+    recordRiderParse((globalThis.performance?.now?.()??Date.now())-parseStarted);
+  }
   if(signal?.aborted){
     disposeAvatarObject(gltf?.scene);
     throw createAbortError();

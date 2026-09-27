@@ -1012,7 +1012,7 @@ function consumeSkateboardFeedbackEvents(wetness=roadWetness){
     const type=String(event.type||'');
     const lower=type.toLowerCase();
     const surface=skateSurfaceFromEvent(event,wetness);
-    const payload={...event,surface,type:event.trick||event.type};
+    const payload={...event,surface};
 
     if(lower==='tailpop'){
       // Takeoff audio already comes through gameFeedback; route semantic state
@@ -1041,18 +1041,18 @@ function consumeSkateboardFeedbackEvents(wetness=roadWetness){
       continue;
     }
     if(lower==='grindstart'){
-      audio.playSkateEvent?.(type,{...payload,intensity:.78});
+      audio.playSkateEvent?.(type,{...payload,type:event.trick||'50-50',intensity:.78});
       haptics.grind?.('start',.78);
       continue;
     }
     if(lower==='grindloop'){
       // Sustained grind timbre is continuous; loop events update balance/speed
       // without creating a new transient every 100 ms.
-      audio.playSkateEvent?.(type,{...payload,intensity:.62,audio:false});
+      audio.playSkateEvent?.(type,{...payload,type:event.trick||'50-50',intensity:.62,audio:false});
       continue;
     }
     if(lower==='grindend'){
-      audio.playSkateEvent?.(type,{...payload,intensity:.68});
+      audio.playSkateEvent?.(type,{...payload,type:event.trick||'50-50',intensity:.68});
       haptics.grind?.('end',.68);
       continue;
     }

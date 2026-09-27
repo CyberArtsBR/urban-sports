@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {chromium} from '@playwright/test';
 import path from 'node:path';
+import {assertMeaningfulCanvas,sampleMeaningfulCanvas} from './release-browser-utils.mjs';
 
 const base=process.env.BASE_URL||'http://127.0.0.1:4173';
 const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -128,6 +129,8 @@ try{
   assert.equal(ride.startCrowdCount,0);
   assert.equal(ride.startCrowdModelSources,0);
   assert.equal(new Set(built.glbs).size,1,'Normal gameplay should request only the selected built-in GLB');
+  const renderedFrame=await sampleMeaningfulCanvas(page);
+  assertMeaningfulCanvas(renderedFrame,'production smoke gameplay');
 
   await page.keyboard.press('Escape');
   await page.locator('#pause-overlay').waitFor({state:'visible',timeout:5000});
@@ -193,6 +196,7 @@ try{
     freshBootGlbRequests:0,
     crowdGlbRequests:0,
     builtInGameplayUniqueGlbs:1,
+    meaningfulWebglGameplay:true,
     customGlbRemoteRequests:0,
     skateboard:true,
     legacySnowboardHandling:true,

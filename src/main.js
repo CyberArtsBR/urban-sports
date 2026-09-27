@@ -840,6 +840,19 @@ function resolveTrickAudio(event){
 
 let avatarRequest=0;
 let avatarLoadController=null;
+let validatedLocalCandidate=null;
+
+function releaseValidatedLocalCandidate(except=null){
+  const candidate=validatedLocalCandidate;
+  validatedLocalCandidate=null;
+  if(candidate?.rider&&candidate.rider!==except)disposeAvatarObject(candidate.rider);
+}
+function takeValidatedLocalCandidate(sourceUrl){
+  const candidate=validatedLocalCandidate;
+  if(!candidate||candidate.sourceUrl!==sourceUrl)return null;
+  validatedLocalCandidate=null;
+  return candidate.rider||null;
+}
 async function setAvatar(entry,rideMode=selectedRideMode){
   if(!entry)return;
   // Skateboard uses the snowboard ride mode only for the shared speed/avatar/
@@ -868,12 +881,16 @@ async function setAvatar(entry,rideMode=selectedRideMode){
   try{
     const sourceUrl=entry.localOnly?entry.localObjectUrl:'/'+entry.url;
     const avatarLoadStarted=performance.now();
-    const nextSkier=await loadRiderAsset(sourceUrl,{
-      rideMode:nextRideMode,
-      requireGameplayRig:!!entry.localOnly,
-      compatibilityInput:entry.name,
-      signal:loadController.signal
-    });
+    let nextSkier=entry.localOnly?takeValidatedLocalCandidate(sourceUrl):null;
+    if(!entry.localOnly)releaseValidatedLocalCandidate();
+    if(!nextSkier){
+      nextSkier=await loadRiderAsset(sourceUrl,{
+        rideMode:nextRideMode,
+        requireGameplayRig:!!entry.localOnly,
+        compatibilityInput:entry.name,
+        signal:loadController.signal
+      });
+    }
     performanceTelemetry.recordAvatarLoad(performance.now()-avatarLoadStarted);
     if(request!==avatarRequest){disposeAvatarObject(nextSkier);return;}
     riderController.replace(nextSkier);
@@ -902,12 +919,13 @@ async function setAvatar(entry,rideMode=selectedRideMode){
   }
 }
 async function validateLocalAvatarEntry(entry){
+  releaseValidatedLocalCandidate();
   const candidate=await loadRiderAsset(entry.localObjectUrl,{
     rideMode:selectedRideMode,
     requireGameplayRig:true,
     compatibilityInput:entry.name
   });
-  disposeAvatarObject(candidate);
+  validatedLocalCandidate={sourceUrl:entry.localObjectUrl,rider:candidate};
   return true;
 }
 
@@ -926,6 +944,7 @@ function installAvatarSelector(initialAvatar){
     selectedRideMode
   });
   runtimeListeners.on(selector.dialog,'close',()=>{
+    releaseValidatedLocalCandidate(riderController.rider);
     if(initialSelectionFlow)initialSelectionFlow=false;
   });
   selector.setSelected(initialAvatar,selectedRideMode);

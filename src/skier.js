@@ -833,8 +833,23 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       const dt=state.dt??1/60;
       const mix=(a,b,response)=>THREE.MathUtils.lerp(a,b,1-Math.pow(1-response,dt*60));
       const snowboardMode=currentRideMode===RIDE_MODE.SNOWBOARD;
-      if(snowboardMode)skateAnimator?.update(state);
-      else updateRig?.(state);
+      if(snowboardMode){
+        const rawCarve=THREE.MathUtils.clamp(state.steer||0,-1,1);
+        snowboard.updateMotion?.({
+          dt,
+          speed:state.speed??0,
+          lean:rawCarve*.52,
+          steer:rawCarve,
+          air:!!state.air,
+          time:state.time??0,
+          landing:THREE.MathUtils.clamp(state.landing||0,0,1),
+          powerslide:state.powerslideAmount??Number(!!state.powerslide),
+          roadRoughness:state.roadRoughness??(Number(state.roadWetness)>0 ? .16 : .28),
+          reducedMotion:!!state.reducedMotion,
+          externalPose:true
+        });
+        skateAnimator?.update(state);
+      }else updateRig?.(state);
       const pose=snowboardMode?skateAnimator?.pose:updateRig?.pose;
       const carve=pose?.carve??THREE.MathUtils.clamp(state.steer||0,-1,1);
       const air=pose?.air??Number(!!state.air);
@@ -852,31 +867,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
       const rightGround=state.rightGround??state.centerGround??0;
       const centerGround=state.centerGround??0;
 
-      if(snowboardMode){
-        const board=snowboard.root;
-        const rest=board.userData.restPosition;
-        board.rotation.y=mix(board.rotation.y,-carve*.040,.18);
-        board.rotation.z=mix(board.rotation.z,-carve*.085+groundRoll*.16,.18);
-        board.rotation.x=mix(board.rotation.x,ascent*.095*airScale+apex*.020-descent*.072*airScale-landing*.026+groundPitch*.28,.18);
-        board.position.x=mix(board.position.x,rest.x,.18);
-        board.position.y=mix(board.position.y,rest.y+air*.026-landing*.012-speed*.004,.18);
-        board.position.z=mix(board.position.z,rest.z+air*.012,.18);
-        snowboard.updateMotion?.({
-          dt,
-          speed:state.speed??0,
-          lean:carve*.52,
-          steer:carve,
-          air:!!state.air,
-          time:state.time??0,
-          trickType:state.trickType??'',
-          trickProgress:state.trickProgress??0,
-          landing,
-          powerslide:state.powerslideAmount??Number(!!state.powerslide),
-          roadRoughness:state.roadRoughness??(Number(state.roadWetness)>0 ? .16 : .28),
-          reducedMotion:!!state.reducedMotion,
-          externalPose:!!skateAnimator?.active
-        });
-      }else{
+      if(!snowboardMode){
         skis.forEach((ski,index)=>{
           const side=index===0?-1:1;
           const rest=ski.userData.restPosition;

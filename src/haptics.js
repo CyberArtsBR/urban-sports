@@ -53,8 +53,9 @@ function supportsDualRumble(actuator){
   }
 }
 
-export function createHaptics({getActiveGamepad=null,enabled=true}={}){
+export function createHaptics({getActiveGamepad=null,enabled=true,intensity=1}={}){
   let hapticsEnabled=enabled!==false;
+  let hapticsIntensity=clamp(Number.isFinite(Number(intensity))?Number(intensity):1);
   let activeGamepad=null;
   let eventLock=0;
   let continuousClock=0;
@@ -103,7 +104,7 @@ export function createHaptics({getActiveGamepad=null,enabled=true}={}){
 
   function play(pattern,{lock=true,intensity=1}={}){
     if(!hapticsEnabled)return false;
-    const safe=safePattern(pattern,intensity);
+    const safe=safePattern(pattern,intensity*hapticsIntensity);
     if(!safe.duration||(!safe.weakMagnitude&&!safe.strongMagnitude))return false;
 
     const pad=resolveActiveGamepad();
@@ -245,10 +246,17 @@ export function createHaptics({getActiveGamepad=null,enabled=true}={}){
     return hapticsEnabled;
   }
   function isEnabled(){return hapticsEnabled;}
+  function setIntensity(value=1){
+    hapticsIntensity=clamp(Number.isFinite(Number(value))?Number(value):1);
+    if(hapticsIntensity<=0)reset();
+    return hapticsIntensity;
+  }
+  function getIntensity(){return hapticsIntensity;}
   function diagnostics(){
     const pad=resolveActiveGamepad();
     return {
       enabled:hapticsEnabled,
+      intensity:hapticsIntensity,
       activeIndex:Number.isInteger(pad?.index)?pad.index:null,
       activeId:String(pad?.id||''),
       hasActuator:!!getActuator(pad)
@@ -260,6 +268,8 @@ export function createHaptics({getActiveGamepad=null,enabled=true}={}){
     clearActiveGamepad,
     setEnabled,
     isEnabled,
+    setIntensity,
+    getIntensity,
     getActiveGamepad,
     emit,
     diagnostics,

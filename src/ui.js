@@ -225,7 +225,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   settings.id='settings-overlay';
   settings.className='presentation-overlay settings-overlay';
   settings.hidden=true;
-  settings.innerHTML=`<section class="presentation-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title"><small class="eyebrow">PREFERENCES</small><h2 id="settings-title">SETTINGS</h2><div class="presentation-actions vertical settings-actions"><button class="toggle-button" id="toggle-music" aria-pressed="true">MUSIC · ON</button><button class="toggle-button" id="music-volume">MUSIC VOLUME · 25%</button><button class="toggle-button" id="toggle-sfx" aria-pressed="true">SFX · ON</button><button class="toggle-button" id="sfx-volume">SFX VOLUME · 25%</button><button class="toggle-button" id="quality-profile">QUALITY · AUTO</button><button class="toggle-button" id="camera-view">CAMERA VIEW · CHASE</button><button class="toggle-button" id="camera-motion">CAMERA MOTION · FULL</button><button class="toggle-button" id="toggle-haptics" aria-pressed="true">HAPTICS · ON</button><button class="secondary" id="how-to-play">HOW TO PLAY</button><button class="primary" id="settings-close" data-menu-default="true">DONE</button></div><p class="controller-hint">Settings are saved on this device · ${CONTROL_COPY.cancel} · Back</p></section>`;
+  settings.innerHTML=`<section class="presentation-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title"><small class="eyebrow">PREFERENCES</small><h2 id="settings-title">SETTINGS</h2><div class="presentation-actions vertical settings-actions"><button class="toggle-button" id="toggle-music" aria-pressed="true">MUSIC · ON</button><button class="toggle-button" id="music-volume">MUSIC VOLUME · 25%</button><button class="toggle-button" id="toggle-sfx" aria-pressed="true">SFX · ON</button><button class="toggle-button" id="sfx-volume">SFX VOLUME · 25%</button><button class="toggle-button" id="audio-impact-intensity">AUDIO IMPACT · FULL</button><button class="toggle-button" id="quality-profile">QUALITY · AUTO</button><button class="toggle-button" id="camera-view">CAMERA VIEW · CHASE</button><button class="toggle-button" id="camera-motion">CAMERA MOTION · FULL</button><button class="toggle-button" id="toggle-haptics" aria-pressed="true">HAPTICS · ON</button><button class="secondary" id="how-to-play">HOW TO PLAY</button><button class="primary" id="settings-close" data-menu-default="true">DONE</button></div><p class="controller-hint">Settings are saved on this device · ${CONTROL_COPY.cancel} · Back</p></section>`;
   document.body.append(settings);
 
   const settingsMenuButton=document.createElement('button');
@@ -253,6 +253,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   const musicButton=byId('toggle-music');
   const sfxVolumeButton=byId('sfx-volume');
   const musicVolumeButton=byId('music-volume');
+  const impactIntensityButton=byId('audio-impact-intensity');
   const qualityButton=byId('quality-profile');
   const cameraViewButton=byId('camera-view');
   const cameraMotionButton=byId('camera-motion');
@@ -346,6 +347,12 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     }
     if(sfxVolumeButton)sfxVolumeButton.textContent='SFX VOLUME · '+Math.round((audioSettings.sfx??1)*100)+'%';
     if(musicVolumeButton)musicVolumeButton.textContent='MUSIC VOLUME · '+Math.round((audioSettings.music??1)*100)+'%';
+    if(impactIntensityButton){
+      const level=Number(audioSettings.impactIntensity??1);
+      const label=level<=.5?'GENTLE':level<=.75?'REDUCED':'FULL';
+      impactIntensityButton.textContent='AUDIO IMPACT · '+label;
+      impactIntensityButton.setAttribute('aria-label','Audio impact intensity '+label.toLowerCase());
+    }
   }
   function cycleVolume(kind){
     const audioSettings=audio.getSettings();
@@ -809,6 +816,12 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   });
   sfxVolumeButton?.addEventListener('click',()=>cycleVolume('sfx'));
   musicVolumeButton?.addEventListener('click',()=>cycleVolume('music'));
+  impactIntensityButton?.addEventListener('click',()=>{
+    const current=Number(audio.getSettings().impactIntensity??1);
+    const next=current>.75?.75:current>.5?.5:1;
+    audio.setImpactIntensity?.(next);
+    syncAudioButtons();
+  });
   qualityButton?.addEventListener('click',cycleQuality);
   cameraViewButton?.addEventListener('click',cycleCameraView);
   cameraMotionButton?.addEventListener('click',cycleCameraMotion);

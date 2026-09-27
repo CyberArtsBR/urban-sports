@@ -668,7 +668,14 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     currentSettings=next||{};
     const shouldEnable=currentSettings.profile===CINEMATIC_PROFILE;
     active=shouldEnable&&!failed&&!contextLost;
-    if(!shouldEnable)return false;
+    if(!shouldEnable){
+      if(composer)disposeComposer();
+      renderTargetType='none';
+      renderTargetReason='inactive-profile';
+      postResolutionScale=1;
+      postResolutionReason='inactive-profile';
+      return false;
+    }
     if(restoreDirectFrames>0)return false;
     if(!ensure())return false;
 

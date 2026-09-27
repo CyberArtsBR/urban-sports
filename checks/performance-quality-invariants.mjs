@@ -124,6 +124,8 @@ assert(gameplayBenchmark.includes('.session-tutorial:not([hidden])'),'gameplay b
 assert(gameplayBenchmark.includes('START_FLOW_TIMEOUT'),'benchmark must allow the real rider load/start flow to complete under software rendering');
 assert(gameplayBenchmark.includes('[data-sport-mode="skateboard"]'),'benchmark must prefer the Urban sport selector instead of legacy-only ride attributes');
 assert(gameplayBenchmark.includes("!document.querySelector('#chimpion-selector')?.open"),'benchmark must wait for rider selection to finish before timing gameplay');
+assert(gameplayBenchmark.includes('const selection=await completeStartSelectionIfNeeded(page);'),'every start entry path must complete rider selection before profiling gameplay');
+assert(!gameplayBenchmark.includes("action==='start-screen'\n    ?await completeStartSelectionIfNeeded(page)"),'benchmark must not restrict selector completion to the initial Start Screen path');
 assert(core.includes("'max'"),'benchmark quality parser must accept MAX');
 assert(core.includes("'max-cinematic'"),'benchmark quality parser must accept MAX CINEMATIC');
 assert(core.includes('chimpionsUrbanSports'),'benchmark must prefer the Urban Sports diagnostics alias');

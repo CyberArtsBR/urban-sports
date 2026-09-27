@@ -32,7 +32,7 @@ assert(mixerSource.includes('activeTransientSources.size>=MAX_TRANSIENT_SOURCES'
 assert(mixerSource.includes('activeTransientSources.delete(source)'),'Transient sources do not self-clean');
 assert(mixerSource.includes('stopTransientSources()'),'Restart/teardown source cleanup is missing');
 assert(mixerSource.includes('peakTransientCount'),'Transient peak diagnostics missing');
-assert(mixerSource.includes('activeNodeEstimate'),'Active node diagnostics missing');
+assert(mixerSource.includes('activeNodeEstimate:graph?39+activeTransientSources.size*3:0'),'Active node diagnostics do not cover the full mixer graph');
 assert(mixerSource.includes('bufferCountEstimate'),'Mixer buffer estimate diagnostics missing');
 assert(facadeSource.includes('activeEnvironmentalTransientCount'),'Whole-runtime environmental transient diagnostics missing');
 assert(facadeSource.includes('bufferCountEstimate:(m.bufferCountEstimate??m.bufferCount)+w.bufferCount+wa.bufferCount'),'Whole-runtime buffer aggregation missing');

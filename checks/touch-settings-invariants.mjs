@@ -43,6 +43,10 @@ input.setTouchTrick(TRICK_TYPE.BACKFLIP,false);
 input.resetTransient();
 assert.equal(input.read(neutralPad).steer,0,'reset left touch steering stuck');
 
+input.requestSpecial();
+assert.equal(input.read(neutralPad).specialPressed,true,'touch Banana Power semantic edge is missing');
+assert.equal(input.read(neutralPad).specialPressed,false,'touch Banana Power edge repeated after consumption');
+
 input.requestPause();
 assert.equal(input.read(neutralPad).pausePressed,true,'touch pause semantic edge is missing');
 assert.equal(input.read(neutralPad).pausePressed,false,'pause edge repeated after consumption');
@@ -57,6 +61,7 @@ const haptics=readFileSync(new URL('../src/haptics.js',import.meta.url),'utf8');
 assert(main.includes('createGameplayInput()'),'main does not consume the semantic gameplay input layer');
 assert(main.includes('createTouchControls({'),'touch controls are not wired into gameplay');
 assert(main.includes('actions.steer')&&main.includes('actions.jumpPressed'),'main bypasses semantic steer/jump actions');
+assert(touch.includes('id="touch-special"')&&touch.includes('onSpecial'),'touch Banana Power control is missing');
 assert(touch.includes('pointercancel'),'touch controls do not clear cancelled pointers');
 assert(touch.includes('setPointerCapture'),'touch controls do not own active pointers');
 assert(css.includes('env(safe-area-inset-left)')&&css.includes('env(safe-area-inset-bottom)'),'touch controls ignore mobile safe areas');

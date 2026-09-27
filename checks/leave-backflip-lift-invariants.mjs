@@ -11,8 +11,8 @@ assert(crowd.includes('export const START_CROWD_COUNT=0'),'real Chimpion start c
 assert(!crowd.includes('GLTFLoader')&&!crowd.includes('crowdAssetCache'),'disabled crowd still owns character loading code');
 assert(main.includes('const startCrowd=createStartCrowd({world,terrainHeight});'),'main crowd compatibility hook changed unexpectedly');
 
-assert(ui.includes('GIVE UP AND LEAVE TO GAME SELECTION'),'give-up option missing from pause/game-over UI');
-assert((ui.match(/GIVE UP AND LEAVE TO GAME SELECTION/g)||[]).length===2,'give-up option must exist in both pause and game-over menus');
+assert(ui.includes('id="give-up-pause"')&&ui.includes('id="give-up-result"'),'leave option missing from pause/results UI');
+assert(ui.includes("data-i18n=\"pause.leave\"")&&ui.includes("data-i18n=\"results.leave\""),'Urban-native leave labels are missing from pause/results UI');
 assert(ui.includes('Do you really want to leave the game?'),'leave confirmation message is missing');
 assert(ui.includes('id="leave-confirm-yes"')&&ui.includes('id="leave-confirm-no"'),'Yes/No confirmation buttons are missing');
 assert(ui.includes('if(!leaveConfirm.hidden)return leaveConfirm'),'controller navigation does not prioritize leave confirmation');

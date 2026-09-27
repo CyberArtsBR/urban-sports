@@ -23,14 +23,36 @@ function isPowerSlide(state){
 
 function isAirState(state){
   return state===SKATE_ANIMATION_STATE.OLLIE_POP||
+    state===SKATE_ANIMATION_STATE.OLLIE_LEVEL||
     state===SKATE_ANIMATION_STATE.AIRBORNE||
+    state===SKATE_ANIMATION_STATE.LANDING_PREP||
     state===SKATE_ANIMATION_STATE.SPIN_180||
     state===SKATE_ANIMATION_STATE.SPIN_360||
     state===SKATE_ANIMATION_STATE.KICKFLIP||
     state===SKATE_ANIMATION_STATE.HEELFLIP||
     state===SKATE_ANIMATION_STATE.SHOVE_IT||
     state===SKATE_ANIMATION_STATE.FRONTSIDE_SHOVE||
+    state===SKATE_ANIMATION_STATE.VARIAL_FLIP||
+    state===SKATE_ANIMATION_STATE.THREE_SIXTY_FLIP||
     state===SKATE_ANIMATION_STATE.GRAB;
+}
+function isFlipState(state){
+  return state===SKATE_ANIMATION_STATE.KICKFLIP||
+    state===SKATE_ANIMATION_STATE.HEELFLIP||
+    state===SKATE_ANIMATION_STATE.VARIAL_FLIP||
+    state===SKATE_ANIMATION_STATE.THREE_SIXTY_FLIP;
+}
+function isShoveState(state){
+  return state===SKATE_ANIMATION_STATE.SHOVE_IT||
+    state===SKATE_ANIMATION_STATE.FRONTSIDE_SHOVE||
+    state===SKATE_ANIMATION_STATE.VARIAL_FLIP||
+    state===SKATE_ANIMATION_STATE.THREE_SIXTY_FLIP;
+}
+function isLandingState(state){
+  return state===SKATE_ANIMATION_STATE.LAND||
+    state===SKATE_ANIMATION_STATE.SKETCHY_LAND||
+    state===SKATE_ANIMATION_STATE.HARD_LAND||
+    state===SKATE_ANIMATION_STATE.FAILED_LAND;
 }
 
 export function createSkateboardAnimator({
@@ -38,6 +60,7 @@ export function createSkateboardAnimator({
   rig,
   snowboard,
   stance=null,
+  stanceMode=null,
   sideSign=1,
   reducedMotion=false
 }={}){
@@ -73,6 +96,10 @@ export function createSkateboardAnimator({
   const riderForward=new THREE.Vector3();
   const upperTarget=new THREE.Vector3();
   const foreTarget=new THREE.Vector3();
+  const ikHip=new THREE.Vector3(),ikKnee=new THREE.Vector3(),ikFoot=new THREE.Vector3();
+  const ikTarget=new THREE.Vector3(),ikKneeGoal=new THREE.Vector3(),ikDirection=new THREE.Vector3();
+  const ikPole=new THREE.Vector3(),ikPerp=new THREE.Vector3(),ikCurrentDirection=new THREE.Vector3(),ikDesiredDirection=new THREE.Vector3();
+  const boardWorldQ=new THREE.Quaternion(),inverseBoardWorldQ=new THREE.Quaternion(),inverseModelWorldQ=new THREE.Quaternion();
 
   const armRestDirections=new Map();
   const armOutwardSigns=new Map();
@@ -124,8 +151,10 @@ export function createSkateboardAnimator({
   const rearTruckRestY=rearTruck?.position.y||0;
 
   const modelBaseY=model.position.y;
-  const frontSide=stance?.leftFront===false?'right':'left';
+  const requestedStance=String(stanceMode||stance?.mode||'').toLowerCase();
+  const frontSide=requestedStance==='goofy'?'right':requestedStance==='regular'?'left':stance?.leftFront===false?'right':'left';
   const rearSide=frontSide==='left'?'right':'left';
+  const resolvedStance=frontSide==='left'?'regular':'goofy';
   const systemReducedMotion=!!reducedMotion||!!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
   const pose={
     carve:0,
@@ -134,11 +163,46 @@ export function createSkateboardAnimator({
     landing:0,
     crouch:0,
     state:SKATE_ANIMATION_STATE.IDLE,
-    pushPhase:0
+    pushPhase:0,
+    stance:resolvedStance,
+    footLock:0
   };
+  const diagnostics={samples:0,totalMs:0,maxMs:0,ikSolves:0,ikFallbacks:0};
+  const perfNow=typeof globalThis.performance?.now==='function'?()=>globalThis.performance.now():null;
   let active=true;
   let lastState=SKATE_ANIMATION_STATE.IDLE;
   let slideRecoil=0;
+
+  const boardTargetRoot=motionRoot||boardRoot;
+  const legMetrics=new Map();
+  const deckTop=Number(boardRoot?.userData?.deckTopOffset)||.045;
+  if(boardTargetRoot){
+    model.updateWorldMatrix(true,true);
+    boardTargetRoot.updateWorldMatrix(true,true);
+    model.getWorldQuaternion(modelWorldQ);
+    inverseModelWorldQ.copy(modelWorldQ).invert();
+    boardTargetRoot.getWorldQuaternion(boardWorldQ);
+    inverseBoardWorldQ.copy(boardWorldQ).invert();
+    for(const side of ['left','right']){
+      const thigh=rig[side+'Thigh'],shin=rig[side+'Shin'],foot=rig[side+'Foot'];
+      if(!thigh||!shin||!foot){diagnostics.ikFallbacks++;continue;}
+      thigh.getWorldPosition(ikHip);shin.getWorldPosition(ikKnee);foot.getWorldPosition(ikFoot);
+      const upperLength=ikHip.distanceTo(ikKnee),lowerLength=ikKnee.distanceTo(ikFoot);
+      if(upperLength<.03||lowerLength<.03){diagnostics.ikFallbacks++;continue;}
+      const targetLocal=boardTargetRoot.worldToLocal(ikTarget.copy(ikFoot)).clone();
+      const bindingX=Number(stance?.[side+'BindingX']),bindingZ=Number(stance?.[side+'BindingZ']);
+      if(Number.isFinite(bindingX))targetLocal.x=bindingX;
+      if(Number.isFinite(bindingZ))targetLocal.z=bindingZ;
+      targetLocal.y=Math.max(deckTop+.055,targetLocal.y);
+      ikDirection.copy(ikFoot).sub(ikHip).normalize();
+      ikPole.copy(ikKnee).sub(ikHip).addScaledVector(ikDirection,-ikPole.copy(ikKnee).sub(ikHip).dot(ikDirection));
+      if(ikPole.lengthSq()<1e-6)ikPole.set(0,0,1).applyQuaternion(modelWorldQ);
+      ikPole.normalize().applyQuaternion(inverseModelWorldQ);
+      foot.getWorldQuaternion(targetWorldQ);
+      const footRelativeQ=new THREE.Quaternion().copy(inverseBoardWorldQ).multiply(targetWorldQ);
+      legMetrics.set(side,{thigh,shin,foot,upperLength,lowerLength,targetLocal,poleLocal:ikPole.clone(),footRelativeQ});
+    }
+  }
 
   function rotate(key,x=0,y=0,z=0,response=.24,dt=1/60){
     const bone=rig[key],base=bone&&rest.get(bone);
@@ -208,6 +272,7 @@ export function createSkateboardAnimator({
     }
     if(frontTruck)frontTruck.position.y=frontTruckRestY;
     if(rearTruck)rearTruck.position.y=rearTruckRestY;
+    snowboard?.resetMotion?.();
   }
 
   function reset(){
@@ -223,6 +288,7 @@ export function createSkateboardAnimator({
     pose.pushPhase=0;
     slideRecoil=0;
     lastState=SKATE_ANIMATION_STATE.IDLE;
+    pose.footLock=0;
   }
 
   function setActive(next=true){
@@ -231,6 +297,79 @@ export function createSkateboardAnimator({
     active=value;
     reset();
     return active;
+  }
+
+  function alignBoneToDirection(bone,currentDirection,desiredDirection,strength){
+    if(!bone?.parent||strength<=.001)return false;
+    ikCurrentDirection.copy(currentDirection).normalize();
+    ikDesiredDirection.copy(desiredDirection).normalize();
+    if(ikCurrentDirection.lengthSq()<.5||ikDesiredDirection.lengthSq()<.5)return false;
+    bone.getWorldQuaternion(boneWorldQ);
+    alignWorldQ.setFromUnitVectors(ikCurrentDirection,ikDesiredDirection);
+    targetWorldQ.copy(alignWorldQ).multiply(boneWorldQ);
+    bone.parent.getWorldQuaternion(parentWorldQ);
+    inverseParentQ.copy(parentWorldQ).invert();
+    goalQ.copy(inverseParentQ).multiply(targetWorldQ);
+    bone.quaternion.slerp(goalQ,clamp(strength,0,1));
+    return true;
+  }
+
+  function footLockStrength(s,side,reduced){
+    if(s.state===SKATE_ANIMATION_STATE.CRASH||s.state===SKATE_ANIMATION_STATE.FAILED_LAND)return 0;
+    if(s.state===SKATE_ANIMATION_STATE.PUSH){
+      if(side===frontSide)return .98;
+      return .08+(1-Math.sin(s.pushPhase*Math.PI))*.72;
+    }
+    const p=s.trickProgress==null?.5:s.trickProgress;
+    const mid=Math.sin(clamp(p,0,1)*Math.PI);
+    if(isFlipState(s.state))return .88-mid*.72;
+    if(isShoveState(s.state))return .90-mid*.52;
+    if(s.state===SKATE_ANIMATION_STATE.GRAB)return .58;
+    if(s.state===SKATE_ANIMATION_STATE.OLLIE_POP)return .78;
+    if(s.state===SKATE_ANIMATION_STATE.OLLIE_LEVEL||s.state===SKATE_ANIMATION_STATE.LANDING_PREP)return .84;
+    if(s.air)return .74;
+    return reduced?.98:.96;
+  }
+
+  function applyFootLock(side,s,dt,reduced){
+    const metric=legMetrics.get(side);
+    if(!metric||!boardTargetRoot)return false;
+    const lock=footLockStrength(s,side,reduced);
+    if(lock<=.001)return false;
+    boardTargetRoot.localToWorld(ikTarget.copy(metric.targetLocal));
+    metric.thigh.getWorldPosition(ikHip);metric.shin.getWorldPosition(ikKnee);metric.foot.getWorldPosition(ikFoot);
+    ikDirection.copy(ikTarget).sub(ikHip);
+    let distance=ikDirection.length();
+    if(distance<1e-5)return false;
+    ikDirection.multiplyScalar(1/distance);
+    distance=clamp(distance,Math.abs(metric.upperLength-metric.lowerLength)+.006,metric.upperLength+metric.lowerLength-.008);
+    model.getWorldQuaternion(modelWorldQ);
+    ikPole.copy(metric.poleLocal).applyQuaternion(modelWorldQ);
+    ikPerp.copy(ikPole).addScaledVector(ikDirection,-ikPole.dot(ikDirection));
+    if(ikPerp.lengthSq()<1e-6)ikPerp.set(0,0,1).applyQuaternion(modelWorldQ).addScaledVector(ikDirection,-ikDirection.z);
+    ikPerp.normalize();
+    const upper=metric.upperLength,lower=metric.lowerLength;
+    const along=clamp((upper*upper-lower*lower+distance*distance)/(2*distance),0,upper);
+    const height=Math.sqrt(Math.max(0,upper*upper-along*along));
+    ikKneeGoal.copy(ikHip).addScaledVector(ikDirection,along).addScaledVector(ikPerp,height);
+    const response=blendFactor(.30+lock*.18,dt)*lock;
+    ikCurrentDirection.copy(ikKnee).sub(ikHip);ikDesiredDirection.copy(ikKneeGoal).sub(ikHip);
+    if(alignBoneToDirection(metric.thigh,ikCurrentDirection,ikDesiredDirection,response)){
+      metric.thigh.updateWorldMatrix(true,true);
+      metric.shin.getWorldPosition(ikKnee);metric.foot.getWorldPosition(ikFoot);
+      ikCurrentDirection.copy(ikFoot).sub(ikKnee);ikDesiredDirection.copy(ikTarget).sub(ikKnee);
+      alignBoneToDirection(metric.shin,ikCurrentDirection,ikDesiredDirection,response*.92);
+      metric.shin.updateWorldMatrix(true,true);
+    }
+    boardTargetRoot.getWorldQuaternion(boardWorldQ);
+    targetWorldQ.copy(boardWorldQ).multiply(metric.footRelativeQ);
+    metric.foot.parent?.getWorldQuaternion(parentWorldQ);
+    inverseParentQ.copy(parentWorldQ).invert();
+    goalQ.copy(inverseParentQ).multiply(targetWorldQ);
+    metric.foot.quaternion.slerp(goalQ,response*.78);
+    metric.foot.updateWorldMatrix(true,false);
+    diagnostics.ikSolves++;
+    return true;
   }
 
   function updateBoard(frame,s,dt,reduced){
@@ -245,12 +384,14 @@ export function createSkateboardAnimator({
       else if(s.state===SKATE_ANIMATION_STATE.HEELFLIP)roll=TAU*progress;
       else if(s.state===SKATE_ANIMATION_STATE.SHOVE_IT)yaw=-TAU*progress;
       else if(s.state===SKATE_ANIMATION_STATE.FRONTSIDE_SHOVE)yaw=TAU*progress;
+      else if(s.state===SKATE_ANIMATION_STATE.VARIAL_FLIP){roll=-TAU*progress;yaw=-Math.PI*progress;}
+      else if(s.state===SKATE_ANIMATION_STATE.THREE_SIXTY_FLIP){roll=-TAU*progress;yaw=-TAU*progress;}
       else if(s.state===SKATE_ANIMATION_STATE.SPIN_180)yaw=Math.PI*progress;
       else if(s.state===SKATE_ANIMATION_STATE.SPIN_360)yaw=TAU*progress;
     }
 
-    if(s.state===SKATE_ANIMATION_STATE.MANUAL)pitch=-.115;
-    else if(s.state===SKATE_ANIMATION_STATE.NOSE_MANUAL)pitch=.115;
+    if(s.state===SKATE_ANIMATION_STATE.MANUAL)pitch=-.115-s.manualBalance*.025;
+    else if(s.state===SKATE_ANIMATION_STATE.NOSE_MANUAL)pitch=.115+s.manualBalance*.025;
 
     if(s.state===SKATE_ANIMATION_STATE.GRIND||s.state===SKATE_ANIMATION_STATE.SLIDE){
       const orientation=frame.grindBoardOrientation||frame.boardVisualOrientation||null;
@@ -265,12 +406,16 @@ export function createSkateboardAnimator({
       }
     }
 
-    if(s.state===SKATE_ANIMATION_STATE.OLLIE_COMPRESSION)compression=.55;
+    if(s.state===SKATE_ANIMATION_STATE.OLLIE_ANTICIPATION)compression=.28;
+    else if(s.state===SKATE_ANIMATION_STATE.OLLIE_COMPRESSION)compression=.55;
     else if(s.state===SKATE_ANIMATION_STATE.OLLIE_POP)compression=.18;
-    else if(s.state===SKATE_ANIMATION_STATE.LAND)compression=.48*s.landing;
+    else if(s.state===SKATE_ANIMATION_STATE.LAND)compression=.44*s.landing;
+    else if(s.state===SKATE_ANIMATION_STATE.SKETCHY_LAND)compression=.58*Math.max(.2,s.landing);
     else if(s.state===SKATE_ANIMATION_STATE.HARD_LAND)compression=.88*Math.max(.35,s.landing);
+    else if(s.state===SKATE_ANIMATION_STATE.FAILED_LAND)compression=.96*Math.max(.4,s.landing);
 
-    if(isPowerSlide(s.state))yaw+=s.steer*.075;
+    if(isPowerSlide(s.state))yaw+=s.steer*(.075+.035*clamp(frame.powerslideAmount??frame.slip??0,0,1));
+    if(s.state===SKATE_ANIMATION_STATE.GRIND||s.state===SKATE_ANIMATION_STATE.SLIDE)roll+=s.grindBalance*.055;
     if(s.state===SKATE_ANIMATION_STATE.CRASH){
       roll+=s.steer>=0?.22:-.22;
       yaw+=.16*sideSign;
@@ -299,6 +444,7 @@ export function createSkateboardAnimator({
 
   function update(frame={}){
     if(!active)return pose;
+    const perfStart=perfNow?perfNow():0;
     const s=machine.sample(frame);
     const dt=clamp(frame.dt??1/60,1/240,.10);
     const reduced=frame.reducedMotion==null?systemReducedMotion:!!frame.reducedMotion;

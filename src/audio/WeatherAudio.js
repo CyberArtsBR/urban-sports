@@ -44,7 +44,14 @@ export function createWeatherAudio({mixer,emitSemantic=()=>{}}={}){
 
   function silence(){if(graph){mixer.setTarget(graph.rain.gain.gain,0,.05);mixer.setTarget(graph.wind.gain.gain,0,.05);}lastUpdate=-1;}
   function reset(){silence();}
-  function diagnostics(){return {initialized:!!graph,persistentLoopCount:graph?2:0,activeThunderCount:activeThunder.size};}
+  function diagnostics(){return {
+    initialized:!!graph,
+    persistentLoopCount:graph?2:0,
+    activeThunderCount:activeThunder.size,
+    bufferCount:graph?3:0,
+    activeNodeEstimate:(graph?6:0)+activeThunder.size*3,
+    thunderPeakGainLimit:.72
+  };}
   function dispose(){
     disposed=true;
     for(const source of activeThunder){try{source.stop();source.disconnect();}catch{}}

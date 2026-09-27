@@ -207,7 +207,8 @@ try{
   const maxTransientSeen=Math.max(...samples.map(sample=>Number(sample.activeTransientCount)||0));
   const transientCap=Math.max(1,...samples.map(sample=>Number(sample.maxTransientCount)||0));
   assert(maxTransientSeen<=transientCap,'WebAudio transient source cap was exceeded');
-  assert(final.audioBufferCount<=warm.audioBufferCount+4,'WebAudio buffer cache grew unexpectedly during soak');
+  assert(final.audioBufferCount<=40,'WebAudio event-buffer cache exceeded its bounded sound vocabulary');
+  assert(final.recentAudioEventCount<=64,'WebAudio event de-duplication map grew beyond its bounded vocabulary');
   assert(final.domNodes<=warm.domNodes+120,'DOM node count grew beyond soak budget');
 
   let heapGrowth=null;

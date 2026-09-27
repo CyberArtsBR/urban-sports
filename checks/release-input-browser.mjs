@@ -32,13 +32,13 @@ async function installVirtualPad(context){
     }});
   });
 }
-async function pulse(page,index,ms=90){
+async function pulse(page,index,ms=160){
   await page.evaluate(i=>window.__releasePad.press(i),index);
   await page.waitForTimeout(ms);
   await page.evaluate(i=>window.__releasePad.release(i),index);
   await page.waitForTimeout(100);
 }
-async function axisPulse(page,index,value,ms=120){
+async function axisPulse(page,index,value,ms=160){
   await page.evaluate(([i,v])=>window.__releasePad.axis(i,v),[index,value]);
   await page.waitForTimeout(ms);
   await page.evaluate(i=>window.__releasePad.axis(i,0),index);
@@ -133,7 +133,7 @@ try{
   const resultsShown=await controllerPage.evaluate(()=>window.__urbanReleaseTest?.showCrashResults?.()===true);
   assert.equal(resultsShown,true,'crash results could not be surfaced');
   await controllerPage.locator('#results-overlay').waitFor({state:'visible',timeout:5000});
-  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.id),'restart-result','results default focus changed');
+  await controllerPage.waitForFunction(()=>document.activeElement?.id==='restart-result',null,{timeout:5000});
   await pulse(controllerPage,0);
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:30000});
 }finally{

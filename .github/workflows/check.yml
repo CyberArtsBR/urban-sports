@@ -1,8 +1,10 @@
 name: Chimpions Urban Sports build and checks
+
 on:
   push:
   pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -10,29 +12,66 @@ concurrency:
   group: urban-check-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: 22.23.2
+
 jobs:
-  check:
+  fast:
+    name: FAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: High severity dependency audit
+        run: npm audit --audit-level=high
+      - run: npm run check:fast
+
+  standard:
+    name: STANDARD
+    needs: fast
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22.23.2
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
       - run: npm ci
-      - run: npm run check
+      - run: npm run check:standard
       - run: npm run build
       - run: node checks/assets.mjs
+
+  browser:
+    name: BROWSER
+    needs: standard
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: Run local desktop browser audit and release smoke
+      - name: Run real browser gameplay gates
+        shell: bash
         run: |
-          npm run preview -- --host 127.0.0.1 > /tmp/chimpions-ski-vite.log 2>&1 &
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 > /tmp/chimpions-urban-vite.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:4173/?test=1 >/dev/null; then break; fi
-            if [ "$i" = 60 ]; then cat /tmp/chimpions-ski-vite.log || true; exit 1; fi
+            if [ "$i" = 60 ]; then cat /tmp/chimpions-urban-vite.log || true; exit 1; fi
             sleep 1
           done
           node checks/desktop-browser.mjs
-          npm run smoke:production
+          npm run check:browser

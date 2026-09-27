@@ -111,7 +111,7 @@ app.innerHTML=`
       <p class="tagline" data-i18n="menu.tagline">Ride the endless city, chase bananas, clear street obstacles and keep your line as the run gets faster.</p>
       <div class="selected-avatar" id="selected-avatar">
         <span class="selected-avatar-image" id="selected-avatar-image">🐵</span>
-        <span><small data-i18n="menu.yourRider">YOUR RIDER</small><strong id="selected-avatar-name" data-i18n="menu.loadingRider">Loading Chimpions…</strong><em id="selected-ride-mode" class="selected-ride-mode">SKATEBOARD</em></span>
+        <span><small data-i18n="menu.yourRider">YOUR RIDER</small><strong id="selected-avatar-name" data-i18n="menu.loadingRider">Loading Chimpions…</strong><em id="selected-sport-mode" class="selected-sport-mode">SKATEBOARD</em></span>
       </div>
       <div class="menu-actions">
         <button class="secondary" id="choose" aria-label="Choose Chimpion" data-i18n="menu.chooseRider" disabled>CHOOSE CHIMPION</button>
@@ -732,6 +732,7 @@ const scorePresentation=createScorePresentation({hud:document.querySelector('.hu
 const SESSION_TUTORIAL_KEY='chimpions-urban-sports-tutorial-seen-v1';
 let sessionTutorialVisible=false;
 let sessionTutorialResolve=null;
+let sessionTutorialPreviousFocus=null;
 let tutorialPreviousButtons=[];
 let tutorialAwaitNeutral=true;
 
@@ -741,6 +742,7 @@ sessionTutorialRoot.hidden=true;
 sessionTutorialRoot.setAttribute('role','dialog');
 sessionTutorialRoot.setAttribute('aria-modal','true');
 sessionTutorialRoot.setAttribute('aria-label','Chimpions Urban Sports how to play tutorial');
+sessionTutorialRoot.tabIndex=-1;
 sessionTutorialRoot.innerHTML=`
   <div class="session-tutorial-stage">
     <div class="session-tutorial-bg" aria-hidden="true"></div>
@@ -770,6 +772,8 @@ function markSessionTutorialSeen(){
 }
 function dismissSessionTutorial(){
   if(!sessionTutorialVisible)return false;
+  const focusTarget=sessionTutorialPreviousFocus;
+  sessionTutorialPreviousFocus=null;
   sessionTutorialVisible=false;
   sessionTutorialRoot.hidden=true;
   document.body.classList.remove('session-tutorial-active');
@@ -780,6 +784,11 @@ function dismissSessionTutorial(){
   const resolve=sessionTutorialResolve;
   sessionTutorialResolve=null;
   resolve?.(true);
+  requestAnimationFrame(()=>{
+    if(focusTarget?.isConnected&&!focusTarget.disabled&&!focusTarget.closest?.('[hidden]')){
+      try{focusTarget.focus?.({preventScroll:true});}catch{focusTarget.focus?.();}
+    }
+  });
   return true;
 }
 function showSessionTutorial({force=false}={}){
@@ -788,9 +797,11 @@ function showSessionTutorial({force=false}={}){
   if(!force&&!gameFlow.enter(GAME_FLOW.TUTORIAL,{reason:'session-tutorial'}))return Promise.resolve(false);
   gameplayInput?.resetTransient?.();
   touchControls?.reset?.();
+  sessionTutorialPreviousFocus=document.activeElement;
   sessionTutorialVisible=true;
   sessionTutorialRoot.hidden=false;
   document.body.classList.add('session-tutorial-active');
+  try{sessionTutorialRoot.focus({preventScroll:true});}catch{sessionTutorialRoot.focus();}
   tutorialPreviousButtons=[];
   tutorialAwaitNeutral=true;
   return new Promise(resolve=>{sessionTutorialResolve=resolve;});
@@ -842,7 +853,7 @@ ui.setAvatarLoading(true);
 
 function syncSportPresentation(){
   const sportProfile=getSportProfile(selectedSportMode);
-  const label=document.getElementById('selected-ride-mode');
+  const label=document.getElementById('selected-sport-mode');
   if(label)label.textContent=sportProfile.label;
   document.body.dataset.rideMode=selectedRideMode;
   document.body.dataset.sportMode=selectedSportMode;

@@ -39,12 +39,19 @@ function fakeFile(name,bytes){
   const blob=new Blob([bytes],{type:'model/gltf-binary'});
   return {name,size:blob.size,slice:(...args)=>blob.slice(...args)};
 }
-const valid=new ArrayBuffer(12);
-const view=new DataView(valid);
-view.setUint32(0,0x46546c67,true);view.setUint32(4,2,true);view.setUint32(8,12,true);
+const json=Buffer.from(JSON.stringify({asset:{version:'2.0'},scene:0,scenes:[{}],nodes:[]}));
+const jsonPad=(4-json.length%4)%4;
+const jsonChunk=Buffer.concat([json,Buffer.alloc(jsonPad,0x20)]);
+const valid=Buffer.alloc(20+jsonChunk.length);
+valid.writeUInt32LE(0x46546c67,0);
+valid.writeUInt32LE(2,4);
+valid.writeUInt32LE(valid.length,8);
+valid.writeUInt32LE(jsonChunk.length,12);
+valid.writeUInt32LE(0x4e4f534a,16);
+jsonChunk.copy(valid,20);
 await assert.doesNotReject(()=>validateLocalGlbFile(fakeFile('custom.glb',valid)));
 await assert.rejects(()=>validateLocalGlbFile(fakeFile('custom.txt',valid)),/\.glb/);
-const bad=new Uint8Array(12);bad[0]=1;
+const bad=Buffer.from(valid);bad[0]=1;
 await assert.rejects(()=>validateLocalGlbFile(fakeFile('bad.glb',bad)),/Invalid GLB file header/);
 const tooLarge={name:'huge.glb',size:MAX_LOCAL_GLB_BYTES+1,slice:()=>new Blob()};
 await assert.rejects(()=>validateLocalGlbFile(tooLarge),/too large/i);

@@ -428,6 +428,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   let width=1;
   let height=1;
   let pixelRatio=1;
+  let postResolutionScale=1;
   let currentGrade='day';
   let currentMode='menu';
   let currentSettings=settings||{};
@@ -703,11 +704,28 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     width=Math.max(1,Math.floor(finite(nextWidth,width)));
     height=Math.max(1,Math.floor(finite(nextHeight,height)));
     pixelRatio=Math.max(.5,finite(nextPixelRatio,1));
+
+    // Respect the actual texture/renderbuffer ceiling independently from the
+    // selected quality profile. This is an internal post-resolution clamp, not
+    // a gameplay/profile switch, and prevents oversized offscreen allocations.
+    const targetLimit=Math.max(1,Math.min(
+      finite(capabilities.maxTextureSize,1),
+      finite(capabilities.maxRenderbufferSize,1)
+    ));
+    const requestedWidth=Math.max(1,width*pixelRatio);
+    const requestedHeight=Math.max(1,height*pixelRatio);
+    postResolutionScale=THREE.MathUtils.clamp(
+      Math.min(1,targetLimit/requestedWidth,targetLimit/requestedHeight),
+      .25,
+      1
+    );
+
     if(!composer)return;
-    composer.setPixelRatio(pixelRatio);
+    const postPixelRatio=pixelRatio*postResolutionScale;
+    composer.setPixelRatio(postPixelRatio);
     composer.setSize(width,height);
-    const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio));
-    const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio));
+    const effectiveWidth=Math.max(1,Math.floor(width*postPixelRatio));
+    const effectiveHeight=Math.max(1,Math.floor(height*postPixelRatio));
     const aoScale=THREE.MathUtils.clamp(finite(currentSettings.aoResolutionScale,.5),.25,.75);
     const aoWidth=Math.max(1,Math.floor(effectiveWidth*aoScale));
     const aoHeight=Math.max(1,Math.floor(effectiveHeight*aoScale));
@@ -866,8 +884,8 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   }
 
   function estimateMemory(){
-    const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio));
-    const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio));
+    const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio*postResolutionScale));
+    const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio*postResolutionScale));
     const hdrBytes=renderTargetType==='half-float'?8:4;
     let bytes=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:2});
     bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:4,count:2});
@@ -892,7 +910,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       renderTargetReason,
       renderTargetMemoryBytes:composer?estimateMemory():0,
       msaaSamples:0,
-      postResolutionScale:1,
+      postResolutionScale,
       bloomEnabled:!!bloomPass?.enabled,
       bloomStrength:bloomPass?.strength??0,
       bloomRadius:bloomPass?.radius??0,

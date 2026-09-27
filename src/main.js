@@ -1752,8 +1752,9 @@ function update(dt,frameMs=dt*1000){
   const skateState=state.skate||{};
   const audioSurface=(state.oilSlipTime||0)>0?'oil':(wet>.22?'wet_asphalt':'dry_asphalt');
   const grindAudioState=grindSystem.snapshot();
+  const audioMode=gameFlow.is(GAME_FLOW.RESULTS)?'results':state.mode;
   audio.update({
-    mode:state.mode,
+    mode:audioMode,
     speed:state.speed,
     baseSpeed:state.baseSpeed,
     maxSpeed:state.maxSpeed,

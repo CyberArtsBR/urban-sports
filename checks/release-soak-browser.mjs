@@ -59,7 +59,8 @@ function snapshotScript(){
     heap:performance.memory?.usedJSHeapSize??null,
     quality:d?.qualityProfile,
     weather:d?.weatherState?.mode,
-    input:d?.inputState
+    input:d?.inputState,
+    selectedAvatar:d?.selectedAvatar||''
   };
 }
 
@@ -140,6 +141,15 @@ try{
     assert.equal(reconnect?.mode,'playing','controller reconnect disturbed gameplay');
     assert.equal(Math.abs(reconnect?.inputState?.touchSteer||0),0,'controller reconnect contaminated touch input');
 
+    if(i%2===1){
+      const switched=await page.evaluate(async avatarIndex=>{
+        if(typeof window.__urbanReleaseTest?.switchBuiltinAvatar!=='function')return false;
+        return window.__urbanReleaseTest.switchBuiltinAvatar(avatarIndex);
+      },i+1);
+      assert.equal(switched,true,'soak could not switch built-in avatar on cycle '+(i+1));
+      await page.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.ready===true&&d?.mode==='playing';},null,{timeout:30000});
+    }
+
     samples.push(await page.evaluate(snapshotScript));
   }
 
@@ -181,6 +191,7 @@ try{
     check:'release-soak-browser',
     soakSeconds:SOAK_SECONDS,
     restartCycles:RESTART_CYCLES,
+    avatarSwitchCycles:Math.floor(RESTART_CYCLES/2),
     samples:samples.length,
     graphicsStability:stability,
     listenerGrowth:final.runtimeListenerCount-warm.runtimeListenerCount,

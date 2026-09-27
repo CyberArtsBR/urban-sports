@@ -47,7 +47,7 @@ export const HAPTIC_PATTERNS=Object.freeze({
   crash:Object.freeze({duration:150,weakMagnitude:.64,strongMagnitude:.90})
 });
 
-const CONTINUOUS_INTERVAL=.12;
+const CONTINUOUS_INTERVAL=.10;
 
 export function normalizeHapticIntensity(value,fallback=HAPTIC_INTENSITY.HIGH){
   const raw=String(value??'').trim().toLowerCase();

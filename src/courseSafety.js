@@ -41,9 +41,20 @@ export function maxHumanReachableLateralDelta(dz,speed=T.BASE_SPEED){
   );
   const steeringTime=Math.max(0,availableTime-reactionReserve);
   const usefulLateralSpeed=estimateUsefulLateralSpeed(safeSpeed);
-  const responseAllowance=T.SAFE_ROUTE_BASE_REACH*clamp(availableTime/.24,0,1);
+  // The previous solver assumed near-instant lateral authority and could approve
+  // dodge lines that were mathematically reachable by Ski handling but not by
+  // the slower truck/heading buildup of a skateboard. Model the response ramp
+  // conservatively so every certified safe corridor remains steer-only viable.
+  const responseProgress=clamp(steeringTime/.34,0,1);
+  const averageAuthority=.18+responseProgress*.62;
+  const speed01=getSpeedProgress(safeSpeed);
+  // At late-game world speed, the player has far less real time between rows.
+  // Tighten the authored safe-line envelope accordingly instead of pretending
+  // that higher forward speed grants proportionally more dodge authority.
+  const handlingScale=THREE.MathUtils.lerp(.96,.62,speed01);
+  const responseAllowance=T.SAFE_ROUTE_BASE_REACH*clamp(availableTime/.40,0,1)*.45*handlingScale;
   const delta=responseAllowance+
-    usefulLateralSpeed*steeringTime*T.SAFE_ROUTE_ACCELERATION_FACTOR;
+    usefulLateralSpeed*steeringTime*averageAuthority*T.SAFE_ROUTE_ACCELERATION_FACTOR*handlingScale;
   return clamp(delta,0,T.SAFE_ROUTE_MAX_REACH);
 }
 
@@ -200,7 +211,7 @@ export function createSafeRouteTracker(initialX=0,initialZ=null){
 
     const geometricReach=maxReachableLateralDelta(z-previousSafeZ,speed);
     const humanReach=Math.max(
-      T.SAFE_ROUTE_BASE_REACH,
+      .12,
       maxHumanReachableLateralDelta(z-previousSafeZ,speed)
     );
     const maxDelta=Math.min(geometricReach,humanReach);

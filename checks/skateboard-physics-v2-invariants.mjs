@@ -90,18 +90,36 @@ function stepFor(state,seconds,input=0,options={},hz=180){
   assert(s.edge<-.35,'opposite input failed to complete a deliberate reversal');
 }
 
-// Powerslide has separate entry, maintenance and recovery phases.
+// Normal left/right steering must remain a planted carve. Powerslide is an
+// explicit modifier so keyboard ±1 input cannot silently turn every hard carve
+// into a low-grip slide.
 {
+  const planted=makeState({speed:profile.maxSpeed*.92});
+  stepFor(planted,.42,1,{powerslideIntent:false});
+  assert.equal(planted.skate.powerslide,false,'normal full steering unexpectedly entered powerslide');
+
   const s=makeState({speed:profile.maxSpeed*.92});
-  stepFor(s,.42,1);
-  assert.equal(s.skate.powerslide,true,'high-load carve did not enter powerslide');
+  stepFor(s,.42,1,{powerslideIntent:true});
+  assert.equal(s.skate.powerslide,true,'explicit powerslide intent did not enter powerslide');
   const slideSlip=s.skate.slip;
-  stepFor(s,.70,0);
-  assert.equal(s.skate.powerslide,false,'powerslide did not exit after steering release');
+  stepFor(s,.70,0,{powerslideIntent:false});
+  assert.equal(s.skate.powerslide,false,'powerslide did not exit after modifier/steering release');
   assert(s.skate.slip<slideSlip,'powerslide recovery did not restore lateral grip');
   const types=consumeSkateboardEvents(s).map(event=>event.type);
   assert(types.includes('powerslideStart'),'powerslideStart event missing');
   assert(types.includes('powerslideEnd'),'powerslideEnd event missing');
+}
+
+// Steering-only play must have enough immediate lateral authority to dodge a
+// readable obstacle without requiring an ollie as an escape hatch.
+{
+  const opening=makeState({speed:profile.baseSpeed});
+  const maximum=makeState({speed:profile.maxSpeed});
+  stepFor(opening,.25,1,{powerslideIntent:false});
+  stepFor(maximum,.25,1,{powerslideIntent:false});
+  assert(opening.x>.72,'opening-speed steer-only dodge is still too sluggish');
+  assert(maximum.x>.62,'maximum-speed steer-only dodge is still too sluggish');
+  assert(opening.vx>4.5&&maximum.vx>4.2,'steering did not build useful lateral velocity quickly enough');
 }
 
 // Wet asphalt and oil lower grip but never remove steering agency.

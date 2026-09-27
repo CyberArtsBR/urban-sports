@@ -43,7 +43,7 @@ function applyUrbanTutorialCopy(){
   if(title&&title.textContent.trim()!=='CHIMPIONS URBAN SPORTS')title.innerHTML='CHIMPIONS <span>URBAN SPORTS</span>';
   setPresentationText(tutorial.querySelector('.session-tutorial-title em'),'SKATEBOARD · HOW TO PLAY');
   const sections=tutorial.querySelectorAll('.session-tutorial-grid section');
-  if(sections[0])setPresentationText(sections[0].querySelector('p'),'Steer left and right to thread through street obstacles.');
+  if(sections[0])setPresentationText(sections[0].querySelector('p'),'Steer left and right to thread through street obstacles. Hold SHIFT / LB / RB while steering to powerslide.');
   if(sections[1])setPresentationText(sections[1].querySelector('p'),'Pop jumps, clear hazards and link tricks.');
   if(sections[4]){
     const goals=sections[4].querySelectorAll('p');

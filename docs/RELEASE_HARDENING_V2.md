@@ -191,18 +191,17 @@ These cover route safety, late-game pressure, collision margins, ramp behavior, 
 
 No PR was closed and no branch was deleted.
 
-| PR | Branch | Audit finding | Recommendation |
-| --- | --- | --- | --- |
-| #10 | `test/urban-sports-regression` | Historical regression branch; current main and this hardening branch contain substantially broader regression coverage. | Manually review for any unique check, then close if none remains. |
-| #25 | `feat/final-aaa-max-rendering` -> main | Historical final rendering draft; rendering work was subsequently integrated/evolved and main later required black-screen hotfixes. | Treat as superseded after manual unique-commit review. |
-| #27 | `feat/final-native-skate-gameplay` | Main history contains the native skateboard gameplay integration. Branch now diverges from main. | Candidate for manual close as integrated/superseded. |
-| #28 | `feat/final-skate-rider-animation` | Main history contains rider animation integration. Branch now diverges. | Candidate for manual close as integrated/superseded. |
-| #29 | `feat/final-aaa-max-rendering` | Main history contains the prior MAX rendering integration; subsequent rendering fixes supersede its release state. | Candidate for manual close after unique-commit review. |
-| #30 | `feat/final-aaa-city-assets` | Main history contains final urban city asset integration. Branch now diverges. | Candidate for manual close as integrated/superseded. |
-| #31 | `feat/final-skate-audio-vfx` | Main history contains skateboard audio/VFX integration. Branch now diverges. | Candidate for manual close as integrated/superseded. |
-| #35 | `feat/urban-max-cinematic-rendering` | Current draft rendering work, not treated as historical stale work. | Keep under active review; it must preserve the fail-open rendering contract before integration. |
+| PR | Branch | Ancestry vs current main | Audit finding | Recommendation |
+| --- | --- | ---: | --- | --- |
+| #10 | `test/urban-sports-regression` | diverged; 26 branch-only / 81 main-only commits | Historical regression branch; current main plus this hardening contain broader regression coverage, but ancestry proves unique commits remain. | Review the 26 branch-only commits for any unique safeguard; close only after that review. |
+| #25 / #29 | `feat/final-aaa-max-rendering` | diverged; 19 branch-only / 58 main-only commits | Historical final rendering work; later main rendering integration/hotfixes supersede its release state, but the branch is not ancestry-clean. | Compare the 19 branch-only commits against current rendering; close both duplicate PRs only when no desired change remains. |
+| #27 | `feat/final-native-skate-gameplay` | diverged; 24 branch-only / 58 main-only commits | Main contains later native skateboard gameplay integration, but this branch still has unique ancestry. | Review branch-only commits; then close as superseded if all desired behavior exists on main. |
+| #28 | `feat/final-skate-rider-animation` | diverged; 7 branch-only / 58 main-only commits | Main contains later rider-animation integration. | Small manual unique-commit review, then close if superseded. |
+| #30 | `feat/final-aaa-city-assets` | diverged; 4 branch-only / 58 main-only commits | Main contains later final urban city asset integration. | Review the 4 branch-only commits, then close if they add nothing still desired. |
+| #31 | `feat/final-skate-audio-vfx` | diverged; 12 branch-only / 58 main-only commits | Main contains later skateboard audio/VFX integration. | Review branch-only commits, then close if superseded. |
+| #35 | `feat/urban-max-cinematic-rendering` | main is 38 commits behind this branch | Active cinematic rendering draft with substantial work not in current main. | Keep open/active. Any integration must preserve the new fail-open rendering and graphics gates. |
 
-"Integrated/superseded" here is based on audited main commit history and current branch divergence, not on automatic ancestry closure. Human review should confirm no unique desired commits before closing.
+The historical PRs above are **not** clean ancestors of main. "Superseded" refers to later main functionality and integration history, not proof that every branch commit landed. Human review of branch-only commits is required before closing.
 
 ## Branch protection
 

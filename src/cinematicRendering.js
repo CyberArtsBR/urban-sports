@@ -536,7 +536,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       renderPass=instrumentPass(new RenderPass(scene,camera),'scene');
       composer.addPass(renderPass);
 
-      if(currentSettings.ambientOcclusion!==false&&capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable&&!forced('gtao')){
+      if(currentSettings.ambientOcclusion!==false&&capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&!forced('gtao')){
         try{
           gtaoPass=new GTAOPass(scene,camera,1,1);
           gtaoPass.output=GTAOPass.OUTPUT.Default;
@@ -557,10 +557,10 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
           gtaoPass=null;
         }
       }else if(currentSettings.ambientOcclusion!==false){
-        noteFeatureFailure('ao',forced('gtao')?'forced GTAO failure':'GTAO requires verified HalfFloat + depth texture support');
+        noteFeatureFailure('ao',forced('gtao')?'forced GTAO failure':'GTAO requires verified linear HalfFloat + depth texture support');
       }
 
-      if(currentSettings.bloomEnabled!==false&&capabilities.halfFloatRenderable&&!forced('bloom')){
+      if(currentSettings.bloomEnabled!==false&&capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&!forced('bloom')){
         try{
           bloomPass=new UnrealBloomPass(
             new THREE.Vector2(1,1),
@@ -576,7 +576,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
           bloomPass=null;
         }
       }else if(currentSettings.bloomEnabled!==false){
-        noteFeatureFailure('bloom',forced('bloom')?'forced bloom failure':'Bloom requires verified HalfFloat render targets');
+        noteFeatureFailure('bloom',forced('bloom')?'forced bloom failure':'Bloom requires verified linear HalfFloat render targets');
       }
 
       if(gtaoPass?.depthTexture&&currentSettings.volumetricFog!==false&&!forced('volumetric')){

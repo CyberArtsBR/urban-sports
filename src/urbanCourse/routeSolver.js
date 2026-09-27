@@ -41,8 +41,9 @@ export function solveCourseSectionRoute({
     previous=point;
   }
   return Object.freeze({
-    valid:corridor.valid&&!impossibleCheckpoint,
+    valid:corridor.valid,
     corridorValid:corridor.valid,
+    checkpointSequenceValid:!impossibleCheckpoint,
     impossibleCheckpoint,
     minimumRouteWidth:Number(corridor.narrowestWidth)||0,
     firstDecisionReadTime:corridor.firstDecisionReadTime,

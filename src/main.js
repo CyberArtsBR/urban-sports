@@ -132,7 +132,7 @@ function applyCameraMotionPreference(mode=cameraMotionMode){
 }
 applyCameraMotionPreference();
 
-const renderer=new THREE.WebGLRenderer({antialias:quality.active!=='max-cinematic',powerPreference:'high-performance'});
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
 const gpuTimer=createGpuTimer(renderer);
@@ -149,11 +149,13 @@ renderer.shadowMap.enabled=false;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
 app.prepend(renderer.domElement);
 
-// Production-safe default remains direct rendering. The new MAX CINEMATIC
-// stack allocates its zero-sample offscreen targets only when that explicit
-// manual tier is selected and fails open to WebGLRenderer if any pass errors.
+// Direct WebGLRenderer rendering is the universal safety path. MAX CINEMATIC
+// may allocate zero-sample offscreen targets only after runtime framebuffer
+// probes succeed; any initialization, pass, output-health or context-recovery
+// failure returns control to the direct renderer in the same frame.
 cinematicRendering=createCinematicRendering({
   renderer,
   scene,

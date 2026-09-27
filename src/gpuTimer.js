@@ -97,6 +97,8 @@ export function createGpuTimer(renderer){
       averageMs:round(average),
       p50Ms:round(percentile(samples,.50)),
       p95Ms:round(percentile(samples,.95)),
+      p99Ms:round(percentile(samples,.99)),
+      maxMs:round(samples.length?Math.max(...samples):0),
       samples:samples.length,
       pending:pending.length+(active?1:0),
       discarded,

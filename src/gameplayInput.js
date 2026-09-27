@@ -57,6 +57,9 @@ export function createGameplayInput({windowRef=globalThis.window,documentRef=glo
       touchTricks.delete(normalized);
     }
   }
+  function requestSpecial(){
+    specialQueued=true;
+  }
   function requestPause(){
     pauseQueued=true;
   }
@@ -142,6 +145,7 @@ export function createGameplayInput({windowRef=globalThis.window,documentRef=glo
     setTouchSteer,
     setTouchJump,
     setTouchTrick,
+    requestSpecial,
     requestPause,
     resetTransient,
     getDiagnostics

@@ -301,12 +301,13 @@ export function trySkateboardOllie(state,groundY,{powered=false,nollie=false}={}
   return true;
 }
 
-function classifySkateboardLanding({impact,alignment,lateralVelocity,trickComplete=true,wetness=0}){
-  const surfacePenalty=clamp(wetness,0,1);
+function classifySkateboardLanding({impact,alignment,lateralVelocity,trickComplete=true,wetness=0,oil=0,speed01=0}){
+  const surfacePenalty=clamp(wetness,0,1)*.65+clamp(oil,0,1)*.55;
+  const speedTolerance=lerp(1,1.10,clamp(speed01,0,1));
   const sketchyImpact=8.8-surfacePenalty*.25,hardImpact=12.4-surfacePenalty*.35,failedImpact=16.2-surfacePenalty*.45;
-  if(!trickComplete||impact>=failedImpact||alignment>=.72||lateralVelocity>=9.6)return SKATEBOARD_LANDING.FAILED;
-  if(impact>=hardImpact||alignment>=.50||lateralVelocity>=7.1)return SKATEBOARD_LANDING.HARD;
-  if(impact>=sketchyImpact||alignment>=.28||lateralVelocity>=4.5)return SKATEBOARD_LANDING.SKETCHY;
+  if(!trickComplete||impact>=failedImpact||alignment>=.72*speedTolerance||lateralVelocity>=9.6*speedTolerance)return SKATEBOARD_LANDING.FAILED;
+  if(impact>=hardImpact||alignment>=.50*speedTolerance||lateralVelocity>=7.1*speedTolerance)return SKATEBOARD_LANDING.HARD;
+  if(impact>=sketchyImpact||alignment>=.28*speedTolerance||lateralVelocity>=4.5*speedTolerance)return SKATEBOARD_LANDING.SKETCHY;
   return SKATEBOARD_LANDING.CLEAN;
 }
 
@@ -329,8 +330,9 @@ export function stepSkateboardAir(state,dt,groundY,{trickComplete=true,wetness=0
   if(state.y>groundY||state.vy>0)return {landed:false,impact:0,quality:'air'};
 
   const impact=Math.abs(state.vy),alignment=Math.abs(state.heading||0),lateralVelocity=Math.abs(state.vx||0);
-  const source=state.jumpSource||'',profile=state.jumpProfile||'';
-  const quality=classifySkateboardLanding({impact,alignment,lateralVelocity,trickComplete,wetness});
+  const source=state.jumpSource||'',profile=state.jumpProfile||'',velocity=getSkateboardVelocityModel(state);
+  const oil=clamp((state.oilSlipTime||0)/Math.max(.001,SKATEBOARD_TUNING.OIL_SLIP_SECONDS),0,1);
+  const quality=classifySkateboardLanding({impact,alignment,lateralVelocity,trickComplete,wetness,oil,speed01:velocity.speed01});
   const landingId=++s.landingSequence;
 
   state.y=groundY;state.vy=0;state.jumpVelocity=0;
@@ -349,7 +351,7 @@ export function stepSkateboardAir(state,dt,groundY,{trickComplete=true,wetness=0
   s.speedScrub=clamp(s.speedScrub+(quality===SKATEBOARD_LANDING.CLEAN?0:quality===SKATEBOARD_LANDING.SKETCHY?.035:quality===SKATEBOARD_LANDING.HARD?.08:.14),0,SKATEBOARD_TUNING.MAX_SPEED_SCRUB);
 
   s.lastLanding=quality;s.wheelContacts=quality===SKATEBOARD_LANDING.FAILED?2:4;s.olliePhase='landing';s.animationState=quality===SKATEBOARD_LANDING.HARD||quality===SKATEBOARD_LANDING.FAILED?'hardLand':'land';
-  const landing={landed:true,landingId,impact,alignment,lateralVelocity,quality,failed:quality===SKATEBOARD_LANDING.FAILED,source,profile,trickComplete:!!trickComplete,wetness:clamp(wetness,0,1)};
+  const landing={landed:true,landingId,impact,alignment,lateralVelocity,quality,failed:quality===SKATEBOARD_LANDING.FAILED,source,profile,trickComplete:!!trickComplete,wetness:clamp(wetness,0,1),oil,speedKmh:Math.round(velocity.gameplaySpeedKmh)};
   emitSkateboardEvent(state,'landing',landing);
   emitSkateboardEvent(state,landing.failed?'failedLanding':quality===SKATEBOARD_LANDING.HARD?'hardLand':'land',landing);
   return landing;

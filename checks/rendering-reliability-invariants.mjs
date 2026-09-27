@@ -50,6 +50,7 @@ assert.equal(estimateRenderTargetBytes(100,50,{bytesPerPixel:8,count:2}),80000);
 const cinematic=readFileSync(new URL('../src/cinematicRendering.js',import.meta.url),'utf8');
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const quality=readFileSync(new URL('../src/renderQuality.js',import.meta.url),'utf8');
+const buildings=readFileSync(new URL('../src/urban/urbanBuildings.js',import.meta.url),'utf8');
 
 for(const needle of [
   'probeRenderingCapabilities',
@@ -70,6 +71,9 @@ assert(cinematic.includes("capabilities.halfFloatRenderable&&capabilities.halfFl
 assert(cinematic.includes("return degradeRuntime('critical WebGL error"),'critical framebuffer errors must degrade instead of blanking gameplay');
 assert(main.includes("if(!composed)renderer.render(scene,camera)"),'direct WebGLRenderer must remain the same-frame universal fallback');
 assert(main.includes("renderer.outputColorSpace=THREE.SRGBColorSpace"),'output color space must be explicit');
+assert(main.includes('directRenderCpuTiming'),'direct renderer CPU timing must be exposed');
+assert(main.includes('shadowCpuTiming'),'shadow-map CPU timing must be exposed');
+assert(buildings.includes('mesh.castShadow=false'),'skyline must stay outside the realtime shadow-map budget');
 assert(main.includes("renderPath:quality.active==='max-cinematic'&&cinematicDiagnostics?.enabled?'cinematic-composer':'direct'"),'diagnostics must expose the actual render path');
 assert(quality.includes("const PROFILE_ORDER=Object.freeze(['high','medium','low'])"),'AUTO must never promote into MAX CINEMATIC');
 

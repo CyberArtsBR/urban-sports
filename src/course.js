@@ -1327,9 +1327,9 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     };
     const type=urbanPlan.legacyType;
     const hazardProgress=clamp(
-      difficulty*.31+
-      getSpeedProgress(currentSpeed)*.25+
-      urbanPlan.difficulty.longitudinalHazardDensity*.44,
+      difficulty*.46+
+      getSpeedProgress(currentSpeed)*.38+
+      urbanPlan.difficulty.longitudinalHazardDensity*.16,
       0,
       1
     );

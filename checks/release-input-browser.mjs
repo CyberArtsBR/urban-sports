@@ -155,9 +155,12 @@ try{
   await controllerPage.evaluate(()=>window.__releasePad.release(1));
   await waitControllerPolls(controllerPage,2);
 
-  await controllerPage.evaluate(()=>window.__releasePad.press(1));
+  // B/Circle was just proven by closing Settings. Use Start here to
+  // validate the independent pause/resume mapping without requiring two
+  // consecutive cancel edges through the same polling frame boundary.
+  await controllerPage.evaluate(()=>window.__releasePad.press(9));
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:5000});
-  await controllerPage.evaluate(()=>window.__releasePad.release(1));
+  await controllerPage.evaluate(()=>window.__releasePad.release(9));
   await waitControllerPolls(controllerPage,2);
 
   await controllerPage.evaluate(()=>{

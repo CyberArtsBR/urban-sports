@@ -1,6 +1,8 @@
 import {CONFIG,analyzeCourse,analyzeGraphics,analyzeMetric,frameMark,frameSummarySince,pending,readDiagnostics,round,runtimeSnapshot,sampleRuntime,speedBins} from './core.mjs';
 import {closeSelector,openSelector} from './selector.mjs';
 
+const START_FLOW_TIMEOUT=Math.max(120000,CONFIG.readyTimeoutMs);
+
 async function dismissTutorial(page){
   const tutorial=page.locator('.session-tutorial:not([hidden])');
   if(!await tutorial.isVisible().catch(()=>false))return;
@@ -17,7 +19,7 @@ async function completeStartSelectionIfNeeded(page){
     await page.waitForFunction(()=>{
       const d=(window.chimpionsUrbanSports?.()??window.chimpionsSki?.());
       return d?.mode==='playing'||document.querySelector('#chimpion-selector')?.open===true;
-    },undefined,{timeout:5000});
+    },undefined,{timeout:15000});
   }catch{return {status:'PENDING',reason:'Start flow did not reach gameplay or open the selector'};}
 
   const mode=await readDiagnostics(page);
@@ -27,7 +29,7 @@ async function completeStartSelectionIfNeeded(page){
     const dialog=document.querySelector('#chimpion-selector');
     if(!dialog?.open)return {ok:false,reason:'Selector is not open'};
     const card=dialog.querySelector('.chimpion-card.is-selected:not(.is-upload-avatar):not([aria-disabled="true"])')||dialog.querySelector('.chimpion-card:not(.is-upload-avatar):not([aria-disabled="true"])');
-    if(!card)return {ok:false,reason:'No Chimpion card is rendered'};
+    if(!card)return {ok:false,reason:'No enabled built-in Chimpion card is rendered'};
     card.click();
     return {ok:true,avatarId:card.dataset.avatarId||null};
   });
@@ -37,7 +39,7 @@ async function completeStartSelectionIfNeeded(page){
     await page.waitForFunction(()=>{
       const step=document.querySelector('#ride-mode-step');
       return !!step&&!step.hidden;
-    },undefined,{timeout:5000});
+    },undefined,{timeout:15000});
   }catch{return {status:'PENDING',reason:'Ride-mode step did not open after selecting a Chimpion'};}
 
   const ride=await page.evaluate(()=>{
@@ -45,15 +47,22 @@ async function completeStartSelectionIfNeeded(page){
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     const current=String(d?.rideMode||'snowboard').toLowerCase();
     const button=
-      dialog?.querySelector('.ride-mode-card.is-selected')||
-      dialog?.querySelector('.ride-mode-card[data-ride-mode="'+current+'"]')||
-      dialog?.querySelector('.ride-mode-card');
-    if(!button)return {ok:false,reason:'No ride-mode control is rendered'};
-    const rideMode=button.dataset.rideMode||null;
+      dialog?.querySelector('[data-sport-mode="skateboard"]')||
+      dialog?.querySelector('.ride-mode-card.is-selected:not([disabled])')||
+      dialog?.querySelector('.ride-mode-card[data-ride-mode="'+current+'"]:not([disabled])')||
+      dialog?.querySelector('.ride-mode-card:not([disabled])');
+    if(!button)return {ok:false,reason:'No enabled Skateboard-compatible ride control is rendered'};
+    const rideMode=button.dataset.sportMode||button.dataset.rideMode||null;
     button.click();
     return {ok:true,rideMode};
   });
   if(!ride.ok)return {status:'PENDING',reason:ride.reason};
+
+  try{
+    await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,undefined,{timeout:START_FLOW_TIMEOUT});
+  }catch{
+    return {status:'PENDING',reason:'Rider selection did not finish loading and close the selector'};
+  }
   return {status:'PASS',selectionRequired:true,avatarId:avatar.avatarId,rideMode:ride.rideMode};
 }
 
@@ -81,12 +90,12 @@ async function clickStart(page){
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       const tutorial=document.querySelector('.session-tutorial:not([hidden])');
       return !!tutorial||d?.mode==='countdown'||d?.mode==='playing';
-    },undefined,{timeout:20000});
+    },undefined,{timeout:START_FLOW_TIMEOUT});
     await dismissTutorial(page);
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';
-    },undefined,{timeout:CONFIG.readyTimeoutMs});
+    },undefined,{timeout:START_FLOW_TIMEOUT});
   }catch{
     return pending('Start control was invoked but gameplay did not reach mode=playing');
   }

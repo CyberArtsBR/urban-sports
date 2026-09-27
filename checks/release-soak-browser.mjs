@@ -132,18 +132,28 @@ try{
   }
 
   for(let i=0;i<RESTART_CYCLES;i++){
-    await page.keyboard.press('Escape');
+    const restartStateReady=await page.evaluate(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      if(d?.mode==='playing')window.__urbanReleaseTest?.forceCrash?.('soak-restart');
+      return typeof window.__urbanReleaseTest?.showCrashResults==='function';
+    });
+    assert.equal(restartStateReady,true,'soak restart test hooks are unavailable');
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.mode==='paused';
+      return d?.mode==='crashed'||d?.mode==='results';
+    },null,{timeout:5000});
+    await page.evaluate(()=>window.__urbanReleaseTest?.showCrashResults?.());
+    await page.waitForFunction(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      return d?.mode==='results';
     },null,{timeout:5000});
     const restartInvoked=await page.evaluate(()=>{
-      const button=document.querySelector('#restart-pause');
+      const button=document.querySelector('#restart-result');
       if(!button||button.disabled)return false;
       button.click();
       return true;
     });
-    assert.equal(restartInvoked,true,'soak restart control was unavailable');
+    assert.equal(restartInvoked,true,'soak results restart control was unavailable');
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';

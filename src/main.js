@@ -1866,6 +1866,12 @@ window.chimpionsUrbanSports.registerGrindTarget=target=>grindSystem.register(tar
 window.chimpionsUrbanSports.unregisterGrindTarget=id=>grindSystem.unregister(id);
 window.chimpionsUrbanSports.getSkateboardGameplay=()=>getSkateboardGameplaySnapshot(state,grindSystem);
 window.chimpionsUrbanSports.pollSkateboardEvents=()=>consumeSkateboardEvents(state);
+if(runtimeTestMode){
+  window.__urbanReleaseTest=Object.freeze({
+    forceCrash:(kind='test')=>crash(kind),
+    showCrashResults:()=>showCrashResults('release-test')
+  });
+}
 
 
 if(import.meta.hot){
@@ -1887,5 +1893,6 @@ if(import.meta.hot){
     selector?.dispose?.();
     delete window.chimpionsSki;
     delete window.chimpionsUrbanSports;
+    delete window.__urbanReleaseTest;
   });
 }

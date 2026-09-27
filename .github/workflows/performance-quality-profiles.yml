@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - integration/ski-full-audit-fixes
+      - perf/urban-runtime-assets-v2
   pull_request:
     branches:
       - main
@@ -22,7 +23,7 @@ jobs:
     timeout-minutes: 30
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      BENCH_ENV: "GAMEPLAY_SECONDS=30 LONG_RUN_SECONDS=60 MODE_RUN_SECONDS=15 TRICK_RUN_SECONDS=15 RESTART_ITERATIONS=2 SELECTOR_ITERATIONS=2 SAMPLE_INTERVAL_MS=500"
+      BENCH_ENV: "GAMEPLAY_SECONDS=30 LONG_RUN_SECONDS=60 MODE_RUN_SECONDS=15 TRICK_RUN_SECONDS=15 RESTART_ITERATIONS=20 SELECTOR_ITERATIONS=6 SAMPLE_INTERVAL_MS=500"
     steps:
       - uses: actions/checkout@v7
         with:

@@ -402,7 +402,10 @@ export function createSkiAudio(){
 
   function handleBlur(){focused=false;mixer.setLifecycleAudible(false);}
   function handleFocus(){focused=true;mixer.setLifecycleAudible(!hidden);if(!hidden)mixer.resume();}
-  function handleDeviceChange(){deviceChangeCount++;mixer.resume();}
+  function handleDeviceChange(){
+    deviceChangeCount++;
+    if(!hidden&&focused)mixer.resume();
+  }
   function handlePageHide(event){if(event?.persisted)mixer.suspend();else dispose();}
 
   const unlockHandler=()=>unlock();

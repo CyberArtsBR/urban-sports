@@ -15,7 +15,7 @@ const districtDistribution=new Map();
 const hazardDistribution=new Map();
 const densityBins=new Map();
 const riskBananas={tier1:0,tier2:0,tier3:0,total:0};
-let impossibleRouteCount=0,solverImpossibleRouteCount=0,totalSections=0,totalPlacements=0;
+let impossibleRouteCount=0,solverImpossibleRouteCount=0,solverCheckpointWarningCount=0,totalSections=0,totalPlacements=0;
 let rampFrequency=0,railFrequency=0,recoveryFrequency=0;
 let minimumRouteWidth=Infinity,maximumRequiredLateralTransition=0;
 let maxRepeatedSectionStreak=0,maxRepeatedFormationStreak=0;
@@ -86,12 +86,37 @@ for(let seedIndex=0;seedIndex<SEEDS;seedIndex++){
         placements:section.placements,startZ:z,endZ:section.endZ,speed,startX:section.urban?.safeRoute?.startX||0
       });
       if(!solved.valid)solverImpossibleRouteCount++;
+      if(!solved.checkpointSequenceValid)solverCheckpointWarningCount++;
       maximumRequiredLateralTransition=Math.max(maximumRequiredLateralTransition,solved.maxRequiredLateralTransition);
       if(solved.minimumRouteWidth>0)minimumRouteWidth=Math.min(minimumRouteWidth,solved.minimumRouteWidth);
     }
     z=section.endZ;
   }
 }
+
+const densityByDistance=Object.fromEntries([...densityBins].map(([key,value])=>[key,{
+  sections:value.sections,
+  hazardsPerSection:Number((value.hazards/value.sections).toFixed(3)),
+  placementsPerSection:Number((value.placements/value.sections).toFixed(3)),
+  threatPerSection:Number((value.threat/value.sections).toFixed(3))
+}]));
+
+console.log(JSON.stringify({
+  check:'urban-course-director-fuzz',
+  seeds:SEEDS,sections:totalSections,placements:totalPlacements,
+  impossibleRouteCount,solverImpossibleRouteCount,solverCheckpointWarningCount,
+  sectionDistribution:Object.fromEntries(sectionDistribution),
+  familyDistribution:Object.fromEntries(familyDistribution),
+  districtDistribution:Object.fromEntries(districtDistribution),
+  hazardDistribution:Object.fromEntries(hazardDistribution),
+  rampFrequency,railFrequency,recoveryFrequency,
+  minimumRouteWidth:Number(minimumRouteWidth.toFixed(3)),
+  maximumRequiredLateralTransition:Number(maximumRequiredLateralTransition.toFixed(3)),
+  averageThreatScore:Number((totalThreat/totalSections).toFixed(3)),
+  maxRepeatedSectionStreak,maxRepeatedFormationStreak,
+  bananaRiskDistribution:riskBananas,
+  landmarkCount,densityByDistance
+}));
 
 assert.equal(impossibleRouteCount,0,'generated an impossible reachable corridor during 10k-seed fuzz');
 assert.equal(solverImpossibleRouteCount,0,'lightweight route solver found an impossible sampled section');
@@ -109,26 +134,3 @@ assert(Number.isFinite(minimumRouteWidth)&&minimumRouteWidth>.35,'minimum route 
 assert(maximumRequiredLateralTransition<=T.SAFE_ROUTE_MAX_REACH+.01,'sampled route demanded excessive lateral transition');
 assert(landmarkCount>SEEDS*.20,'landmark cadence did not activate');
 
-const densityByDistance=Object.fromEntries([...densityBins].map(([key,value])=>[key,{
-  sections:value.sections,
-  hazardsPerSection:Number((value.hazards/value.sections).toFixed(3)),
-  placementsPerSection:Number((value.placements/value.sections).toFixed(3)),
-  threatPerSection:Number((value.threat/value.sections).toFixed(3))
-}]));
-
-console.log(JSON.stringify({
-  check:'urban-course-director-fuzz',
-  seeds:SEEDS,sections:totalSections,placements:totalPlacements,
-  impossibleRouteCount,solverImpossibleRouteCount,
-  sectionDistribution:Object.fromEntries(sectionDistribution),
-  familyDistribution:Object.fromEntries(familyDistribution),
-  districtDistribution:Object.fromEntries(districtDistribution),
-  hazardDistribution:Object.fromEntries(hazardDistribution),
-  rampFrequency,railFrequency,recoveryFrequency,
-  minimumRouteWidth:Number(minimumRouteWidth.toFixed(3)),
-  maximumRequiredLateralTransition:Number(maximumRequiredLateralTransition.toFixed(3)),
-  averageThreatScore:Number((totalThreat/totalSections).toFixed(3)),
-  maxRepeatedSectionStreak,maxRepeatedFormationStreak,
-  bananaRiskDistribution:riskBananas,
-  landmarkCount,densityByDistance
-}));

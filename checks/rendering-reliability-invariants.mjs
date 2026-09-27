@@ -74,6 +74,7 @@ assert(cinematic.includes("return currentSettings.profile===CINEMATIC_PROFILE&&!
 assert(cinematic.includes("return degradeRuntime('critical WebGL error"),'critical framebuffer errors must degrade instead of blanking gameplay');
 assert(main.includes("if(!composed){")&&main.includes("renderer.render(scene,camera)"),'direct WebGLRenderer must remain the same-frame universal fallback');
 assert(main.includes("renderer.outputColorSpace=THREE.SRGBColorSpace"),'output color space must be explicit');
+assert(!main.includes("globalThis.location?.reload?.()"),'quality switching must never require a page reload');
 assert(main.includes('directRenderCpuTiming'),'direct renderer CPU timing must be exposed');
 assert(main.includes('shadowCpuTiming'),'shadow-map CPU timing must be exposed');
 assert(buildings.includes('mesh.castShadow=false'),'skyline must stay outside the realtime shadow-map budget');

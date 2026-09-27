@@ -70,6 +70,7 @@ assert(cinematic.includes("const hdrTarget=choice.type===THREE.HalfFloatType&&ch
 assert(cinematic.includes("currentSettings.ambientOcclusion!==false&&hdrTarget&&capabilities.depthTextureRenderable"),'GTAO must require the actually selected linear HalfFloat target + verified depth support');
 assert(cinematic.includes("currentSettings.bloomEnabled!==false&&hdrTarget&&!forced('bloom')"),'Bloom must require the actually selected linear HalfFloat target');
 assert(cinematic.includes("if(name==='ao'&&atmospherePass?.enabled)"),'runtime GTAO degradation must disable dependent volumetrics');
+assert(cinematic.includes("return currentSettings.profile===CINEMATIC_PROFILE&&!failed&&!contextLost"),'composition request state must allow composer rebuild after a fail-open frame');
 assert(cinematic.includes("return degradeRuntime('critical WebGL error"),'critical framebuffer errors must degrade instead of blanking gameplay');
 assert(main.includes("if(!composed){")&&main.includes("renderer.render(scene,camera)"),'direct WebGLRenderer must remain the same-frame universal fallback');
 assert(main.includes("renderer.outputColorSpace=THREE.SRGBColorSpace"),'output color space must be explicit');

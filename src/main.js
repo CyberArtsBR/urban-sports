@@ -426,6 +426,24 @@ let trailTimer=0;
 const player=new THREE.Group();scene.add(player);
 player.position.set(0,.12,2.2);
 const impactVfx=createImpactVfx({scene,capacity:224});
+let lastSkateVfxEventId=0;
+function emitPendingSkateVfx(){
+  const events=state.skate?.events||[];
+  for(const event of events){
+    const id=Number(event?.id)||0;
+    if(id<=lastSkateVfxEventId)continue;
+    impactVfx.skateEvent?.(event,{
+      x:state.x,
+      y:Math.max(.10,(state.y||0)+.12),
+      z:player.position.z,
+      direction:Math.sign(state.vx)||state.crashDirection||1,
+      speed:state.speed,
+      wetness:roadWetness,
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
+    });
+    lastSkateVfxEventId=Math.max(lastSkateVfxEventId,id);
+  }
+}
 
 // Banana Power is displayed directly on the rider equipment as emissive LED light.
 const trickVisualPivot=new THREE.Group();
@@ -992,10 +1010,12 @@ function resetRunState(){
   tricks.reset();
   grindSystem.reset();
   resetSkateboardState(state);
+  lastSkateVfxEventId=0;
+  riderController.resetPose?.();
   audio.resetRun?.();
   haptics.reset?.();
   player.position.set(0,.12,2.2);resetPlayerOrientation(player);
-  state.crashActive=false;state.crashMotion=null;state.crashTime=0;pendingCrashResults=null;impactVfx.reset();
+  state.crashActive=false;state.crashMotion=null;state.crashTime=0;state.crashVisualCause='';pendingCrashResults=null;impactVfx.reset();
   startCountdownStarted=false;
   startCrowd.reset();startGate.reset();
   trailTimer=0;skiTrails.reset();
@@ -1108,6 +1128,7 @@ function crash(kind='tree',item=null){
   const previousBest=state.best;
   const newBest=runDistance>previousBest;
   const isTrickCrash=kind==='trick';
+  const wasGrinding=!!state.grinding;
   if(isTrickCrash)state.failedTricksCount=(state.failedTricksCount||0)+1;
   state.lastMistakeTime=state.time;
   state.trickCrash=isTrickCrash;
@@ -1122,6 +1143,16 @@ function crash(kind='tree',item=null){
     (state.speed-crashProfile.baseSpeed)/Math.max(.001,crashProfile.maxSpeed-crashProfile.baseSpeed),
     0,1
   );
+  const lateralRatio=Math.abs(Number(state.vx)||0)/Math.max(1,Math.abs(Number(state.speed)||0));
+  state.crashVisualCause=isTrickCrash
+    ?'trick_failure'
+    :kind==='landing'
+      ?'failed_landing'
+      :wasGrinding
+        ?'grind_failure'
+        :lateralRatio>.28
+          ?'lateral_impact'
+          :crashSpeed01>.72?'high_speed_collision':'frontal_impact';
   const crashJitter=Math.sin((state.time+state.distance*.013)*12.9898)*.5+.5;
   state.crashMotion={
     active:true,
@@ -1150,7 +1181,8 @@ function crash(kind='tree',item=null){
       z:item?.position.z??player.position.z,
       direction:state.crashDirection,
       speed:state.speed,
-      severity:.68+crashSpeed01*.32
+      severity:.68+crashSpeed01*.32,
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
     });
   }
   bananaPower.deactivate();
@@ -1418,12 +1450,25 @@ function update(dt,frameMs=dt*1000){
       rightGround:state.rightGround,
       centerGround:state.centerGround,
       skateboardState:state.skate?.animationState||'idle',
+      pushActive:state.skate?.animationState==='push',
       powerslide:!!state.skate?.powerslide,
+      powerslideAmount:state.skate?.powerslideAmount||0,
+      slip:state.skate?.slip||0,
+      olliePhase:state.skate?.olliePhase||'',
       manualMode:state.skate?.manualMode||'',
+      manualBalance:state.skate?.manualBalance||0,
       grinding:!!state.grinding,
+      grindType:state.skate?.grindState==='active'?(grindSystem.snapshot().trick||'grind'):'',
       grindTrick:grindSystem.snapshot().trick,
+      grindBalance:state.skate?.grindBalance||0,
+      landingQuality:state.skate?.lastLanding||state.landingQuality||'',
       trickType:activeTrick.type||'',
-      trickProgress:activeTrick.progress||0
+      trickProgress:activeTrick.progress||0,
+      crashed:!!state.crashActive,
+      crashType:state.crashVisualCause||state.crashType||'',
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED,
+      roadWetness,
+      roadRoughness:roadWetness>.2?.16:.28
     });
     if(!state.air&&!ridingRamp){
       trailTimer-=dt;
@@ -1591,6 +1636,8 @@ function update(dt,frameMs=dt*1000){
     // Cinematic crash motion is integrated below so it continues behind results.
   }
 
+  emitPendingSkateVfx();
+
   let crashCinematicDt=dt;
   if(state.crashActive){
     state.crashTime+=dt;
@@ -1599,6 +1646,21 @@ function update(dt,frameMs=dt*1000){
     crashCinematicDt=dt*crashTimeScale;
     const crashGround=terrainHeight(player.position.x,player.position.z-state.travel)+.12;
     updateCrashOrientation(player,state,crashCinematicDt,crashGround);
+    riderController.updatePose({
+      dt:crashCinematicDt,
+      steer:state.edge,
+      air:false,
+      landing:state.landingPulse,
+      speed:state.speed,
+      rideMode:state.rideMode,
+      time:state.time,
+      skateboardState:'crash',
+      crashed:true,
+      crashType:state.crashVisualCause||state.crashType||'collision',
+      reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED,
+      roadWetness,
+      roadRoughness:roadWetness>.2?.16:.28
+    });
     state.crashVisualX=player.position.x;
     state.crashVisualY=player.position.y;
     state.crashVisualZ=player.position.z;

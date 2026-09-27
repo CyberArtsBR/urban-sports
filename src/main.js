@@ -68,6 +68,7 @@ import {createImpactVfx} from './impactVfx.js';
 import {CONTROL_COPY} from './controlCopy.js';
 import {createLocalization} from './localization.js';
 import {applyAccessibilityPreferences} from './uiAccessibility.js';
+import {createProgressionReplayService} from './progression/index.js';
 
 const userPreferences=loadUserPreferences();
 const localization=createLocalization({locale:userPreferences.locale});
@@ -77,6 +78,7 @@ configureControllerInput({deadzone:userPreferences.controllerDeadzone});
 
 let runtimeTestMode=false;
 let requestedRunSeed=null;
+let activeChallengeSeed=null;
 try{
   const params=new URLSearchParams(globalThis.location?.search||'');
   runtimeTestMode=params.get('test')==='1';
@@ -85,6 +87,7 @@ try{
 }catch{}
 function createRunSeed(){
   if(requestedRunSeed)return requestedRunSeed;
+  if(activeChallengeSeed)return activeChallengeSeed;
   try{
     const values=new Uint32Array(2);
     globalThis.crypto?.getRandomValues?.(values);
@@ -489,7 +492,8 @@ let selectedRideMode=sportController.legacyRideMode;
 saveSportPreference(selectedSportMode);
 let initialSelectionFlow=false;
 const initialRideProfile=getRideProfile(selectedRideMode);
-const runController=createRunController({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:0});
+const progression=createProgressionReplayService({reducedVfx:!!accessibilityPreferences.reducedVfx});
+const runController=createRunController({mode:'menu',rideMode:selectedRideMode,rideProfile:initialRideProfile,best:progression.getBestDistance()});
 const {state,runSession,gameFlow}=runController;
 state.skateSetup=selectedSkateboardSetup;
 resetSkateboardState(state);
@@ -1075,7 +1079,7 @@ function installAvatarSelector(initialAvatar){
 
 resetAirborneScoring(state);
 resetTrickScoring(state);
-state.best=loadBestScore(0);
+state.best=Math.max(loadBestScore(0),progression.getBestDistance());
 courseDirector=createCourseDirector({routeCenter});
 resetCourse(0);
 const gameplayInput=createGameplayInput();
@@ -1177,6 +1181,12 @@ function resetRunState(){
   const rideProfile=getRideProfile(state.rideMode);
   runSession.reset({rideProfile});
   state.runSeed=createRunSeed();
+  progression.startRun({
+    runSeed:state.runSeed,
+    sport:selectedSportMode,
+    setup:selectedSkateboardSetup||state.rideMode||'default',
+    rider:selectedAvatar?.id||selectedAvatar?.name||'unknown'
+  });
   bananaPower.reset();
   riderController.setRideMode(state.rideMode);
   audio.setRideMode?.(state.rideMode);
@@ -1304,6 +1314,9 @@ function crash(kind='tree',item=null){
   const runDistance=Math.floor(state.distance);
   const previousBest=state.best;
   const newBest=runDistance>previousBest;
+  const maxSpeedKmh=selectedSportMode===SPORT_ID.SKATEBOARD
+    ?Math.round(Math.max(state.maxSkateGameplaySpeed||0,skateboardGameplaySpeed(state))*3.6)
+    :speedToKmh(state.maxRunSpeed||state.speed);
   const isTrickCrash=kind==='trick';
   const wasGrinding=!!state.grinding;
   if(isTrickCrash)state.failedTricksCount=(state.failedTricksCount||0)+1;
@@ -1365,7 +1378,8 @@ function crash(kind='tree',item=null){
   bananaPower.deactivate();
   breakSkillCombo(state);
   if(!gameFlow.enter(GAME_FLOW.CRASHED,{reason:kind}))return;
-  state.best=Math.max(state.best,runDistance);
+  const progressionResult=progression.finishRun(state,{maxSpeed:maxSpeedKmh,crashCause:state.crashType});
+  state.best=Math.max(state.best,runDistance,progression.getBestDistance());
   ui.setMode('crashed');
   const crashFeedback=feedback.onCrash({kind:state.crashType,velocity:state.crashVelocity});
   if(!isTrickCrash)haptics.crash(state.crashType,crashFeedback?.hapticStrength);
@@ -1378,13 +1392,12 @@ function crash(kind='tree',item=null){
     newBest,
     crashType:state.crashType,
     time:state.time,
-    maxSpeedKmh:selectedSportMode===SPORT_ID.SKATEBOARD
-      ?Math.round(Math.max(state.maxSkateGameplaySpeed||0,skateboardGameplaySpeed(state))*3.6)
-      :speedToKmh(state.maxRunSpeed||state.speed),
+    maxSpeedKmh,
     bestCombo:state.bestCombo||0,
     sportMode:selectedSportMode,
     rideMode:state.rideMode,
     runSeed:state.runSeed,
+    challengeResult:progressionResult.challengeResult,
     nearMisses:state.nearMisses||0,
     tricksLanded:state.tricksLanded||0,
     tricksFailed:state.tricksFailed||0,
@@ -1516,6 +1529,18 @@ function update(dt,frameMs=dt*1000){
     const groundY=.12+state.centerGround;
 
     const pressedThisStep=step===0&&jumpPressed;
+    progression.captureInput({
+      steer,
+      verticalIntent:actions.verticalIntent,
+      trickModifier:actions.trickModifier,
+      jumpPressed:pressedThisStep,
+      jumpHeld,
+      trickIntent:pressedThisStep?actions.trickIntent:null,
+      airborneTrickIntent:pressedThisStep?actions.airborneTrickIntent:null,
+      specialPressed:step===0&&actions.specialPressed,
+      cameraPressed:step===0&&actions.cameraPressed,
+      cameraMotionPressed:step===0&&actions.cameraMotionPressed
+    },dt);
     if(nativeSkateboard)updateSkateboardManual(state,{verticalIntent:actions.verticalIntent,dt:controlDt,powered:bananaPower.active});
     if(nativeSkateboard)updateSkateboardJumpAssist(state,pressedThisStep,dt,jumpHeld);
     else updateJumpAssist(state,pressedThisStep,dt,jumpHeld);
@@ -1810,6 +1835,7 @@ function update(dt,frameMs=dt*1000){
 
       crash(item.userData.kind,item);
     }
+    progression.captureCheckpoint(state);
     }
     performanceTelemetry.record('physics',performance.now()-physicsStarted);
     syncCourseVisuals();
@@ -2046,6 +2072,7 @@ window.chimpionsSki=()=>{
     cameraReducedMotion:document.documentElement.dataset.cameraMotion==='reduced',
     hapticsEnabled:haptics.isEnabled?.()!==false,
     inputState:gameplayInput.getDiagnostics(),
+    progression:progression.diagnostics(),
     touchControlsPresent:!!touchControls.root,
     qualityProfile:quality.active,
     qualityMode:quality.current,
@@ -2144,6 +2171,28 @@ window.chimpionsUrbanSports.setHapticIntensity=value=>{
   saveHapticsPreference(next!=='off');
   return next;
 };
+window.chimpionsUrbanSports.getCurrentChallenge=()=>progression.getCurrentChallenge();
+window.chimpionsUrbanSports.getRunHistory=()=>progression.getRunHistory();
+window.chimpionsUrbanSports.getPersonalRecords=()=>progression.getRecords();
+window.chimpionsUrbanSports.getReplayAvailability=()=>progression.getReplayAvailability();
+window.chimpionsUrbanSports.getReplay=mode=>progression.getReplay(mode);
+window.chimpionsUrbanSports.exportReplay=mode=>{const replay=progression.getReplay(mode);return replay?progression.serializeReplay(replay):null;};
+window.chimpionsUrbanSports.selectGhost=mode=>progression.selectGhost(mode);
+window.chimpionsUrbanSports.getGhostSelection=()=>progression.getGhostSelection();
+window.chimpionsUrbanSports.getProgressionDiagnostics=()=>progression.diagnostics();
+window.chimpionsUrbanSports.activateDailyChallenge=()=>{
+  const challenge=progression.activateChallenge(progression.getCurrentChallenge());
+  activeChallengeSeed=challenge.seed;
+  return challenge;
+};
+window.chimpionsUrbanSports.clearChallenge=()=>{activeChallengeSeed=null;progression.clearChallenge();};
+window.chimpionsUrbanSports.createShareCode=(metadata={})=>progression.encodeShareCode({
+  seed:metadata.seed||state.runSeed||createRunSeed(),
+  sport:metadata.sport||selectedSportMode,
+  setup:metadata.setup||selectedSkateboardSetup||state.rideMode||'default',
+  challengeVersion:metadata.challengeVersion||progression.getActiveChallenge()?.challengeVersion||'none'
+});
+window.chimpionsUrbanSports.decodeShareCode=code=>progression.decodeShareCode(code);
 
 
 if(import.meta.hot){

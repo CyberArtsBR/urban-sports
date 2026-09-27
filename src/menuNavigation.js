@@ -102,6 +102,20 @@ export function createMenuFocusController({
     if(root?.contains&&!root.contains(element))return false;
     return mark(element);
   }
+  function trapTab(event,{root=getRoot?.()}={}){
+    if(event?.key!=='Tab')return false;
+    const items=list(root);
+    if(!items.length)return false;
+    const current=items.indexOf(documentRef?.activeElement);
+    const backwards=!!event.shiftKey;
+    const next=backwards
+      ?(current<=0?items.length-1:current-1)
+      :(current<0||current>=items.length-1?0:current+1);
+    focus(items[next]);
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    return true;
+  }
   function handle(action,{root=getRoot?.()}={}){
     if(action===MENU_ACTION.CANCEL){onCancel(action);return true;}
     if(action===MENU_ACTION.MENU){onMenu(action);return true;}
@@ -126,5 +140,5 @@ export function createMenuFocusController({
     return true;
   }
 
-  return {open,close,clear,reset,focus,handle,syncFromFocus,getSelected:()=>selected};
+  return {open,close,clear,reset,focus,handle,trapTab,syncFromFocus,getSelected:()=>selected};
 }

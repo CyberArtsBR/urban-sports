@@ -6,6 +6,7 @@ export function createTouchControls({
   onSteer=()=>{},
   onJump=()=>{},
   onTrick=()=>{},
+  onSpecial=()=>{},
   onPause=()=>{},
   windowRef=globalThis.window,
   documentRef=globalThis.document
@@ -22,6 +23,7 @@ export function createTouchControls({
     <div class="touch-action-cluster" aria-label="Jump and trick controls">
       <button type="button" class="touch-action touch-trick" data-touch-trick="360" aria-label="360 trick">360</button>
       <button type="button" class="touch-action touch-trick" data-touch-trick="backflip" aria-label="Backflip trick">FLIP</button>
+      <button type="button" class="touch-action touch-special" id="touch-special" aria-label="Banana Power">BANANA</button>
       <button type="button" class="touch-action touch-jump" id="touch-jump" aria-label="Jump">JUMP</button>
     </div>
     <button type="button" class="touch-pause" id="touch-pause" aria-label="Pause game">Ⅱ</button>
@@ -32,6 +34,7 @@ export function createTouchControls({
   const steerZone=root.querySelector('#touch-steer-zone');
   const steerKnob=root.querySelector('#touch-steer-knob');
   const jump=root.querySelector('#touch-jump');
+  const special=root.querySelector('#touch-special');
   const pause=root.querySelector('#touch-pause');
   let steerPointer=null;
   const heldPointers=new Map();
@@ -86,6 +89,15 @@ export function createTouchControls({
   }
 
   bindHold(jump,onJump);
+  special.addEventListener('pointerdown',event=>{
+    onSpecial();
+    special.classList.add('is-held');
+    event.preventDefault();
+  });
+  const releaseSpecial=()=>special.classList.remove('is-held');
+  special.addEventListener('pointerup',releaseSpecial);
+  special.addEventListener('pointercancel',releaseSpecial);
+  special.addEventListener('lostpointercapture',releaseSpecial);
   for(const button of root.querySelectorAll('[data-touch-trick]')){
     const type=button.dataset.touchTrick==='backflip'?TRICK_TYPE.BACKFLIP:TRICK_TYPE.SPIN_360;
     bindHold(button,pressed=>onTrick(type,pressed));
@@ -102,6 +114,7 @@ export function createTouchControls({
     root.querySelectorAll('.is-held').forEach(element=>element.classList.remove('is-held'));
     onSteer(0);
     onJump(false);
+    releaseSpecial();
     onTrick(TRICK_TYPE.SPIN_360,false);
     onTrick(TRICK_TYPE.BACKFLIP,false);
   }

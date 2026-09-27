@@ -109,6 +109,20 @@ try{
   {
     const context=await browser.newContext({viewport:{width:1280,height:720}});
     const page=await context.newPage();
+    const d=await startGameplay(page,urlFor({renderFail:'gtao,bloom,lut,volumetric,sharpen,dof'}));
+    assert.equal(d?.mode,'playing','decorative shader failures must preserve gameplay');
+    const cinematic=d?.renderingQuality?.cinematic||{};
+    assert.equal(cinematic.failed,false,'optional shader failures must not disable the entire composition pipeline');
+    for(const feature of ['ao','bloom','volumetric','colorGrading','dof','sharpen']){
+      assert(cinematic.featureFailures?.[feature],feature+' forced failure must be recorded');
+    }
+    assert(['cinematic-composer','direct'].includes(d?.renderingQuality?.renderPath),'shader failures must retain a visible presentation path');
+    await context.close();
+  }
+
+  {
+    const context=await browser.newContext({viewport:{width:1280,height:720}});
+    const page=await context.newPage();
     const before=await startGameplay(page,urlFor());
     const supported=!!before?.renderingQuality?.cinematic?.capabilities?.extensions?.WEBGL_lose_context;
     if(supported){

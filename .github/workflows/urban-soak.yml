@@ -1,0 +1,61 @@
+name: Urban Sports SOAK
+
+on:
+  push:
+    branches:
+      - 'test/**'
+  schedule:
+    - cron: '20 5 * * *'
+  workflow_dispatch:
+    inputs:
+      soak_seconds:
+        description: Gameplay soak duration before restart cycles
+        required: false
+        default: '75'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: urban-soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    name: SOAK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          (exec ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173) >/tmp/urban-soak-preview.log 2>&1 &
+          echo $! >/tmp/urban-soak-preview.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:4173/?test=1 >/dev/null; then exit 0; fi
+            if [ "$i" = 90 ]; then cat /tmp/urban-soak-preview.log || true; exit 1; fi
+            sleep 1
+          done
+      - name: Long-running gameplay/resource stability
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          SOAK_SECONDS: ${{ github.event.inputs.soak_seconds || '75' }}
+          SOAK_RESTART_CYCLES: '8'
+        run: npm run audit:soak
+      - name: Stop preview
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/urban-soak-preview.pid ]; then
+            kill "$(cat /tmp/urban-soak-preview.pid)" 2>/dev/null || true
+          fi
+          cat /tmp/urban-soak-preview.log || true

@@ -70,6 +70,10 @@ export const CONFIG=Object.freeze({
 
 export function benchmarkTargetUrl(){
   const url=new URL(CONFIG.baseUrl);
+  // Local CI benchmarks should exercise the deterministic browser-audit path:
+  // skip the first-session tutorial and drive countdown independently of slow
+  // software-renderer frame pacing. Public benchmarks keep production behavior.
+  if(CONFIG.targetMode==='local')url.searchParams.set('test','1');
   if(CONFIG.qualityProfile)url.searchParams.set('quality',CONFIG.qualityProfile);
   return url.toString();
 }

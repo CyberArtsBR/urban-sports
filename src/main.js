@@ -55,6 +55,7 @@ import {createGlobalListenerScope} from './globalListeners.js';
 import {createRiderController} from './riderController.js';
 import {createRuntimeDiagnostics} from './runtimeDiagnostics.js';
 import {createImpactVfx} from './impactVfx.js';
+import {recordLandingFeedbackStats,recordLandingOutcome} from './landingStats.js';
 import {createFailOpenRenderer,createOneShotGraphicsFaultInjector} from './renderFailOpen.js';
 
 const userPreferences=loadUserPreferences();
@@ -1394,11 +1395,7 @@ function update(dt,frameMs=dt*1000){
       landing=nativeSkateboard?stepSkateboardAir(state,dt,groundY):stepAir(state,dt,groundY);
     }
     if(landing.landed){
-      if(landing.quality==='clean'){
-        state.cleanLandings=(state.cleanLandings||0)+1;
-      }else{
-        state.lastMistakeTime=state.time;
-      }
+      recordLandingOutcome(state,landing);
       const trickLanding=tricks.land({jumpSource:landingSource});
       if(nativeSkateboard&&landing.failed&&state.mode==='playing'){
         if(trickLanding.interrupted)resolveTrickAudio(scoreTrickFailure(state,trickLanding));
@@ -1409,8 +1406,7 @@ function update(dt,frameMs=dt*1000){
       }else if(state.mode==='playing'){
         const feedbackLanding=landing.quality==='sketchy'?{...landing,quality:'rough'}:landing;
         const landingFeedback=feedback.onLanding(feedbackLanding,{jumpSource:landingSource,verticalVelocity:landing.impact});
-        if(landingFeedback?.quality==='clean')state.cleanLandings=(state.cleanLandings||0)+1;
-        if(landingFeedback?.dramatic&&landingFeedback?.quality!=='hard')state.strongLandings=(state.strongLandings||0)+1;
+        recordLandingFeedbackStats(state,landingFeedback);
         haptics.land(landingFeedback?.hapticStrength??Math.min(1,(Number(landing.impact)||0)/18),landing.quality);
       }
     }

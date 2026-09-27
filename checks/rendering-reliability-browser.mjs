@@ -37,29 +37,42 @@ async function startGameplay(page,target){
   });
   assert.equal(startClicked,true,'Start Game control unavailable after readiness');
 
+  const selector=page.locator('#chimpion-selector');
+  await selector.waitFor({state:'visible',timeout:15000});
   await page.waitForFunction(()=>{
     const dialog=document.querySelector('#chimpion-selector');
     return !!dialog?.querySelector('.chimpion-card:not([aria-disabled="true"])');
   },null,{timeout:30000});
-  await page.evaluate(()=>{
+  const avatarResult=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
     const card=dialog?.querySelector('.chimpion-card.is-selected:not([aria-disabled="true"])')||dialog?.querySelector('.chimpion-card:not([aria-disabled="true"])');
-    card?.click();
+    if(!card)return {ok:false,reason:'No enabled Chimpion card'};
+    card.click();
+    return {ok:true};
   });
+  assert.equal(avatarResult.ok,true,avatarResult.reason||'Failed to choose Chimpion');
 
-  await page.waitForFunction(()=>!document.querySelector('#ride-mode-step')?.hidden,null,{timeout:15000});
-  await page.evaluate(()=>{
+  await page.waitForFunction(()=>{
+    const step=document.querySelector('#ride-mode-step');
+    return !!step&&!step.hidden;
+  },null,{timeout:15000});
+  const rideResult=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
     const button=dialog?.querySelector('[data-sport-mode="skateboard"]')||
       dialog?.querySelector('.ride-mode-card[data-ride-mode="skateboard"]')||
+      dialog?.querySelector('.ride-mode-card[data-ride-mode="snowboard"]')||
       Array.from(dialog?.querySelectorAll('.ride-mode-card')||[]).find(node=>/skateboard/i.test(node.textContent||''));
-    button?.click();
+    if(!button)return {ok:false,reason:'No Skateboard-compatible ride control'};
+    button.click();
+    return {ok:true};
   });
+  assert.equal(rideResult.ok,true,rideResult.reason||'Failed to choose Skateboard');
 
+  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:RUN_TIMEOUT});
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return !!document.querySelector('.session-tutorial:not([hidden])')||d?.mode==='countdown'||d?.mode==='playing';
-  },null,{timeout:RUN_TIMEOUT});
+  },null,{timeout:20000});
   const tutorial=page.locator('.session-tutorial:not([hidden])');
   if(await tutorial.isVisible().catch(()=>false)){
     await page.mouse.click(24,24);

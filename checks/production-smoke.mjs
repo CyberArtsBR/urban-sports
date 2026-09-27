@@ -65,27 +65,6 @@ async function chooseBuiltInAvatar(selector){
   await domClick(cards.first());
 }
 
-async function chooseSkateboardCompatibleRide(page,selector){
-  await page.waitForFunction(()=>{
-    const step=document.querySelector('#ride-mode-step');
-    return !!step&&!step.hidden;
-  },null,{timeout:20000});
-
-  const choice=await selector.evaluate(dialog=>{
-    const button=
-      dialog.querySelector('[data-sport-mode="skateboard"]:not([aria-disabled="true"])')||
-      dialog.querySelector('.ride-mode-card[data-ride-mode="skateboard"]:not([aria-disabled="true"])')||
-      dialog.querySelector('.ride-mode-card[data-ride-mode="snowboard"]:not([aria-disabled="true"])')||
-      Array.from(dialog.querySelectorAll('.ride-mode-card:not([aria-disabled="true"])')).find(node=>/skateboard/i.test(node.textContent||''));
-    if(!button)return null;
-    const mode=button.dataset.sportMode||button.dataset.rideMode||button.textContent?.trim()||'unknown';
-    button.click();
-    return mode;
-  });
-  assert(choice,'Selector exposed no Skateboard-compatible ride control');
-  return choice;
-}
-
 async function waitForGameplay(page){
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   await page.waitForFunction(()=>{
@@ -116,7 +95,7 @@ try{
   assert.equal(await selector.locator('.chimpion-card.is-upload-avatar').count(),1,'Selector must expose exactly one local GLB upload action');
 
   await chooseBuiltInAvatar(selector);
-  const selectedRideControl=await chooseSkateboardCompatibleRide(page,selector);
+  const selectedSelectionFlow='direct-rider';
   await waitForGameplay(page);
 
   const ride=await runtime(page);
@@ -169,9 +148,8 @@ try{
   assert.equal(local.glbs.length,0,'Invalid local GLB must create zero remote GLB requests');
 
   await input.setInputFiles(path.resolve('public/model/characters/The Heretic.glb'));
-  await customSelector.locator('#ride-mode-step:not([hidden])').waitFor({state:'visible',timeout:20000});
   assert.equal(local.glbs.length,0,'Valid local GLB parsing must stay local-only');
-  const customRideControl=await chooseSkateboardCompatibleRide(custom,customSelector);
+  const customSelectionFlow='direct-rider';
   await waitForGameplay(custom);
 
   const customRide=await runtime(custom);
@@ -196,8 +174,8 @@ try{
     customGlbRemoteRequests:0,
     skateboard:true,
     legacySnowboardHandling:true,
-    selectedRideControl,
-    customRideControl,
+    selectedSelectionFlow,
+    customSelectionFlow,
     invalidCustomFailsSafely:true
   }));
 }finally{

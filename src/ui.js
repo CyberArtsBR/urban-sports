@@ -52,8 +52,8 @@ function applyUrbanSelectorCopy(){
   setPresentationText(copy?.querySelector('span'),'Pick a handling setup for the current street build.');
   const cards=Array.from(rideStep.querySelectorAll('.ride-mode-card'));
   const labels=[
-    {icon:'🛹',name:'STREET SETUP',detail:'Responsive line control'},
-    {icon:'🛹',name:'PARK SETUP',detail:'Alternate stance profile'}
+    {icon:'🛹',name:'STREET SETUP',detail:'Fast trucks · precise manuals & grinds'},
+    {icon:'🛹',name:'PARK SETUP',detail:'More pop · wider carve & air control'}
   ];
   cards.forEach((card,index)=>{
     const label=labels[index]||labels[0];

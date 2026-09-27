@@ -3,7 +3,7 @@ name: AAA urban graphics regression
 on:
   push:
     branches:
-      - test/aaa-urban-graphics-regression
+      - 'test/**'
   pull_request:
     branches:
       - main
@@ -77,3 +77,58 @@ jobs:
             kill "$(cat /tmp/aaa-urban-preview.pid)" 2>/dev/null || true
           fi
           cat /tmp/aaa-urban-preview.log || true
+
+
+  fallback-and-visual:
+    name: GRAPHICS fallback + visual matrix
+    needs: static-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          (exec ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173) >/tmp/graphics-fallback-preview.log 2>&1 &
+          echo $! > /tmp/graphics-fallback-preview.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            if [ "$i" = 90 ]; then cat /tmp/graphics-fallback-preview.log || true; exit 1; fi
+            sleep 1
+          done
+
+      - name: Prove fail-open rendering and context restoration
+        env:
+          BASE_URL: http://127.0.0.1:4173
+        run: npm run audit:graphics-fallback
+
+      - name: Capture controlled visual regression matrix
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          VISUAL_OUTPUT_DIR: artifacts/visual-regression
+        run: npm run audit:visual
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: urban-visual-regression
+          path: artifacts/visual-regression/*.png
+          if-no-files-found: error
+
+      - name: Stop preview
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/graphics-fallback-preview.pid ]; then
+            kill "$(cat /tmp/graphics-fallback-preview.pid)" 2>/dev/null || true
+          fi
+          cat /tmp/graphics-fallback-preview.log || true

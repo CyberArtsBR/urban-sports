@@ -377,9 +377,22 @@ export function createSkateboardAnimator({
 
   function updateBoard(frame,s,dt,reduced){
     if(!boardPoseRoot)return;
-    let targetX=0,targetY=0,targetZ=0;
-    let pitch=0,yaw=0,roll=0;
+    let targetX=Number(frame.boardVisualOffsetX)||0;
+    let targetY=0;
+    let targetZ=Number(frame.boardVisualOffsetZ)||0;
+    const groundPitch=clamp(frame.groundPitch??0,-.18,.18);
+    const groundRoll=clamp(frame.groundRoll??0,-.18,.18);
+    const ascent=s.air?clamp(s.verticalVelocity/11,0,1):0;
+    const descent=s.air?clamp(-s.verticalVelocity/11,0,1):0;
+    const apex=s.air?clamp(1-Math.abs(s.verticalVelocity)/4.6,0,1):0;
+    const jumpScale=String(frame.jumpSource||'').toLowerCase()==='ramp'?1:.72;
+    let pitch=ascent*.095*jumpScale+apex*.020-descent*.072*jumpScale-s.landing*.026+groundPitch*.28;
+    let yaw=-s.steer*.040;
+    let roll=-s.steer*.085+groundRoll*.16;
     let compression=0;
+
+    targetY+=s.air*.026-s.landing*.012-s.speed01*.004;
+    targetZ+=s.air*.012;
 
     const progress=s.trickProgress;
     if(progress!=null){
@@ -432,8 +445,6 @@ export function createSkateboardAnimator({
 
     const vibration=reduced?0:Math.sin((Number(frame.time)||0)*43.0)*.0035*s.speed01*(s.air?0:.6);
     targetY+=vibration-compression*.010;
-    targetX=(Number(frame.boardVisualOffsetX)||0);
-    targetZ=(Number(frame.boardVisualOffsetZ)||0);
 
     const response=blendFactor(.34,dt);
     boardPoseRoot.position.x=THREE.MathUtils.lerp(boardPoseRoot.position.x,targetX,response);

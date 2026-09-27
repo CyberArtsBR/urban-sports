@@ -16,12 +16,15 @@ async function completeStartSelectionIfNeeded(page){
   try{
     await page.waitForFunction(()=>{
       const d=(window.chimpionsUrbanSports?.()??window.chimpionsSki?.());
-      return d?.mode==='playing'||document.querySelector('#chimpion-selector')?.open===true;
+      return d?.mode==='playing'||d?.mode==='countdown'||
+        !!document.querySelector('.session-tutorial:not([hidden])')||
+        document.querySelector('#chimpion-selector')?.open===true;
     },undefined,{timeout:5000});
   }catch{return {status:'PENDING',reason:'Start flow did not reach gameplay or open the selector'};}
 
   const mode=await readDiagnostics(page);
-  if(mode?.mode==='playing')return {status:'PASS',selectionRequired:false};
+  if(mode?.mode==='playing'||mode?.mode==='countdown'||
+    !await page.locator('#chimpion-selector').isVisible())return {status:'PASS',selectionRequired:false};
 
   const avatar=await page.evaluate(()=>{
     const dialog=document.querySelector('#chimpion-selector');
@@ -108,9 +111,10 @@ async function clickStart(page){
     return null;
   });
   if(!action)return pending('No enabled start control was available');
-  const selection=action==='start-screen'
-    ?await completeStartSelectionIfNeeded(page)
-    :{status:'PASS',selectionRequired:false};
+  // Closing the selector retires the artwork but does not commit a rider.
+  // The menu Start button can therefore reopen selection too. Follow the
+  // actual state after either entry point, including an already committed run.
+  const selection=await completeStartSelectionIfNeeded(page);
   if(selection.status!=='PASS')return selection;
   try{
     await page.waitForFunction(()=>{

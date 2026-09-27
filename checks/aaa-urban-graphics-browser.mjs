@@ -110,7 +110,7 @@ try{
   if(REQUESTED_QUALITY_PROFILE==='max'){
     assert.equal(rendering.shadowMapsEnabled,true,'MAX must enable real shadow maps');
     assert(rendering.shadowMapSize>=2048,'MAX must use the premium directional shadow resolution');
-    assert.equal(rendering.ssaoEnabled,true,'MAX must enable contact AO');
+    assert.equal(rendering.ssaoEnabled,false,'MAX must preserve the direct-render black-screen fix without an offscreen SSAO pass');
     assert((rendering.materialQuality?.anisotropy??0)>=16,'MAX must use premium road anisotropy when supported');
   }else if(REQUESTED_QUALITY_PROFILE==='high'){
     assert.equal(rendering.shadowMapsEnabled,true,'HIGH must retain budgeted real shadows');

@@ -157,6 +157,9 @@ async function main(){
       targetMode:CONFIG.targetMode,
       resultsPath:CONFIG.writeResults?CONFIG.resultsPath:null,
       phases:Object.fromEntries(Object.entries(results.phases).map(([key,value])=>[key,value?.status||'UNKNOWN'])),
+      phaseFailures:Object.fromEntries(Object.entries(results.phases)
+        .filter(([,value])=>value?.status!=='PASS')
+        .map(([key,value])=>[key,value?.reason||value?.status||'MISSING'])),
       warnings:results.warnings,
       fatal:results.fatal?.message||null
     },null,2));

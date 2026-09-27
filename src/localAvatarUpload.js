@@ -11,7 +11,9 @@ export const LOCAL_GLB_CONTAINER_LIMITS=Object.freeze({
   accessors:1600,
   bufferViews:1600,
   animations:32,
-  animationChannels:1200
+  animationChannels:1200,
+  accessorElements:2000000,
+  declaredBufferBytes:MAX_LOCAL_GLB_BYTES
 });
 
 export const LOCAL_GLB_COMPLEXITY_LIMITS=Object.freeze({
@@ -71,7 +73,9 @@ export function inspectLocalGlbJson(json,{limits=LOCAL_GLB_CONTAINER_LIMITS}={})
     accessors:boundedArrayLength(json,'accessors',limits.accessors),
     bufferViews:boundedArrayLength(json,'bufferViews',limits.bufferViews),
     animations:boundedArrayLength(json,'animations',limits.animations),
-    animationChannels:0
+    animationChannels:0,
+    accessorElements:0,
+    declaredBufferBytes:0
   };
 
   const externalUris=[];
@@ -81,6 +85,14 @@ export function inspectLocalGlbJson(json,{limits=LOCAL_GLB_CONTAINER_LIMITS}={})
     for(const item of items){
       const uri=typeof item?.uri==='string'?item.uri.trim():'';
       if(uri&&!/^data:/i.test(uri))externalUris.push({collection:collectionName,uri});
+      if(collectionName==='buffers'){
+        const bytes=Number(item?.byteLength);
+        if(!Number.isInteger(bytes)||bytes<0)throw localGlbError('Malformed GLB buffer byteLength.','LOCAL_GLB_MALFORMED_JSON');
+        stats.declaredBufferBytes+=bytes;
+        if(stats.declaredBufferBytes>limits.declaredBufferBytes){
+          throw localGlbError('This local GLB declares too much buffer data ('+stats.declaredBufferBytes+' bytes, limit '+limits.declaredBufferBytes+').','LOCAL_GLB_CONTAINER_TOO_COMPLEX');
+        }
+      }
     }
   }
   if(externalUris.length){
@@ -92,6 +104,10 @@ export function inspectLocalGlbJson(json,{limits=LOCAL_GLB_CONTAINER_LIMITS}={})
     if(!ACCESSOR_COMPONENT_TYPES.has(accessor.componentType))throw localGlbError('Malformed accessor '+index+': unsupported componentType.','LOCAL_GLB_MALFORMED_ACCESSOR');
     if(!ACCESSOR_TYPES.has(accessor.type))throw localGlbError('Malformed accessor '+index+': unsupported type.','LOCAL_GLB_MALFORMED_ACCESSOR');
     if(!Number.isInteger(accessor.count)||accessor.count<0)throw localGlbError('Malformed accessor '+index+': invalid count.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    stats.accessorElements+=accessor.count;
+    if(stats.accessorElements>limits.accessorElements){
+      throw localGlbError('This local GLB declares too many accessor elements ('+stats.accessorElements+', limit '+limits.accessorElements+').','LOCAL_GLB_CONTAINER_TOO_COMPLEX');
+    }
     if(accessor.bufferView!=null&&(!Number.isInteger(accessor.bufferView)||accessor.bufferView<0||accessor.bufferView>=stats.bufferViews)){
       throw localGlbError('Malformed accessor '+index+': invalid bufferView.','LOCAL_GLB_MALFORMED_ACCESSOR');
     }

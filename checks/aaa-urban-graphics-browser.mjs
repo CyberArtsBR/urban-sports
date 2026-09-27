@@ -147,14 +147,14 @@ try{
     if(cinematic.enabled){
       assert.equal(cinematic.failed,false,'active cinematic composition cannot also be failed');
       assert(['half-float','unsigned-byte-fallback'].includes(cinematic.renderTargetType),'cinematic target must be capability-selected');
-      if(capabilities.halfFloatRenderable&&capabilities.depthTextureRenderable){
+      if(capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&capabilities.depthTextureRenderable){
         assert.equal(cinematic.ambientOcclusion,true,'verified HalfFloat + depth support should enable GTAO');
         assert.equal(cinematic.aoType,'GTAO','MAX CINEMATIC must use GTAO rather than legacy SSAO');
         assert.equal(cinematic.aoResolutionScale,.5,'MAX CINEMATIC GTAO must run at half resolution');
         assert.equal(cinematic.volumetricFog,true,'verified GTAO depth should enable reduced-resolution atmosphere');
         assert.equal(cinematic.volumetricResolutionScale,.5,'MAX CINEMATIC atmosphere must be half resolution');
       }
-      if(capabilities.halfFloatRenderable){
+      if(capabilities.halfFloatRenderable&&capabilities.halfFloatLinear){
         assert(Math.abs((cinematic.bloomStrength??0)-.65)<.001,'MAX CINEMATIC bloom strength drifted');
         assert(Math.abs((cinematic.bloomRadius??0)-.48)<.001,'MAX CINEMATIC bloom radius drifted');
         assert(Math.abs((cinematic.bloomThreshold??0)-1.60)<.001,'MAX CINEMATIC bloom threshold drifted');

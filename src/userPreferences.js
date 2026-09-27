@@ -18,7 +18,10 @@ const KEYS=Object.freeze({
   quality:'chimpions-ski-quality',
   cameraMotion:'chimpions-ski-camera-motion',
   cameraView:'chimpions-ski-camera-view',
-  haptics:'chimpions-ski-haptics-enabled'
+  haptics:'chimpions-urban-haptics-enabled',
+  hapticsLegacy:'chimpions-ski-haptics-enabled',
+  hapticIntensity:'chimpions-urban-haptics-intensity',
+  hapticIntensityLegacy:'chimpions-ski-haptics-intensity'
 });
 
 function read(key,fallback=''){
@@ -37,6 +40,21 @@ function write(key,value){
     return false;
   }
 }
+function readMigrated(primary,legacy,fallback=''){
+  const current=read(primary,'');
+  if(current!=='')return current;
+  const previous=read(legacy,'');
+  if(previous!==''){
+    write(primary,previous);
+    return previous;
+  }
+  return fallback;
+}
+function writeMigrated(primary,legacy,value){
+  const modern=write(primary,value);
+  write(legacy,value);
+  return modern;
+}
 function normalizedChoice(value,allowed,fallback){
   const normalized=String(value??'').trim().toLowerCase();
   return allowed.includes(normalized)?normalized:fallback;
@@ -49,7 +67,12 @@ export function loadUserPreferences(){
     quality:normalizedChoice(read(KEYS.quality,'auto'),['auto','high','max','medium','low'],'auto'),
     cameraMotion:normalizedChoice(read(KEYS.cameraMotion,CAMERA_MOTION.FULL),Object.values(CAMERA_MOTION),CAMERA_MOTION.FULL),
     cameraView:normalizedChoice(read(KEYS.cameraView,CAMERA_VIEW.CHASE),Object.values(CAMERA_VIEW),CAMERA_VIEW.CHASE),
-    haptics:read(KEYS.haptics,'1')!=='0'
+    haptics:readMigrated(KEYS.haptics,KEYS.hapticsLegacy,'1')!=='0',
+    hapticIntensity:normalizedChoice(
+      readMigrated(KEYS.hapticIntensity,KEYS.hapticIntensityLegacy,'high'),
+      ['off','low','medium','high'],
+      'high'
+    )
   };
 }
 
@@ -70,5 +93,12 @@ export function saveCameraViewPreference(mode){
   return write(KEYS.cameraView,normalizedChoice(mode,Object.values(CAMERA_VIEW),CAMERA_VIEW.CHASE));
 }
 export function saveHapticsPreference(enabled){
-  return write(KEYS.haptics,enabled?1:0);
+  return writeMigrated(KEYS.haptics,KEYS.hapticsLegacy,enabled?1:0);
+}
+export function saveHapticIntensityPreference(intensity){
+  return writeMigrated(
+    KEYS.hapticIntensity,
+    KEYS.hapticIntensityLegacy,
+    normalizedChoice(intensity,['off','low','medium','high'],'high')
+  );
 }

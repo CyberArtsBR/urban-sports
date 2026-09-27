@@ -2,14 +2,29 @@ services:
   - type: web
     name: chimpions-urban-sports
     runtime: static
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
-    autoDeploy: true
+    autoDeploy: false
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
     headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: "nosniff"
+      - path: /*
+        name: Referrer-Policy
+        value: "strict-origin-when-cross-origin"
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()"
+      - path: /*
+        name: X-Frame-Options
+        value: "DENY"
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.helius-rpc.com https://arweave.net; media-src 'self' blob:; connect-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
       - path: /assets/*
         name: Cache-Control
         value: "public, max-age=31536000, immutable"

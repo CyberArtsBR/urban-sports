@@ -1,7 +1,7 @@
 import {parseArgs,getRoot,read,result,finish,STATUS} from './integration-check-utils.mjs';
 
 const args=parseArgs(),root=getRoot(args);
-const input=read(root,'src/input.js'),main=read(root,'src/main.js');
+const input=read(root,'src/input.js'),actionMap=read(root,'src/actionMap.js'),main=read(root,'src/main.js');
 const selector=read(root,'src/avatar-system.js')+read(root,'src/rideMode.js');
 const trickInput=read(root,'src/trickInput.js');
 const trick=trickInput+read(root,'src/trickSystem.js')+main;
@@ -9,8 +9,11 @@ const trickPresent=/backflip|\b360\b|trickType|trickState/i.test(trick);
 const ridePresent=/snowboard|ride.?mode/i.test(selector+main);
 const results=[];
 results.push(result('A/Cross remains semantic Jump in gameplay input',
- /confirm:!!buttons\[STANDARD_BUTTON\.confirm\]/.test(input)&&/jump:!!buttons\[STANDARD_BUTTON\.confirm\]/.test(input)?STATUS.PASS:STATUS.FAIL,
- 'button 0 must remain confirm+jump by context'));
+ /\[INPUT_ACTION\.CONFIRM\]:GAMEPAD_BUTTON\.CONFIRM/.test(actionMap)&&
+ /\[INPUT_ACTION\.JUMP\]:GAMEPAD_BUTTON\.CONFIRM/.test(actionMap)&&
+ /confirm:at\(INPUT_ACTION\.CONFIRM\)/.test(input)&&
+ /jump:at\(INPUT_ACTION\.JUMP\)/.test(input)?STATUS.PASS:STATUS.FAIL,
+ 'default action map keeps A/Cross as contextual confirm+jump'));
 results.push(result('D-pad / stick expose vertical intent for UP/DOWN tricks',
  /axisY/.test(input)&&/dpad:\{left,right,up,down\}/.test(input)?STATUS.PASS:STATUS.FAIL,'axisY + D-pad up/down'));
 results.push(result('gamepad edges prevent held-A repeats',
@@ -25,7 +28,7 @@ for(const n of ['UP + Jump maps to 360 intent','DOWN/BACK + Jump maps to backfli
   results.push(result(n,ok?STATUS.PASS:STATUS.FAIL,'static intent contract'));
  }
 }
-for(const n of ['Selector A = select and B = back by context','selector input cannot leak into gameplay trick start','held A confirming ride mode cannot start run with jump/trick']){
+for(const n of ['Selector A = select and B = back by context','selector input cannot leak into gameplay trick start','held A confirming rider selection cannot start run with jump/trick']){
  if(!ridePresent)results.push(result(n,STATUS.PENDING,'ride selector step not merged yet'));
  else {
   const combined=selector+main;

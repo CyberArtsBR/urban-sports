@@ -2,6 +2,8 @@ import {SKI_TUNING} from './gameplayTuning.js';
 import {MENU_ACTION,createMenuFocusController,menuActionFromKeyboardEvent} from './menuNavigation.js';
 import {CONTROL_COPY} from './controlCopy.js';
 import {createMenuInputRepeat} from './menuInputRepeat.js';
+import {URBAN_SPORT_SELECTOR} from './urbanUiContract.js';
+import {LOCALE,defaultLocalization} from './localization.js';
 
 function byId(id){return document.getElementById(id);}
 function isVisible(element){return !!element&&!element.hidden&&element.getClientRects().length>0;}
@@ -11,58 +13,27 @@ function buttonList(root){
 }
 
 const URBAN_CURRENT_SPORT='SKATEBOARD';
-const URBAN_SPORTS=Object.freeze([
-  {id:'skateboard',label:'SKATEBOARD',status:'PLAYABLE NOW',current:true},
-  {id:'inline',label:'INLINE',status:'COMING SOON',current:false},
-  {id:'bmx',label:'BMX',status:'COMING SOON',current:false}
-]);
 
 function setPresentationText(element,text){
   if(element&&element.textContent!==text)element.textContent=text;
 }
-function ensureUrbanSportSelector(overlay){
+function ensureUrbanSportSelector(overlay,localization=defaultLocalization){
   const card=overlay?.querySelector('.card');
   if(!card||card.querySelector('.urban-sport-selector'))return;
+  const t=(key,fallback)=>localization?.t?.(key,fallback)||fallback;
   const selector=document.createElement('section');
   selector.className='urban-sport-selector';
   selector.setAttribute('aria-label','Sport availability');
   selector.innerHTML=`
-    <div class="urban-sport-selector-head"><small>SPORT</small><strong>CHOOSE YOUR LINE</strong></div>
+    <div class="urban-sport-selector-head"><small data-i18n="sport.label">${t('sport.label','SPORT')}</small><strong data-i18n="sport.chooseLine">${t('sport.chooseLine','CHOOSE YOUR LINE')}</strong></div>
     <div class="urban-sport-options" role="list">
-      ${URBAN_SPORTS.map(sport=>`<div class="urban-sport-option${sport.current?' is-current':''}" data-sport="${sport.id}" aria-disabled="true" role="listitem"${sport.current?' aria-current="true"':''}><strong>${sport.label}</strong><span>${sport.status}</span></div>`).join('')}
+      ${URBAN_SPORT_SELECTOR.map(sport=>`<div class="urban-sport-option${sport.available?' is-current':' is-coming-soon'}" data-sport="${sport.id}" role="listitem" ${sport.available?'aria-current="true"':'aria-disabled="true"'}><strong data-i18n="${sport.labelKey}">${t(sport.labelKey,sport.id.toUpperCase())}</strong><span data-i18n="${sport.statusKey}">${t(sport.statusKey,sport.available?'PLAYABLE NOW':'COMING SOON')}</span></div>`).join('')}
     </div>
   `;
   const avatar=card.querySelector('.selected-avatar');
   if(avatar)avatar.after(selector);
   else card.querySelector('.menu-actions')?.before(selector);
-}
-function applyUrbanSelectorCopy(){
-  const dialog=document.querySelector('.selector-dialog');
-  if(!dialog)return;
-  const title=dialog.querySelector('#selector-title');
-  if(title?.textContent==='Choose your ride')setPresentationText(title,'Choose skateboard setup');
-  const stepLabel=dialog.querySelector('#selector-step-label');
-  if(stepLabel?.textContent?.includes('RIDE'))setPresentationText(stepLabel,'STEP 2 OF 2 · SKATEBOARD');
-  const rideStep=dialog.querySelector('#ride-mode-step');
-  if(!rideStep)return;
-  rideStep.setAttribute('aria-label','Choose skateboard setup');
-  const copy=rideStep.querySelector('.ride-mode-copy');
-  setPresentationText(copy?.querySelector('small'),'STEP 2 OF 2 · SKATEBOARD');
-  setPresentationText(copy?.querySelector('strong'),'Choose Skateboard Setup');
-  setPresentationText(copy?.querySelector('span'),'Pick a handling setup for the current street build.');
-  const cards=Array.from(rideStep.querySelectorAll('.ride-mode-card'));
-  const labels=[
-    {icon:'🛹',name:'STREET SETUP',detail:'Fast trucks · precise manuals & grinds'},
-    {icon:'🛹',name:'PARK SETUP',detail:'More pop · wider carve & air control'}
-  ];
-  cards.forEach((card,index)=>{
-    const label=labels[index]||labels[0];
-    setPresentationText(card.querySelector('b'),label.icon);
-    setPresentationText(card.querySelector('strong'),label.name);
-    setPresentationText(card.querySelector('span'),label.detail);
-    card.dataset.sport='skateboard';
-    card.setAttribute('aria-label',`Skateboard ${label.name.toLowerCase()}`);
-  });
+  localization?.apply?.(selector);
 }
 function applyUrbanTutorialCopy(){
   const tutorial=document.querySelector('.session-tutorial');
@@ -81,7 +52,7 @@ function applyUrbanTutorialCopy(){
     if(goals[2])setPresentationText(goals[2],'🍌 Grab bananas and survive the rising pace.');
   }
 }
-function applyUrbanPresentationCopy(){
+function applyUrbanPresentationCopy(localization=defaultLocalization){
   const overlay=byId('overlay');
   const badge=overlay?.querySelector('.badge');
   setPresentationText(badge,'⚡ URBAN NIGHT SERIES');
@@ -89,24 +60,22 @@ function applyUrbanPresentationCopy(){
   if(title&&title.textContent.trim()!=='CHIMPIONS URBAN SPORTS')title.innerHTML='CHIMPIONS <span>URBAN SPORTS</span>';
   setPresentationText(overlay?.querySelector('.tagline'),'Own the endless street, collect bananas, clear obstacles and keep your line as the run gets faster.');
   setPresentationText(overlay?.querySelector('.tip'),'A / D or LEFT STICK / D-PAD · STEER · SPACE / A · CROSS · JUMP · ESC / START · MENU · PAUSE');
-  const ride=byId('selected-ride-mode');
-  setPresentationText(ride,'SKATEBOARD · STREET READY');
+  const sport=byId('selected-sport-mode');
+  setPresentationText(sport,localization?.t?.('sport.skateboard','SKATEBOARD')||'SKATEBOARD');
   const start=byId('start');
   if(start)start.setAttribute('aria-label','Start skateboarding');
-  ensureUrbanSportSelector(overlay);
-  applyUrbanSelectorCopy();
+  ensureUrbanSportSelector(overlay,localization);
   applyUrbanTutorialCopy();
 }
-function observeUrbanPresentation(){
+function observeUrbanPresentation(localization=defaultLocalization){
   const isRelevantNode=node=>{
     if(node?.nodeType!==Node.ELEMENT_NODE)return false;
     const element=node;
-    return element.matches?.('.selector-dialog,.session-tutorial')||
-      !!element.querySelector?.('.selector-dialog,.session-tutorial');
+    return element.matches?.('.session-tutorial')||!!element.querySelector?.('.session-tutorial');
   };
   const observer=new MutationObserver(records=>{
     if(records.some(record=>Array.from(record.addedNodes||[]).some(isRelevantNode))){
-      applyUrbanPresentationCopy();
+      applyUrbanPresentationCopy(localization);
     }
   });
   // HUD text changes every frame. Watch only structural additions so Urban
@@ -116,7 +85,8 @@ function observeUrbanPresentation(){
   return observer;
 }
 
-export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,onChoose,onGiveUp,onShowTutorial}){
+export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,onChoose,onGiveUp,onShowTutorial,localization=defaultLocalization}){
+  const t=(key,fallback)=>localization?.t?.(key,fallback)||fallback;
   const overlay=byId('overlay');
   const startButton=byId('start');
   const chooseButton=byId('choose');
@@ -127,9 +97,9 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   const distanceStat=distance?.closest('.stat');
   const bananaStat=bananas?.closest('.stat');
   const speedStat=speed?.closest('.stat');
-  ensureUrbanSportSelector(overlay);
-  applyUrbanPresentationCopy();
-  observeUrbanPresentation();
+  ensureUrbanSportSelector(overlay,localization);
+  applyUrbanPresentationCopy(localization);
+  observeUrbanPresentation(localization);
   const bestFlag=document.createElement('div');
   bestFlag.className='hud-best';
   bestFlag.hidden=true;
@@ -211,28 +181,35 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   pause.id='pause-overlay';
   pause.className='presentation-overlay';
   pause.hidden=true;
-  pause.innerHTML=`<section class="presentation-card pause-card" role="dialog" aria-modal="true" aria-labelledby="pause-title"><small class="eyebrow">STREET RUN PAUSED</small><h2 id="pause-title">PAUSE</h2><div class="control-legend"><span><b>${CONTROL_COPY.carve}</b> Steer</span><span><b>${CONTROL_COPY.jump}</b> Jump</span><span><b>${CONTROL_COPY.pause}</b> Pause</span></div><div class="presentation-actions vertical"><button class="primary" id="resume-game" data-menu-default="true">RESUME</button><button class="secondary" id="restart-pause">RESTART RUN</button><button class="secondary" id="settings-pause">SETTINGS</button><button class="leave-game-button" id="give-up-pause">GIVE UP AND LEAVE TO GAME SELECTION</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
+  pause.innerHTML=`<section class="presentation-card pause-card" role="dialog" aria-modal="true" aria-labelledby="pause-title"><small class="eyebrow" data-i18n="pause.eyebrow">${t('pause.eyebrow','STREET RUN PAUSED')}</small><h2 id="pause-title" data-i18n="pause.title">${t('pause.title','PAUSE')}</h2><div class="control-legend"><span><b>${CONTROL_COPY.carve}</b> Steer</span><span><b>${CONTROL_COPY.jump}</b> Jump</span><span><b>${CONTROL_COPY.pause}</b> Pause</span></div><div class="presentation-actions vertical"><button class="primary" id="resume-game" data-menu-default="true" data-i18n="pause.resume">${t('pause.resume','RESUME')}</button><button class="secondary" id="restart-pause" data-i18n="pause.restart">${t('pause.restart','RESTART')}</button><button class="secondary" id="settings-pause" data-i18n="pause.settings">${t('pause.settings','SETTINGS')}</button><button class="leave-game-button" id="give-up-pause" data-i18n="pause.leave">${t('pause.leave','LEAVE')}</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
   document.body.append(pause);
 
   const results=document.createElement('div');
   results.id='result-overlay';
   results.className='presentation-overlay';
   results.hidden=true;
-  results.innerHTML=`<section class="presentation-card result-card" role="dialog" aria-modal="true" aria-labelledby="result-title"><small class="eyebrow" id="result-eyebrow">RUN COMPLETE</small><h2 id="result-title">WIPEOUT</h2><div class="result-grid"><div><small>DISTANCE</small><strong id="result-distance">0 m</strong></div><div><small>SCORE</small><strong id="result-score">0</strong></div><div><small>BANANAS</small><strong id="result-bananas">0</strong></div><div><small>TIME</small><strong id="result-time">0:00</strong></div><div><small>MAX SPEED</small><strong id="result-max-speed">0 km/h</strong></div><div><small>BEST COMBO</small><strong id="result-combo">0</strong></div><div><small>RIDE</small><strong id="result-ride">SKATEBOARD</strong></div><div><small>BEST DIST.</small><strong id="result-best">0 m</strong></div><div><small>NEAR MISSES</small><strong id="result-near-misses">0</strong></div><div><small>TRICKS LANDED</small><strong id="result-tricks-landed">0</strong></div><div><small>TRICKS FAILED</small><strong id="result-tricks-failed">0</strong></div><div><small>CLEAN LANDINGS</small><strong id="result-clean-landings">0</strong></div><div><small>STRONG LANDINGS</small><strong id="result-strong-landings">0</strong></div><div><small>POWER USES</small><strong id="result-power-uses">0</strong></div><div><small>BEST TRICK</small><strong id="result-best-trick">0</strong></div></div><div class="new-best-banner" id="new-best-banner" hidden>NEW BEST!</div><div class="presentation-actions"><button class="primary" id="restart-result" data-menu-default="true">RIDE AGAIN</button><button class="secondary" id="choose-result">CHANGE CHIMPION</button></div><div class="presentation-actions vertical leave-actions"><button class="leave-game-button" id="give-up-result">GIVE UP AND LEAVE TO GAME SELECTION</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
+  results.innerHTML=`<section class="presentation-card result-card" role="dialog" aria-modal="true" aria-labelledby="result-title"><small class="eyebrow" id="result-eyebrow" data-i18n="results.complete">${t('results.complete','RUN COMPLETE')}</small><h2 id="result-title" data-i18n="results.wipeout">${t('results.wipeout','WIPEOUT')}</h2><div class="result-grid result-primary"><div><small data-i18n="results.distance">${t('results.distance','DISTANCE')}</small><strong id="result-distance">0 m</strong></div><div><small data-i18n="results.score">${t('results.score','SCORE')}</small><strong id="result-score">0</strong></div><div><small data-i18n="results.bananas">${t('results.bananas','BANANAS')}</small><strong id="result-bananas">0</strong></div></div><div class="result-grid result-secondary"><div><small data-i18n="results.time">${t('results.time','RUN TIME')}</small><strong id="result-time">0:00</strong></div><div><small data-i18n="results.maxSpeed">${t('results.maxSpeed','MAX SPEED')}</small><strong id="result-max-speed">0 km/h</strong></div><div><small data-i18n="results.bestCombo">${t('results.bestCombo','BEST COMBO')}</small><strong id="result-combo">0</strong></div><div><small data-i18n="results.personalBest">${t('results.personalBest','PERSONAL BEST')}</small><strong id="result-best">0 m</strong></div></div><div class="result-grid result-tertiary"><div><small data-i18n="results.nearMisses">${t('results.nearMisses','NEAR MISSES')}</small><strong id="result-near-misses">0</strong></div><div><small data-i18n="results.tricks">${t('results.tricks','TRICKS')}</small><strong id="result-tricks-landed">0</strong></div><div><small data-i18n="results.cleanLandings">${t('results.cleanLandings','CLEAN LANDINGS')}</small><strong id="result-clean-landings">0</strong></div><div><small data-i18n="results.bestTrick">${t('results.bestTrick','BEST TRICK')}</small><strong id="result-best-trick">0</strong></div></div><div class="result-details" aria-label="Additional run statistics"><span>SPORT <strong id="result-ride">SKATEBOARD</strong></span><span>TRICKS FAILED <strong id="result-tricks-failed">0</strong></span><span>STRONG LANDINGS <strong id="result-strong-landings">0</strong></span><span>POWER USES <strong id="result-power-uses">0</strong></span></div><div class="new-best-banner" id="new-best-banner" hidden>NEW BEST!</div><div class="presentation-actions"><button class="primary" id="restart-result" data-menu-default="true" data-i18n="results.rideAgain">${t('results.rideAgain','RIDE AGAIN')}</button><button class="secondary" id="choose-result" data-i18n="results.changeRider">${t('results.changeRider','CHANGE RIDER')}</button><button class="leave-game-button" id="give-up-result" data-i18n="results.leave">${t('results.leave','LEAVE')}</button></div><p class="controller-hint">${CONTROL_COPY.confirm} · Select &nbsp; · &nbsp; ${CONTROL_COPY.cancel} · Back</p></section>`;
   document.body.append(results);
 
   const settings=document.createElement('div');
   settings.id='settings-overlay';
   settings.className='presentation-overlay settings-overlay';
   settings.hidden=true;
-  settings.innerHTML=`<section class="presentation-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title"><small class="eyebrow">PREFERENCES</small><h2 id="settings-title">SETTINGS</h2><div class="presentation-actions vertical settings-actions"><button class="toggle-button" id="toggle-music" aria-pressed="true">MUSIC · ON</button><button class="toggle-button" id="music-volume">MUSIC VOLUME · 25%</button><button class="toggle-button" id="toggle-sfx" aria-pressed="true">SFX · ON</button><button class="toggle-button" id="sfx-volume">SFX VOLUME · 25%</button><button class="toggle-button" id="quality-profile">QUALITY · AUTO</button><button class="toggle-button" id="camera-view">CAMERA VIEW · CHASE</button><button class="toggle-button" id="camera-motion">CAMERA MOTION · FULL</button><button class="toggle-button" id="toggle-haptics" aria-pressed="true">HAPTICS · ON</button><button class="toggle-button" id="audio-impact-intensity">AUDIO IMPACT · FULL</button><button class="secondary" id="how-to-play">HOW TO PLAY</button><button class="primary" id="settings-close" data-menu-default="true">DONE</button></div><p class="controller-hint">Settings are saved on this device · ${CONTROL_COPY.cancel} · Back</p></section>`;
+  settings.innerHTML=`<section class="presentation-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title"><small class="eyebrow">PREFERENCES</small><h2 id="settings-title" data-i18n="settings.title">${t('settings.title','SETTINGS')}</h2><div class="settings-groups settings-actions">
+    <section class="settings-group" aria-labelledby="settings-gameplay-heading"><h3 id="settings-gameplay-heading" data-i18n="settings.gameplay">${t('settings.gameplay','GAMEPLAY')}</h3><button class="secondary" id="how-to-play" data-i18n="settings.howToPlay">${t('settings.howToPlay','HOW TO PLAY')}</button></section>
+    <section class="settings-group" aria-labelledby="settings-controls-heading"><h3 id="settings-controls-heading" data-i18n="settings.controls">${t('settings.controls','CONTROLS')}</h3><button class="toggle-button" id="controller-deadzone">CONTROLLER DEADZONE · 14%</button><button class="toggle-button" id="steering-sensitivity">STEERING SENSITIVITY · 100%</button><button class="toggle-button" id="toggle-haptics" aria-pressed="true">HAPTICS · ON</button><button class="toggle-button" id="haptics-intensity">HAPTICS INTENSITY · 100%</button></section>
+    <section class="settings-group" aria-labelledby="settings-camera-heading"><h3 id="settings-camera-heading" data-i18n="settings.camera">${t('settings.camera','CAMERA')}</h3><button class="toggle-button" id="camera-view">CAMERA VIEW · CHASE</button><button class="toggle-button" id="camera-motion">CAMERA MOTION · FULL</button><button class="toggle-button" id="camera-shake">CAMERA SHAKE · 100%</button></section>
+    <section class="settings-group" aria-labelledby="settings-graphics-heading"><h3 id="settings-graphics-heading" data-i18n="settings.graphics">${t('settings.graphics','GRAPHICS')}</h3><button class="toggle-button" id="quality-profile">QUALITY · AUTO</button><button class="toggle-button" id="reduced-vfx" aria-pressed="false">REDUCED VFX · OFF</button><button class="toggle-button" id="reduced-flashes" aria-pressed="false">REDUCED FLASHES · OFF</button></section>
+    <section class="settings-group" aria-labelledby="settings-audio-heading"><h3 id="settings-audio-heading" data-i18n="settings.audio">${t('settings.audio','AUDIO')}</h3><button class="toggle-button" id="toggle-music" aria-pressed="true">MUSIC · ON</button><button class="toggle-button" id="music-volume">MUSIC VOLUME · 25%</button><button class="toggle-button" id="toggle-sfx" aria-pressed="true">SFX · ON</button><button class="toggle-button" id="sfx-volume">SFX VOLUME · 25%</button><button class="toggle-button" id="audio-impact-intensity">AUDIO IMPACT · FULL</button></section>
+    <section class="settings-group" aria-labelledby="settings-accessibility-heading"><h3 id="settings-accessibility-heading" data-i18n="settings.accessibility">${t('settings.accessibility','ACCESSIBILITY')}</h3><button class="toggle-button" id="language-setting">LANGUAGE · SYSTEM</button><button class="toggle-button" id="ui-scale">UI SCALE · 100%</button><button class="toggle-button" id="high-contrast" aria-pressed="false">HIGH CONTRAST · OFF</button><button class="toggle-button" id="reduced-motion">REDUCED MOTION · SYSTEM</button><button class="toggle-button" id="captions" aria-pressed="false">CAPTIONS · OFF</button></section>
+  </div><div class="settings-footer"><button class="primary" id="settings-close" data-i18n="settings.done">${t('settings.done','DONE')}</button></div><p class="controller-hint">Settings are saved on this device · ${CONTROL_COPY.cancel} · Back</p></section>`;
   document.body.append(settings);
 
   const settingsMenuButton=document.createElement('button');
   settingsMenuButton.type='button';
   settingsMenuButton.id='settings-menu';
   settingsMenuButton.className='secondary';
-  settingsMenuButton.textContent='SETTINGS';
+  settingsMenuButton.textContent=t('settings.title','SETTINGS');
   settingsMenuButton.setAttribute('aria-label','Open settings');
   overlay?.querySelector('.menu-actions')?.prepend(settingsMenuButton);
 
@@ -242,6 +219,15 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   leaveConfirm.hidden=true;
   leaveConfirm.innerHTML='<section class="presentation-card leave-confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="leave-confirm-title"><small class="eyebrow">LEAVE RUN</small><h2 id="leave-confirm-title">Do you really want to leave the game?</h2><div class="presentation-actions"><button class="secondary" id="leave-confirm-no" data-menu-default="true">NO</button><button class="leave-confirm-yes" id="leave-confirm-yes">YES</button></div><p class="controller-hint">NO is selected by default · ESC / B cancels</p></section>';
   document.body.append(leaveConfirm);
+
+  const controllerStatus=document.createElement('div');
+  controllerStatus.id='controller-status';
+  controllerStatus.className='controller-status';
+  controllerStatus.hidden=true;
+  controllerStatus.setAttribute('role','status');
+  controllerStatus.setAttribute('aria-live','polite');
+  controllerStatus.setAttribute('aria-atomic','true');
+  document.body.append(controllerStatus);
 
   const resumeButton=byId('resume-game');
   const restartPause=byId('restart-pause');
@@ -259,6 +245,17 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   const cameraMotionButton=byId('camera-motion');
   const hapticsButton=byId('toggle-haptics');
   const howToPlayButton=byId('how-to-play');
+  const deadzoneButton=byId('controller-deadzone');
+  const steeringSensitivityButton=byId('steering-sensitivity');
+  const hapticsIntensityButton=byId('haptics-intensity');
+  const cameraShakeButton=byId('camera-shake');
+  const reducedVfxButton=byId('reduced-vfx');
+  const reducedFlashesButton=byId('reduced-flashes');
+  const languageButton=byId('language-setting');
+  const uiScaleButton=byId('ui-scale');
+  const highContrastButton=byId('high-contrast');
+  const reducedMotionButton=byId('reduced-motion');
+  const captionsButton=byId('captions');
   const giveUpPause=byId('give-up-pause');
   const giveUpResult=byId('give-up-result');
   const leaveNo=byId('leave-confirm-no');
@@ -273,7 +270,6 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   let bestCelebrated=false;
   let activeControllerSelector=null;
   let qualityMode='auto';
-  let hapticIntensityCallback=null;
   let qualityOptions=[];
   let qualityCallback=null;
   let cameraViewMode='chase';
@@ -281,7 +277,25 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   let cameraMotionMode='auto';
   let cameraMotionCallback=null;
   let hapticsCallback=null;
+  let preferenceCallback=null;
+  let preferenceState={
+    uiScale:1,
+    highContrast:false,
+    reducedMotion:'system',
+    reducedVfx:false,
+    reducedFlashes:false,
+    cameraShake:1,
+    controllerDeadzone:.14,
+    steeringSensitivity:1,
+    hapticsIntensity:1,
+    captions:false,
+    locale:LOCALE.AUTO
+  };
   let settingsOrigin=null;
+  let controllerWasConnected=false;
+  let controllerEverConnected=false;
+  let controllerDisconnected=false;
+  let controllerStatusTimer=0;
 
   const menuFocus=createMenuFocusController({
     getRoot:()=>activeRoot(),
@@ -333,7 +347,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     if(restartResult)restartResult.disabled=!!loading;
     if(chooseResult)chooseResult.disabled=!!loading;
     overlay?.classList.toggle('is-loading',!!loading);
-    if(startButton)startButton.textContent=loading?'LOADING CHIMPION…':(mode==='menu'?'START RIDING':'RIDE AGAIN');
+    if(startButton)startButton.textContent=loading?t('menu.loadingRider','LOADING CHIMPION…'):(mode==='menu'?t('menu.startRiding','START RIDING'):t('menu.rideAgain','RIDE AGAIN'));
   }
   function syncAudioButtons(){
     const audioSettings=audio.getSettings();
@@ -362,31 +376,69 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     else audio.setSfxVolume(next);
     syncAudioButtons();
   }
+  function nearestOptionIndex(options,value){
+    let best=0,bestDistance=Infinity;
+    options.forEach((option,index)=>{
+      const distance=typeof option==='number'?Math.abs(option-Number(value)):Number(option!==value);
+      if(distance<bestDistance){best=index;bestDistance=distance;}
+    });
+    return best;
+  }
+  function cyclePreference(key,options){
+    if(!options?.length)return false;
+    const current=nearestOptionIndex(options,preferenceState[key]);
+    const next=options[(current+1)%options.length];
+    preferenceState={...preferenceState,[key]:next};
+    preferenceCallback?.(key,next,{...preferenceState});
+    localization?.apply?.(document);
+    syncSettingsButtons();
+    return true;
+  }
+  function setPressed(button,value){
+    if(button)button.setAttribute('aria-pressed',String(!!value));
+  }
   function syncSettingsButtons(){
     syncAudioButtons();
+    const on=t('common.on','ON'),off=t('common.off','OFF');
     if(cameraViewButton){
-      const labels={chase:'CHASE',fixed:'FIXED VIEW', 'high-far':'HIGH + FAR','first-person':'FIRST PERSON'};
+      const labels={chase:'CHASE',fixed:'FIXED', 'high-far':'HIGH + FAR','first-person':'FIRST PERSON'};
       cameraViewButton.textContent='CAMERA VIEW · '+(labels[cameraViewMode]||cameraViewMode.toUpperCase());
       cameraViewButton.setAttribute('aria-label','Camera view '+(labels[cameraViewMode]||cameraViewMode));
     }
     if(cameraMotionButton){
-      cameraMotionButton.textContent='CAMERA MOTION · '+cameraMotionMode.toUpperCase();
+      const labels={full:t('common.full','FULL'),fixed:t('common.fixed','FIXED'),reduced:t('common.reduced','REDUCED')};
+      cameraMotionButton.textContent='CAMERA MOTION · '+(labels[cameraMotionMode]||cameraMotionMode.toUpperCase());
       cameraMotionButton.setAttribute('aria-label','Camera motion '+cameraMotionMode);
     }
     if(hapticsButton){
       const enabled=haptics?.isEnabled?.()!==false;
-      const intensity=enabled?(haptics?.getIntensityPreference?.()||'high'):'off';
-      hapticsButton.textContent='HAPTICS · '+String(intensity).toUpperCase();
-      hapticsButton.setAttribute('aria-pressed',String(enabled&&intensity!=='off'));
-      hapticsButton.setAttribute('aria-label','Haptic intensity '+String(intensity));
+      hapticsButton.textContent=t('settings.haptics','HAPTICS')+' · '+(enabled?on:off);
+      setPressed(hapticsButton,enabled);
     }
+    if(deadzoneButton)deadzoneButton.textContent=t('settings.deadzone','CONTROLLER DEADZONE')+' · '+Math.round(preferenceState.controllerDeadzone*100)+'%';
+    if(steeringSensitivityButton)steeringSensitivityButton.textContent=t('settings.steering','STEERING SENSITIVITY')+' · '+Math.round(preferenceState.steeringSensitivity*100)+'%';
+    if(hapticsIntensityButton)hapticsIntensityButton.textContent=t('settings.hapticsIntensity','HAPTICS INTENSITY')+' · '+Math.round(preferenceState.hapticsIntensity*100)+'%';
+    if(cameraShakeButton)cameraShakeButton.textContent=t('settings.cameraShake','CAMERA SHAKE')+' · '+Math.round(preferenceState.cameraShake*100)+'%';
+    if(reducedVfxButton){reducedVfxButton.textContent=t('settings.reducedVfx','REDUCED VFX')+' · '+(preferenceState.reducedVfx?on:off);setPressed(reducedVfxButton,preferenceState.reducedVfx);}
+    if(reducedFlashesButton){reducedFlashesButton.textContent=t('settings.reducedFlashes','REDUCED FLASHES')+' · '+(preferenceState.reducedFlashes?on:off);setPressed(reducedFlashesButton,preferenceState.reducedFlashes);}
+    if(languageButton){
+      const labels={[LOCALE.AUTO]:t('common.system','SYSTEM'),[LOCALE.EN_US]:'EN-US',[LOCALE.PT_BR]:'PT-BR'};
+      languageButton.textContent=t('settings.language','LANGUAGE')+' · '+(labels[preferenceState.locale]||preferenceState.locale);
+    }
+    if(uiScaleButton)uiScaleButton.textContent=t('settings.uiScale','UI SCALE')+' · '+Math.round(preferenceState.uiScale*100)+'%';
+    if(highContrastButton){highContrastButton.textContent=t('settings.highContrast','HIGH CONTRAST')+' · '+(preferenceState.highContrast?on:off);setPressed(highContrastButton,preferenceState.highContrast);}
+    if(reducedMotionButton){
+      const labels={system:t('common.system','SYSTEM'),on:on,off:off};
+      reducedMotionButton.textContent=t('settings.reducedMotion','REDUCED MOTION')+' · '+labels[preferenceState.reducedMotion];
+    }
+    if(captionsButton){captionsButton.textContent=t('settings.captions','CAPTIONS')+' · '+(preferenceState.captions?on:off);setPressed(captionsButton,preferenceState.captions);}
   }
   function showSettings(origin=null){
     if(!settings.hidden)return true;
     settingsOrigin=origin||document.activeElement;
     settings.hidden=false;
     syncSettingsButtons();
-    menuFocus.open({root:settings,defaultElement:settingsCloseButton,restoreFrom:settingsOrigin});
+    menuFocus.open({root:settings,defaultElement:howToPlayButton,restoreFrom:settingsOrigin});
     return true;
   }
   function hideSettings(){
@@ -503,7 +555,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     pause.hidden=true;
     setMode('playing');
   }
-  function showResults({distance=0,score=0,bananas=0,best=0,newBest=false,crashType='',time=0,maxSpeedKmh=0,bestCombo=0,rideMode='ski',nearMisses=0,tricksLanded=0,tricksFailed=0,cleanLandings=0,strongLandings=0,bananaPowerUses=0,largestTrickScore=0}={},delay=620){
+  function showResults({distance=0,score=0,bananas=0,best=0,newBest=false,crashType='',time=0,maxSpeedKmh=0,bestCombo=0,sportMode='skateboard',nearMisses=0,tricksLanded=0,tricksFailed=0,cleanLandings=0,strongLandings=0,bananaPowerUses=0,largestTrickScore=0}={},delay=620){
     clearTimeout(resultTimer);
     resultTimer=setTimeout(()=>{
       leaveConfirm.hidden=true;
@@ -514,8 +566,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
       byId('result-time').textContent=Math.floor(totalSeconds/60)+':'+String(totalSeconds%60).padStart(2,'0');
       byId('result-max-speed').textContent=Math.max(0,Math.round(Number(maxSpeedKmh)||0))+' km/h';
       byId('result-combo').textContent=String(Math.max(0,Math.floor(Number(bestCombo)||0)));
-      const legacyRide=String(rideMode||'skateboard').toLowerCase();
-      byId('result-ride').textContent=['ski','snowboard'].includes(legacyRide)?URBAN_CURRENT_SPORT:legacyRide.replace(/[-_]/g,' ').toUpperCase();
+      byId('result-ride').textContent=String(sportMode||'skateboard').replace(/[-_]/g,' ').toUpperCase();
       byId('result-best').textContent=Math.floor(best)+' m';
       byId('result-near-misses').textContent=String(Math.max(0,Math.floor(Number(nearMisses)||0)));
       byId('result-tricks-landed').textContent=String(Math.max(0,Math.floor(Number(tricksLanded)||0)));
@@ -527,7 +578,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
       const banner=byId('new-best-banner');
       banner.hidden=!newBest;
       const eyebrow=byId('result-eyebrow');
-      eyebrow.textContent=crashType?String(crashType).replace(/[-_]/g,' ').toUpperCase():'RUN COMPLETE';
+      eyebrow.textContent=crashType?String(crashType).replace(/[-_]/g,' ').toUpperCase():t('results.complete','RUN COMPLETE');
       results.hidden=false;
       pause.hidden=true;
       if(newBest){
@@ -556,16 +607,16 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     const b=Math.max(0,Number(values.bananas)||0);
     const kmh=Math.max(0,Math.round((Number(values.speed)||0)*3.6));
     const speedFeel=Math.max(.62,Math.min(1,.62+(kmh-140)/70*.38));
-    if(distance)distance.textContent=Math.floor(d)+' m';
-    if(bananas)bananas.textContent=String(b);
-    if(speed)speed.textContent=kmh+' km/h';
-    if(hudBestReadout)hudBestReadout.textContent='BEST '+Math.floor(Math.max(bestDistance,Number(values.best)||0))+' m';
-    if(hudRunState&&mode==='playing')hudRunState.textContent=values.air?'AIR':'RUN';
+    setPresentationText(distance,Math.floor(d)+' m');
+    setPresentationText(bananas,String(b));
+    setPresentationText(speed,kmh+' km/h');
+    setPresentationText(hudBestReadout,'BEST '+Math.floor(Math.max(bestDistance,Number(values.best)||0))+' m');
+    if(hudRunState&&mode==='playing')setPresentationText(hudRunState,values.air?'AIR':'RUN');
     const powerProgress=Math.max(0,Math.min(10,Math.floor(Number(values.bananaPowerProgress)||0)));
     const specialReady=!!values.specialReady;
     const specialActiveTime=Math.max(0,Number(values.specialActiveTime)||0);
-    if(bananaPowerCount)bananaPowerCount.textContent=(specialReady?'10':powerProgress)+' / 10';
-    if(bananaPowerFill)bananaPowerFill.style.width=((specialReady?10:powerProgress)*10)+'%';
+    setPresentationText(bananaPowerCount,(specialReady?'10':powerProgress)+' / 10');
+    if(bananaPowerFill){const width=((specialReady?10:powerProgress)*10)+'%';if(bananaPowerFill.style.width!==width)bananaPowerFill.style.width=width;}
     if(bananaPowerReady)bananaPowerReady.hidden=!specialReady;
     if(bananaPowerActive){
       bananaPowerActive.hidden=specialActiveTime<=0;
@@ -672,17 +723,22 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     qualityCallback(qualityMode);
     return true;
   }
-  function configureSettings({cameraView='chase',onCameraViewChange=null,cameraMotion='full',onCameraMotionChange=null,onHapticsChange=null,onHapticIntensityChange=null}={}){
-    cameraViewMode=['chase','fixed','high-far','first-person'].includes(String(cameraView).toLowerCase())
-      ?String(cameraView).toLowerCase()
-      :'chase';
+  function configureSettings({
+    cameraView='chase',
+    onCameraViewChange=null,
+    cameraMotion='full',
+    onCameraMotionChange=null,
+    onHapticsChange=null,
+    preferences={},
+    onPreferenceChange=null
+  }={}){
+    cameraViewMode=['chase','fixed','high-far','first-person'].includes(String(cameraView).toLowerCase())?String(cameraView).toLowerCase():'chase';
     cameraViewCallback=typeof onCameraViewChange==='function'?onCameraViewChange:null;
-    cameraMotionMode=['full','fixed','reduced'].includes(String(cameraMotion).toLowerCase())
-      ?String(cameraMotion).toLowerCase()
-      :'full';
+    cameraMotionMode=['full','fixed','reduced'].includes(String(cameraMotion).toLowerCase())?String(cameraMotion).toLowerCase():'full';
     cameraMotionCallback=typeof onCameraMotionChange==='function'?onCameraMotionChange:null;
     hapticsCallback=typeof onHapticsChange==='function'?onHapticsChange:null;
-    hapticIntensityCallback=typeof onHapticIntensityChange==='function'?onHapticIntensityChange:null;
+    preferenceCallback=typeof onPreferenceChange==='function'?onPreferenceChange:null;
+    preferenceState={...preferenceState,...preferences};
     syncSettingsButtons();
   }
   function setCameraViewMode(mode='chase'){
@@ -722,6 +778,27 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     void cameraCallout.offsetWidth;
     cameraCallout.classList.add('pulse');
     cameraCalloutTimer=setTimeout(()=>{cameraCallout.hidden=true;cameraCallout.classList.remove('pulse');},1300);
+  }
+
+  function updateControllerConnection(pad={}){
+    const connected=!!pad?.connected;
+    const activeLost=!!pad?.activeControllerDisconnected;
+    if((controllerWasConnected&&!connected)||activeLost){
+      clearTimeout(controllerStatusTimer);
+      controllerStatus.textContent=t('controller.disconnected','Controller disconnected. Use keyboard/touch or reconnect a controller.');
+      controllerStatus.hidden=false;
+      controllerDisconnected=true;
+      controllerStatusTimer=setTimeout(()=>{controllerStatus.hidden=true;},4200);
+    }else if(connected&&controllerDisconnected){
+      clearTimeout(controllerStatusTimer);
+      controllerStatus.textContent=t('controller.reconnected','Controller connected.');
+      controllerStatus.hidden=false;
+      controllerDisconnected=false;
+      controllerStatusTimer=setTimeout(()=>{controllerStatus.hidden=true;},2400);
+    }
+    if(connected)controllerEverConnected=true;
+    controllerWasConnected=connected;
+    return connected;
   }
 
   function activeRoot(){
@@ -826,16 +903,22 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   cameraViewButton?.addEventListener('click',cycleCameraView);
   cameraMotionButton?.addEventListener('click',cycleCameraMotion);
   hapticsButton?.addEventListener('click',()=>{
-    const options=['off','low','medium','high'];
-    const enabled=haptics?.isEnabled?.()!==false;
-    const current=enabled?(haptics?.getIntensityPreference?.()||'high'):'off';
-    const next=options[(Math.max(0,options.indexOf(current))+1)%options.length];
-    haptics?.setIntensityPreference?.(next);
-    haptics?.setEnabled?.(next!=='off');
+    const next=!(haptics?.isEnabled?.()!==false);
+    haptics?.setEnabled?.(next);
     syncSettingsButtons();
-    hapticIntensityCallback?.(next);
-    hapticsCallback?.(next!=='off');
+    hapticsCallback?.(next);
   });
+  deadzoneButton?.addEventListener('click',()=>cyclePreference('controllerDeadzone',[.08,.14,.20,.28]));
+  steeringSensitivityButton?.addEventListener('click',()=>cyclePreference('steeringSensitivity',[.75,1,1.25,1.5]));
+  hapticsIntensityButton?.addEventListener('click',()=>cyclePreference('hapticsIntensity',[0,.35,.7,1]));
+  cameraShakeButton?.addEventListener('click',()=>cyclePreference('cameraShake',[0,.5,1]));
+  reducedVfxButton?.addEventListener('click',()=>cyclePreference('reducedVfx',[false,true]));
+  reducedFlashesButton?.addEventListener('click',()=>cyclePreference('reducedFlashes',[false,true]));
+  languageButton?.addEventListener('click',()=>cyclePreference('locale',[LOCALE.AUTO,LOCALE.EN_US,LOCALE.PT_BR]));
+  uiScaleButton?.addEventListener('click',()=>cyclePreference('uiScale',[.9,1,1.15,1.3]));
+  highContrastButton?.addEventListener('click',()=>cyclePreference('highContrast',[false,true]));
+  reducedMotionButton?.addEventListener('click',()=>cyclePreference('reducedMotion',['system','on','off']));
+  captionsButton?.addEventListener('click',()=>cyclePreference('captions',[false,true]));
   howToPlayButton?.addEventListener('click',()=>{
     hideSettings();
     onShowTutorial?.();
@@ -845,8 +928,11 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     if(event.target.closest('button'))audio.play('button',.24);
   },true);
   document.addEventListener('keydown',event=>{
-    if(event.repeat||document.body.classList.contains('start-screen-active'))return;
+    if(document.body.classList.contains('start-screen-active'))return;
     if(document.querySelector('.selector-dialog[open]'))return;
+    const root=activeRoot();
+    if(event.key==='Tab'&&root&&menuFocus.trapTab(event,{root}))return;
+    if(event.repeat)return;
     if(event.target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
     const action=menuActionFromKeyboardEvent(event);
     if(!action)return;
@@ -857,8 +943,14 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     }
   });
 
+  localization?.apply?.(document);
+  localization?.subscribe?.(()=>{
+    localization.apply?.(document);
+    syncSettingsButtons();
+    settingsMenuButton.textContent=t('settings.title','SETTINGS');
+  });
   syncAudioButtons();
   setMode('menu');
 
-  return {setMode,setAvatar,setAvatarLoading,showRunLoading,hideRunLoading,prepareRun,startCountdown,cancelCountdown,showPause,hidePause,showResults,showMenu,showSettings,hideSettings,updateHud,handleMenuAction,updateController,configureQuality,configureSettings,syncAudioButtons,showLandingFeedback,showJumpFeedback,showTrickHint,showSpeedUp,showCameraMode,showCameraMotion,showBananaPowerReady,showBananaPowerActivated,setCameraViewMode,setCameraMotionMode};
+  return {setMode,setAvatar,setAvatarLoading,showRunLoading,hideRunLoading,prepareRun,startCountdown,cancelCountdown,showPause,hidePause,showResults,showMenu,showSettings,hideSettings,updateHud,handleMenuAction,updateController,updateControllerConnection,configureQuality,configureSettings,syncAudioButtons,showLandingFeedback,showJumpFeedback,showTrickHint,showSpeedUp,showCameraMode,showCameraMotion,showBananaPowerReady,showBananaPowerActivated,setCameraViewMode,setCameraMotionMode};
 }

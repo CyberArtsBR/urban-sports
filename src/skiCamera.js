@@ -82,6 +82,7 @@ export function createSkiCamera(camera){
   let previewLookDown=0;
   let predictedLandingTime=0;
   let motionScale=1;
+  let motionAmount=1;
   let motionMode='full';
   let viewMode=SKI_CAMERA_VIEW.CHASE;
   let transitionStartFov=finite(camera.fov,58);
@@ -103,12 +104,18 @@ export function createSkiCamera(camera){
     viewTransitionElapsed=SKI_CAMERA_LIMITS.VIEW_TRANSITION_SECONDS;
   }
 
+  function refreshMotionScale(){
+    const base=motionMode==='reduced'?SKI_CAMERA_LIMITS.REDUCED_MOTION_SCALE:motionMode==='fixed'?0:1;
+    motionScale=base*motionAmount;
+    return motionScale;
+  }
+
   function setMotionMode(mode='full'){
     const next=['full','fixed','reduced'].includes(String(mode).toLowerCase())
       ?String(mode).toLowerCase()
       :'full';
     motionMode=next;
-    motionScale=next==='reduced'?SKI_CAMERA_LIMITS.REDUCED_MOTION_SCALE:next==='fixed'?0:1;
+    refreshMotionScale();
     if(next==='fixed'){
       roll=0;
       landingKick=0;
@@ -124,6 +131,11 @@ export function createSkiCamera(camera){
   function setReducedMotion(enabled=false){
     setMotionMode(enabled?'reduced':'full');
     return motionScale;
+  }
+  function setMotionAmount(value=1){
+    motionAmount=THREE.MathUtils.clamp(finite(value,1),0,1);
+    refreshMotionScale();
+    return motionAmount;
   }
 
   function normalizeViewMode(mode){
@@ -415,6 +427,7 @@ export function createSkiCamera(camera){
       previewLookDown,
       predictedLandingTime,
       motionScale,
+      motionAmount,
       motionMode,
       viewMode
     };
@@ -426,6 +439,7 @@ export function createSkiCamera(camera){
     getChaseFrame,
     setReducedMotion,
     setMotionMode,
+    setMotionAmount,
     getMotionMode:()=>motionMode,
     setViewMode,
     getViewMode:()=>viewMode,

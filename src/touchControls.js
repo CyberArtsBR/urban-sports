@@ -1,4 +1,5 @@
 import {TRICK_TYPE} from './trickSystem.js';
+import {defaultLocalization} from './localization.js';
 
 const clamp=(value,min=-1,max=1)=>Math.max(min,Math.min(max,Number(value)||0));
 
@@ -6,32 +7,38 @@ export function createTouchControls({
   onSteer=()=>{},
   onJump=()=>{},
   onTrick=()=>{},
+  onSpecial=()=>{},
   onPause=()=>{},
   windowRef=globalThis.window,
-  documentRef=globalThis.document
+  documentRef=globalThis.document,
+  localization=defaultLocalization
 }={}){
+  const t=(key,fallback)=>localization?.t?.(key,fallback)||fallback;
   const root=documentRef.createElement('div');
   root.id='touch-controls';
   root.className='touch-controls';
+  root.setAttribute('role','group');
   root.setAttribute('aria-label','Touch gameplay controls');
   root.innerHTML=`
-    <div class="touch-steer-zone" id="touch-steer-zone" aria-label="Steering touch area">
+    <div class="touch-steer-zone" id="touch-steer-zone" role="application" aria-label="${t('touch.steer','STEER')}">
       <div class="touch-steer-base"><div class="touch-steer-knob" id="touch-steer-knob"></div></div>
-      <span>STEER</span>
+      <span>${t('touch.steer','STEER')}</span>
     </div>
-    <div class="touch-action-cluster" aria-label="Jump and trick controls">
+    <div class="touch-action-cluster" role="group" aria-label="Jump, trick and Banana Power controls">
       <button type="button" class="touch-action touch-trick" data-touch-trick="360" aria-label="360 trick">360</button>
-      <button type="button" class="touch-action touch-trick" data-touch-trick="backflip" aria-label="Backflip trick">FLIP</button>
-      <button type="button" class="touch-action touch-jump" id="touch-jump" aria-label="Jump">JUMP</button>
+      <button type="button" class="touch-action touch-trick" data-touch-trick="backflip" aria-label="Backflip trick">${t('touch.flip','FLIP')}</button>
+      <button type="button" class="touch-action touch-special" id="touch-special" aria-label="Banana Power">${t('touch.power','POWER')}</button>
+      <button type="button" class="touch-action touch-jump" id="touch-jump" aria-label="${t('touch.jump','JUMP')}">${t('touch.jump','JUMP')}</button>
     </div>
-    <button type="button" class="touch-pause" id="touch-pause" aria-label="Pause game">Ⅱ</button>
-    <div class="touch-orientation-hint" role="status">ROTATE TO LANDSCAPE FOR BETTER CONTROL</div>
+    <button type="button" class="touch-pause" id="touch-pause" aria-label="${t('touch.pause','Pause game')}">Ⅱ</button>
+    <div class="touch-orientation-hint" role="status">${t('touch.rotate','ROTATE TO LANDSCAPE FOR BETTER CONTROL')}</div>
   `;
   documentRef.body.append(root);
 
   const steerZone=root.querySelector('#touch-steer-zone');
   const steerKnob=root.querySelector('#touch-steer-knob');
   const jump=root.querySelector('#touch-jump');
+  const special=root.querySelector('#touch-special');
   const pause=root.querySelector('#touch-pause');
   let steerPointer=null;
   const heldPointers=new Map();
@@ -58,9 +65,7 @@ export function createTouchControls({
     updateSteer(event);
     event.preventDefault();
   });
-  steerZone.addEventListener('pointermove',event=>{
-    if(steerPointer===event.pointerId)updateSteer(event);
-  });
+  steerZone.addEventListener('pointermove',event=>{if(steerPointer===event.pointerId){updateSteer(event);event.preventDefault();}});
   steerZone.addEventListener('pointerup',releaseSteer);
   steerZone.addEventListener('pointercancel',releaseSteer);
 
@@ -90,18 +95,15 @@ export function createTouchControls({
     const type=button.dataset.touchTrick==='backflip'?TRICK_TYPE.BACKFLIP:TRICK_TYPE.SPIN_360;
     bindHold(button,pressed=>onTrick(type,pressed));
   }
-  pause.addEventListener('pointerdown',event=>{
-    onPause();
-    event.preventDefault();
-  });
+  special.addEventListener('pointerdown',event=>{onSpecial();event.preventDefault();});
+  pause.addEventListener('pointerdown',event=>{onPause();event.preventDefault();});
 
   function reset(){
     steerPointer=null;
     heldPointers.clear();
     steerKnob.style.setProperty('--touch-steer-x','0px');
     root.querySelectorAll('.is-held').forEach(element=>element.classList.remove('is-held'));
-    onSteer(0);
-    onJump(false);
+    onSteer(0);onJump(false);
     onTrick(TRICK_TYPE.SPIN_360,false);
     onTrick(TRICK_TYPE.BACKFLIP,false);
   }

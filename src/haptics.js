@@ -276,6 +276,12 @@ export function createHaptics({getActiveGamepad=null,enabled=true,intensity=HAPT
     return intensityPreference;
   }
   function getIntensityPreference(){return intensityPreference;}
+  function setIntensity(value=1){
+    const numeric=clamp(Number(value));
+    const next=numeric<=.01?HAPTIC_INTENSITY.OFF:numeric<.51?HAPTIC_INTENSITY.LOW:numeric<.84?HAPTIC_INTENSITY.MEDIUM:HAPTIC_INTENSITY.HIGH;
+    return setIntensityPreference(next);
+  }
+  function getIntensity(){return preferenceScale();}
   function diagnostics(){
     const pad=resolveActiveGamepad();
     return {
@@ -290,7 +296,7 @@ export function createHaptics({getActiveGamepad=null,enabled=true,intensity=HAPT
   }
 
   return {
-    setActiveGamepad,clearActiveGamepad,setEnabled,isEnabled,setIntensityPreference,getIntensityPreference,
+    setActiveGamepad,clearActiveGamepad,setEnabled,isEnabled,setIntensityPreference,getIntensityPreference,setIntensity,getIntensity,
     getActiveGamepad:getActiveGamepadValue,emit,diagnostics,reset,update,menuMove,menuConfirm,
     ollie,pickup:banana,banana,bananaReady,bananaPowerActivate,bananaPowerEnd,nearMiss,speedTier,newBest,
     rampLaunch:rampTakeoff,rampTakeoff,land,powerslide,grind,wetSurface,trickStart,trickSuccess,trickFail,

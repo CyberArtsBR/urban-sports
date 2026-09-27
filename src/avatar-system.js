@@ -5,7 +5,8 @@ import {
   filterAvatarSearchIndex,
   getAvatarRenderTarget
 } from './avatar-selector-model.js';
-import {RIDE_MODE,getRideProfile,normalizeRideMode,speedToKmh} from './rideMode.js';
+import {EMPTY_SKATEBOARD_SETUP_CONTRACT,createSkateboardSetupContract} from './urbanUiContract.js';
+import {defaultLocalization} from './localization.js';
 import {AVATAR_COMPATIBILITY_STATUS,getAvatarCompatibility} from './avatarCompatibility.js';
 import {MENU_ACTION,menuActionFromKeyboardEvent} from './menuNavigation.js';
 import {BUILTIN_AVATAR_NAMES,canonicalizeBuiltinCatalog} from './avatarRoster.js';
@@ -85,19 +86,25 @@ function createPortrait(entry,className=''){
   return wrap;
 }
 
-export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=async()=>true,selectedId='',selectedRideMode=RIDE_MODE.SKI}) {
+export function createAvatarSelector({
+  catalog,
+  onSelect,
+  onValidateLocalAvatar=async()=>true,
+  selectedId='',
+  selectedRideMode='',
+  skateboardSetup=EMPTY_SKATEBOARD_SETUP_CONTRACT,
+  localization=defaultLocalization
+}) {
+  const t=(key,fallback)=>localization?.t?.(key,fallback)||fallback;
+  const setupContract=createSkateboardSetupContract(skateboardSetup||{});
+  const hasSetupStep=setupContract.selectable;
   const dialog=document.createElement('dialog');
   dialog.id='chimpion-selector';
   dialog.className='selector-dialog';
   dialog.setAttribute('aria-labelledby','selector-title');
-  dialog.innerHTML='<form method="dialog" class="selector-shell"><header class="selector-head"><div><small>THE CHIMPIONS</small><h2 id="selector-title">Choose your Chimpion</h2></div><button class="selector-close" value="close" aria-label="Close Chimpion selector">×</button></header><div class="selector-featured"><span id="selector-preview-portrait" class="selector-preview-portrait">🐵</span><span><small id="selector-step-label">STEP 1 OF 2 · CHIMPION</small><strong id="selector-preview-name">Choose a Chimpion</strong><em id="selector-preview-tribe">The Chimpions</em></span></div><input id="chimpion-search" class="selector-search" type="search" placeholder="Search Chimpion..." autocomplete="off" aria-label="Search Chimpions"><div id="chimpion-grid" class="selector-grid" role="list"></div><input id="local-glb-upload" type="file" accept=".glb,model/gltf-binary" hidden><p id="selector-status" class="selector-status" role="status" aria-live="polite" hidden></p><section class="ride-mode-step" id="ride-mode-step" hidden aria-label="Choose ride mode"><div class="ride-mode-copy"><small>STEP 2 OF 2</small><strong>Choose Ride</strong><span>Same mountain. Different handling and stance.</span></div><div class="ride-mode-options"><button type="button" class="ride-mode-card" data-ride-mode="ski"><b>⛷</b><strong>SKI</strong><span>150 → 300 km/h</span></button><button type="button" class="ride-mode-card" data-ride-mode="snowboard"><b>🏂</b><strong>SNOWBOARD</strong><span>150 → 300 km/h</span></button></div><button type="button" class="ride-mode-back">BACK TO CHIMPIONS</button></section><div class="selector-help">D-PAD / STICK · Navigate &nbsp; A / ENTER · Select &nbsp; B / ESC · Back</div></form>';
+  dialog.innerHTML=`<form method="dialog" class="selector-shell"><header class="selector-head"><div><small>THE CHIMPIONS</small><h2 id="selector-title" data-i18n="avatar.title">${t('avatar.title','Choose your Chimpion')}</h2></div><button class="selector-close" value="close" data-i18n-aria-label="avatar.close" aria-label="${t('avatar.close','Close Chimpion selector')}">×</button></header><div class="selector-featured"><span id="selector-preview-portrait" class="selector-preview-portrait">🐵</span><span><small id="selector-step-label">${hasSetupStep?'STEP 1 OF 2 · RIDER':t('avatar.step','RIDER SELECT')}</small><strong id="selector-preview-name" data-i18n="avatar.previewEmpty">${t('avatar.previewEmpty','Choose a Chimpion')}</strong><em id="selector-preview-tribe">The Chimpions</em></span></div><input id="chimpion-search" class="selector-search" type="search" data-i18n-placeholder="avatar.search" placeholder="${t('avatar.search','Search Chimpion…')}" autocomplete="off" data-i18n-aria-label="avatar.searchLabel" aria-label="${t('avatar.searchLabel','Search Chimpions')}"><div id="chimpion-grid" class="selector-grid" role="group" aria-label="${t('avatar.searchLabel','Search Chimpions')}"></div><input id="local-glb-upload" type="file" accept=".glb,model/gltf-binary" hidden><p id="selector-status" class="selector-status" role="status" aria-live="polite" hidden></p><section class="skateboard-setup-step" id="skateboard-setup-step" hidden aria-labelledby="skateboard-setup-title"><div class="setup-profile-copy"><small>SKATEBOARD</small><strong id="skateboard-setup-title" data-i18n="setup.title">${t('setup.title','Choose skateboard setup')}</strong><span>Gameplay profiles are supplied by the skateboard gameplay system.</span></div><div class="skateboard-setup-options">${setupContract.profiles.map(profile=>`<button type="button" class="setup-profile-card skateboard-setup-card" data-setup-id="${profile.id}" ${profile.available?'':'disabled aria-disabled="true"'}><b aria-hidden="true">${profile.icon}</b><strong>${profile.label}</strong><span>${profile.description}</span></button>`).join('')}</div><button type="button" class="setup-profile-back setup-back" data-i18n="setup.back">${t('setup.back','BACK TO RIDERS')}</button></section><div class="selector-help" data-i18n="avatar.help">${t('avatar.help','D-PAD / STICK · Navigate · A / ENTER · Select · B / ESC · Back')}</div></form>`;
   document.body.append(dialog);
-  for(const mode of [RIDE_MODE.SKI,RIDE_MODE.SNOWBOARD]){
-    const profile=getRideProfile(mode);
-    const speedLabel=dialog.querySelector(`[data-ride-mode="${mode}"] span`);
-    if(speedLabel)speedLabel.textContent=`${speedToKmh(profile.baseSpeed)} → ${speedToKmh(profile.maxSpeed)} km/h`;
-  }
-
+  localization?.apply?.(dialog);
   const grid=dialog.querySelector('#chimpion-grid');
   const search=dialog.querySelector('#chimpion-search');
   const previewPortrait=dialog.querySelector('#selector-preview-portrait');
@@ -106,9 +113,9 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
   const title=dialog.querySelector('#selector-title');
   const stepLabel=dialog.querySelector('#selector-step-label');
   const closeButton=dialog.querySelector('.selector-close');
-  const rideStep=dialog.querySelector('#ride-mode-step');
-  const rideButtons=Array.from(dialog.querySelectorAll('.ride-mode-card'));
-  const rideBack=dialog.querySelector('.ride-mode-back');
+  const setupStep=dialog.querySelector('#skateboard-setup-step');
+  const setupButtons=Array.from(dialog.querySelectorAll('.skateboard-setup-card:not([disabled])'));
+  const setupBack=dialog.querySelector('.setup-back');
   const fileInput=dialog.querySelector('#local-glb-upload');
   const status=dialog.querySelector('#selector-status');
 
@@ -122,7 +129,8 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     entryById=new Map(searchIndex.map(record=>[record.id,record.entry]));
   }
   let currentSelectedId=String(selectedId||'');
-  let currentRideMode=normalizeRideMode(selectedRideMode);
+  let currentSetupId=String(setupContract.activeProfileId||'');
+  void selectedRideMode;
   let pendingEntry=null;
   let step='avatar';
   let loading=false;
@@ -176,9 +184,9 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
       :(entry.tribe||'Chimpion');
   }
 
-  function syncRideButtons(){
-    for(const button of rideButtons){
-      const selected=button.dataset.rideMode===currentRideMode;
+  function syncSetupButtons(){
+    for(const button of setupButtons){
+      const selected=button.dataset.setupId===currentSetupId;
       button.classList.toggle('is-selected',selected);
       button.setAttribute('aria-pressed',String(selected));
     }
@@ -197,36 +205,31 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     dialog.classList.toggle('is-loading',loading);
     dialog.setAttribute('aria-busy',String(loading));
     search.disabled=loading;
-    for(const button of grid.querySelectorAll('button'))button.disabled=loading;
-    for(const button of rideButtons)button.disabled=loading;
-    rideBack.disabled=loading;
+    for(const button of grid.querySelectorAll('button'))button.disabled=loading||button.dataset.unavailable==='true';
+    for(const button of setupButtons)button.disabled=loading;
+    setupBack.disabled=loading;
     closeButton.disabled=loading;
   }
 
-  function showRideStep(entry){
-    if(loading||!entry)return;
+  function showSetupStep(entry){
+    if(loading||!entry||!hasSetupStep)return false;
     const compatibility=entry.compatibility||getAvatarCompatibility(entry);
-    if(compatibility.status===AVATAR_COMPATIBILITY_STATUS.UNSUPPORTED){updatePreview(entry);return;}
-    pendingEntry=entry;
-    step='ride';
-    updatePreview(entry);
-    title.textContent='Choose your ride';
-    stepLabel.textContent='STEP 2 OF 2 · RIDE';
-    search.hidden=true;
-    grid.hidden=true;
-    rideStep.hidden=false;
-    syncRideButtons();
-    const preferred=rideButtons.find(button=>button.dataset.rideMode===currentRideMode)||rideButtons[0];
+    if(compatibility.status===AVATAR_COMPATIBILITY_STATUS.UNSUPPORTED){updatePreview(entry);return false;}
+    pendingEntry=entry;step='setup';updatePreview(entry);
+    title.textContent=t('setup.title','Choose skateboard setup');
+    stepLabel.textContent='STEP 2 OF 2 · SKATEBOARD';
+    search.hidden=true;grid.hidden=true;setupStep.hidden=false;
+    syncSetupButtons();
+    const preferred=setupButtons.find(button=>button.dataset.setupId===currentSetupId)||setupButtons[0]||setupBack;
     setTimeout(()=>preferred?.focus(),0);
+    return true;
   }
 
   function showAvatarStep({focusGrid=true}={}){
     step='avatar';
-    title.textContent='Choose your Chimpion';
-    stepLabel.textContent='STEP 1 OF 2 · CHIMPION';
-    rideStep.hidden=true;
-    search.hidden=false;
-    grid.hidden=false;
+    title.textContent=t('avatar.title','Choose your Chimpion');
+    stepLabel.textContent=hasSetupStep?'STEP 1 OF 2 · RIDER':t('avatar.step','RIDER SELECT');
+    setupStep.hidden=true;search.hidden=false;grid.hidden=false;
     const entry=pendingEntry||getEntry(currentSelectedId)||visibleRecords[0]?.entry;
     if(entry)updatePreview(entry);
     if(focusGrid){
@@ -236,23 +239,32 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     }
   }
 
-  async function completeRide(mode){
-    if(loading||!pendingEntry)return;
-    const nextMode=normalizeRideMode(mode);
-    setLoading(true);
+  async function completeSelection(entry=pendingEntry,setupId=currentSetupId||null){
+    if(loading||!entry)return false;
+    const compatibility=entry.compatibility||getAvatarCompatibility(entry);
+    if(compatibility.status===AVATAR_COMPATIBILITY_STATUS.UNSUPPORTED){updatePreview(entry);return false;}
+    setLoading(true);showStatus(t('avatar.loading','Loading rider…'));
     try{
-      await onSelect(pendingEntry,nextMode);
-      currentSelectedId=String(pendingEntry.id);
-      currentRideMode=nextMode;
-      syncRideButtons();
-      syncSelectedCards();
-      updatePreview(pendingEntry);
-      dialog.close();
+      await onSelect(entry,setupId||null);
+      currentSelectedId=String(entry.id);
+      if(setupId)currentSetupId=String(setupId);
+      syncSetupButtons();syncSelectedCards();updatePreview(entry);showStatus('');dialog.close();
+      return true;
     }catch(error){
       console.warn('Could not load selected Chimpion:',error);
-    }finally{
-      setLoading(false);
-    }
+      showStatus(error?.message||t('avatar.localFailed','This rider could not be loaded.'),true);
+      return false;
+    }finally{setLoading(false);}
+  }
+
+  function chooseEntry(entry){
+    if(loading||!entry)return false;
+    const compatibility=entry.compatibility||getAvatarCompatibility(entry);
+    if(compatibility.status===AVATAR_COMPATIBILITY_STATUS.UNSUPPORTED){updatePreview(entry);return false;}
+    pendingEntry=entry;updatePreview(entry);
+    if(hasSetupStep)return showSetupStep(entry);
+    void completeSelection(entry,null);
+    return true;
   }
 
   function cardFor(record,filteredIndex){
@@ -266,11 +278,12 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     if(compatibility?.status===AVATAR_COMPATIBILITY_STATUS.UNSUPPORTED){
       button.classList.add('is-unsupported');
       button.setAttribute('aria-disabled','true');
+      button.dataset.unavailable='true';
+      button.disabled=true;
       button.title=compatibility.reason;
     }
     button.dataset.avatarId=entry.id;
     button.dataset.filterIndex=String(filteredIndex);
-    button.setAttribute('role','listitem');
     const selected=!uploadAction&&String(entry.id)===currentSelectedId;
     button.setAttribute('aria-pressed',String(selected));
     if(selected)button.classList.add('is-selected');
@@ -343,28 +356,20 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
 
   function handleMenuAction(action){
     if(!dialog.open||loading||!action)return false;
-    if(action===MENU_ACTION.CANCEL){
-      if(step==='ride')showAvatarStep();
-      else dialog.close();
-      return true;
-    }
-    if(step==='ride'){
+    if(action===MENU_ACTION.CANCEL){if(step==='setup')showAvatarStep();else dialog.close();return true;}
+    if(step==='setup'){
       const active=document.activeElement;
-      const currentRideIndex=Math.max(0,rideButtons.indexOf(active));
+      const currentIndex=Math.max(0,setupButtons.indexOf(active));
       if(action===MENU_ACTION.CONFIRM){
-        const target=rideButtons.includes(active)?active:(rideButtons.find(button=>button.dataset.rideMode===currentRideMode)||rideButtons[0]);
-        target?.click();
-        return true;
+        if(active===setupBack){setupBack.click();return true;}
+        const target=setupButtons.includes(active)?active:(setupButtons.find(button=>button.dataset.setupId===currentSetupId)||setupButtons[0]);
+        target?.click();return true;
       }
-      if(action===MENU_ACTION.DOWN&&rideButtons.includes(active)){rideBack.focus();return true;}
-      if(action===MENU_ACTION.UP&&active===rideBack){
-        (rideButtons.find(button=>button.dataset.rideMode===currentRideMode)||rideButtons[0])?.focus();
-        return true;
-      }
-      if([MENU_ACTION.LEFT,MENU_ACTION.RIGHT,MENU_ACTION.UP,MENU_ACTION.DOWN].includes(action)){
+      if(action===MENU_ACTION.DOWN&&setupButtons.includes(active)){setupBack.focus();return true;}
+      if(action===MENU_ACTION.UP&&active===setupBack){(setupButtons.find(button=>button.dataset.setupId===currentSetupId)||setupButtons[0])?.focus();return true;}
+      if([MENU_ACTION.LEFT,MENU_ACTION.RIGHT,MENU_ACTION.UP,MENU_ACTION.DOWN].includes(action)&&setupButtons.length){
         const direction=(action===MENU_ACTION.LEFT||action===MENU_ACTION.UP)?-1:1;
-        rideButtons[(currentRideIndex+direction+rideButtons.length)%rideButtons.length]?.focus();
-        return true;
+        setupButtons[(currentIndex+direction+setupButtons.length)%setupButtons.length]?.focus();return true;
       }
       return false;
     }
@@ -373,28 +378,20 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
       if(active===search){focusCard(0);return true;}
       if(active?.classList?.contains('chimpion-card')){active.click();return true;}
       const selectedIndex=visibleRecords.findIndex(record=>record.id===currentSelectedId);
-      focusCard(selectedIndex>=0?selectedIndex:0);
-      return true;
+      focusCard(selectedIndex>=0?selectedIndex:0);return true;
     }
     if(!visibleRecords.length)return false;
     const active=document.activeElement;
-    if(active===search){
-      if(action===MENU_ACTION.DOWN){focusCard(0);return true;}
-      return false;
-    }
+    if(active===search){if(action===MENU_ACTION.DOWN){focusCard(0);return true;}return false;}
     const index=activeCardIndex();
     if(index<0){focusCard(0);return true;}
-    const columnCount=columns();
-    let next=index;
+    const columnCount=columns();let next=index;
     if(action===MENU_ACTION.RIGHT)next=index+1;
     else if(action===MENU_ACTION.LEFT)next=index-1;
     else if(action===MENU_ACTION.DOWN)next=index+columnCount;
-    else if(action===MENU_ACTION.UP){
-      if(index<columnCount){search.focus();return true;}
-      next=index-columnCount;
-    }else return false;
-    focusCard(next);
-    return true;
+    else if(action===MENU_ACTION.UP){if(index<columnCount){search.focus();return true;}next=index-columnCount;}
+    else return false;
+    focusCard(next);return true;
   }
 
   function keyboardMove(event){
@@ -407,17 +404,16 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     }
   }
 
-  function setSelected(entryOrId,rideMode=currentRideMode){
+  function setSelected(entryOrId,setupId=currentSetupId){
     currentSelectedId=String(typeof entryOrId==='object'?entryOrId?.id:entryOrId??'');
-    currentRideMode=normalizeRideMode(rideMode);
+    if(setupId&&setupContract.profiles.some(profile=>profile.id===String(setupId)))currentSetupId=String(setupId);
     const entry=typeof entryOrId==='object'?entryOrId:getEntry(currentSelectedId);
     if(entry){previewId='';updatePreview(entry);}
-    syncSelectedCards();
-    syncRideButtons();
+    syncSelectedCards();syncSetupButtons();
   }
 
   function getDiagnostics(){
-    return {...metrics,selectorStep:step,rideMode:currentRideMode};
+    return {...metrics,selectorStep:step,setupId:currentSetupId,hasSetupStep};
   }
 
   search.addEventListener('input',()=>applyFilter('search'));
@@ -425,12 +421,12 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
   dialog.addEventListener('keydown',keyboardMove);
   dialog.addEventListener('cancel',event=>{
     if(loading){event.preventDefault();return;}
-    if(step==='ride'){event.preventDefault();showAvatarStep();}
+    if(step==='setup'){event.preventDefault();showAvatarStep();}
   });
   dialog.addEventListener('close',()=>{
     step='avatar';
     pendingEntry=null;
-    rideStep.hidden=true;
+    setupStep.hidden=true;
     search.hidden=false;
     grid.hidden=false;
     menuSelected?.classList?.remove('is-menu-selected');
@@ -439,11 +435,11 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     openReturnFocus=null;
     setTimeout(()=>{if(target?.isConnected&&!target.disabled)target.focus();},0);
   });
-  rideBack.addEventListener('click',()=>{if(!loading)showAvatarStep();});
-  rideStep.addEventListener('click',event=>{
-    const button=event.target.closest?.('.ride-mode-card');
-    if(!button||!rideStep.contains(button))return;
-    completeRide(button.dataset.rideMode);
+  setupBack.addEventListener('click',()=>{if(!loading)showAvatarStep();});
+  setupStep.addEventListener('click',event=>{
+    const button=event.target.closest?.('.skateboard-setup-card');
+    if(!button||!setupStep.contains(button)||button.disabled)return;
+    void completeSelection(pendingEntry,button.dataset.setupId);
   });
 
   function showStatus(message='',isError=false){
@@ -455,7 +451,7 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
   async function handleLocalFile(file){
     if(!file)return;
     setLoading(true);
-    showStatus('Checking local GLB…');
+    showStatus(t('avatar.localChecking','Checking local GLB…'));
     let nextUrl='';
     let nextEntry=null;
     try{
@@ -471,16 +467,16 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
       rebuildSearchIndex();
       search.value='';
       applyFilter('upload');
-      showStatus('Local GLB ready. It stays on this device for this session.');
+      showStatus(t('avatar.localReady','Local GLB ready. It stays on this device for this session.'));
     }catch(error){
       if(nextUrl)URL.revokeObjectURL(nextUrl);
-      showStatus(error?.message||'This GLB could not be used.',true);
+      showStatus(error?.message||t('avatar.localFailed','This GLB could not be used.'),true);
       nextEntry=null;
     }finally{
       fileInput.value='';
       setLoading(false);
     }
-    if(nextEntry)showRideStep(nextEntry);
+    if(nextEntry)chooseEntry(nextEntry);
   }
 
   fileInput.addEventListener('change',()=>handleLocalFile(fileInput.files?.[0]));
@@ -504,11 +500,11 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     const record=visibleRecords[Number(button.dataset.filterIndex)];
     if(!record)return;
     if(isUploadAvatarAction(record.entry)){
-      showStatus('Choose a local .glb file (maximum 50 MB).');
+      showStatus(t('avatar.localPick','Choose a local .glb file (maximum 50 MB).'));
       fileInput.click();
       return;
     }
-    showRideStep(record.entry);
+    chooseEntry(record.entry);
   });
   grid.addEventListener('error',event=>{
     const image=event.target;
@@ -522,7 +518,7 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
   // Closed selector owns zero card/image nodes. Cards are materialized only on open.
   metrics.filteredCount=visibleRecords.length;
   metrics.renderedCardCount=0;
-  syncRideButtons();
+  syncSetupButtons();
 
   function open(){
     if(loading)return;
@@ -556,6 +552,7 @@ export function createAvatarSelector({catalog,onSelect,onValidateLocalAvatar=asy
     setSelected,
     setLoading,
     getDiagnostics,
-    getRideMode:()=>currentRideMode
+    getSetupId:()=>currentSetupId,
+    getRideMode:()=>null
   };
 }

@@ -132,6 +132,7 @@ clear();
   assert(state.axis>0&&state.jump&&state.menu);
   state=read([]);
   assert.equal(state.connected,false);
+  assert.equal(state.activeControllerDisconnected,true,'active controller disconnect signal is missing');
   assert.equal(state.activeGamepad,null,'disconnect retained a stale active gamepad reference');
   assert.equal(state.activeKey,null,'disconnect retained a stale active controller identity');
   assert.equal(state.axis,0);

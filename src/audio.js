@@ -305,6 +305,7 @@ export function createSkiAudio(){
       slideAmount:/powerslide/i.test(String(name))?clamp(payload.intensity??payload.amount??pendingState.slideAmount):pendingState.slideAmount,
       grind:skateboard.diagnostics().grind
     },false);
+    if(payload.audio===false)return !!cue;
     return cue?mixer.playTransient(cue.sound,cue.gain*(payload.gain??1)*settings.impactIntensity,cue.rate*(payload.rate??1),payload.pan??0):false;
   }
 

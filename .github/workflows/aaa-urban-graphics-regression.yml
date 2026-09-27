@@ -77,3 +77,47 @@ jobs:
             kill "$(cat /tmp/aaa-urban-preview.pid)" 2>/dev/null || true
           fi
           cat /tmp/aaa-urban-preview.log || true
+
+
+  reliability-audit:
+    needs: static-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+
+      - name: Start reliability preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          (exec ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173) >/tmp/render-reliability-preview.log 2>&1 &
+          echo $! > /tmp/render-reliability-preview.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            if [ "$i" = 90 ]; then
+              cat /tmp/render-reliability-preview.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Audit render failures and context recovery
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          RENDER_RELIABILITY_TIMEOUT_MS: "120000"
+        run: node checks/rendering-reliability-browser.mjs
+
+      - name: Stop reliability preview
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/render-reliability-preview.pid ]; then
+            kill "$(cat /tmp/render-reliability-preview.pid)" 2>/dev/null || true
+          fi
+          cat /tmp/render-reliability-preview.log || true

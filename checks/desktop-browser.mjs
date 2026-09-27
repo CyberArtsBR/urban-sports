@@ -188,16 +188,23 @@ try{
   assert(playing.courseLookaheadTarget>280,'Course streaming must remain beyond camera far plane');
   assert(playing.courseAhead>280,'Generated course must remain ahead of the visible camera range');
 
+  // Freeze gameplay before viewport churn. Leaving simulation live while
+  // repeatedly resizing the headless browser made this UI test race natural
+  // course collisions and intermittently reach CRASHED before the pause probe.
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(()=>{
+    const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+    return d?.mode==='paused';
+  },null,{timeout:5000});
+
   const hud=page.locator('.hud');
+  const pauseOverlay=page.locator('#pause-overlay');
+  await pauseOverlay.waitFor({state:'visible',timeout:5000});
   for(const viewport of responsiveViewports){
     await page.setViewportSize({width:viewport.width,height:viewport.height});
     await assertElementWithinViewport(hud,viewport.label+' HUD');
   }
   await page.setViewportSize({width:1440,height:900});
-
-  await page.keyboard.press('Escape');
-  const pauseOverlay=page.locator('#pause-overlay');
-  await pauseOverlay.waitFor({state:'visible',timeout:5000});
   await page.waitForFunction(()=>document.activeElement?.id==='resume-game');
   assert.equal(await page.locator('#resume-game.is-menu-selected').count(),1,'Pause default focus is not visibly selected');
 

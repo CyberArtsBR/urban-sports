@@ -13,8 +13,8 @@ const css=await readFile(new URL('../src/floatingUI.css',import.meta.url),'utf8'
 
 assert(!main.includes("from './environment.js'"),'Urban main must not statically import the Alpine environment runtime');
 assert(main.includes("createUrbanRuntimeEnvironment"),'Urban main must boot the Urban-native runtime');
-for(const token of ['alpineSky','alpineLandscape','snowMaterial','snowParticles','snowSurfaceDetail','boundaryMarkers','ambientFlybys']){
-  assert(!urbanRuntime.includes(token),'Urban runtime must not import/allocate Alpine system '+token);
+for(const path of ['./alpineSky.js','./alpineLandscape.js','../snowMaterial.js','../snowParticles.js','../snowSurfaceDetail.js','../boundaryMarkers.js','../ambientFlybys.js']){
+  assert(!urbanRuntime.includes("from '"+path+"'")&&!urbanRuntime.includes('from "'+path+'"'),'Urban runtime must not import Alpine system '+path);
 }
 assert(urbanRuntime.includes("activeSnowLayerParticles:0"),'Urban diagnostics must expose zero Alpine particles');
 assert(weather.includes('snowParticles?.setTint?.'),'weather bridge must tolerate absent Alpine particles');

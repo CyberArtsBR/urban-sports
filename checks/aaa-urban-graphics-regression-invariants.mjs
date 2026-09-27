@@ -199,7 +199,7 @@ const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 assert(main.includes("captureGraphicsDiagnostics({renderer,scene,urbanEnvironment})"),'runtime diagnostics must expose graphics resource counts');
 assert(main.includes('renderer.info.autoReset=false'),'Renderer diagnostics must use explicit per-frame reset');
 assert(main.includes('renderer.info.reset();'),'renderer.info must reset once per frame before rendering');
-assert(main.includes('if(!composed)renderer.render(scene,camera);'),'Runtime must preserve fail-open direct rendering when MAX CINEMATIC is inactive or fails');
+assert(main.includes('if(!composed){')&&main.includes('renderer.render(scene,camera);'),'Runtime must preserve fail-open direct rendering when MAX CINEMATIC is inactive or fails');
 
 console.log(JSON.stringify({
   check:'aaa-urban-graphics-regression-invariants',

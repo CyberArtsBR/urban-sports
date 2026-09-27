@@ -33,11 +33,20 @@ export function createSkateboardAudio({mixer,emitSemantic=()=>{}}={}){
     mixer.setTarget(graph.skateBearing.gain.gain,mix.bearing*audible,.10);
     mixer.setTarget(graph.skateRoad.gain.gain,mix.roadHiss*audible,.12);
     mixer.setTarget(graph.skateWet.gain.gain,mix.wetHiss*audible,.18);
-    mixer.setTarget(graph.skateSlide.gain.gain,(mix.slide+(grind.active?grind.intensity*.020:0))*audible,.055);
+    const grindSurface=String(grind.surface||'').toLowerCase();
+    const metalGrind=grind.active&&(/rail|metal/.test(grindSurface));
+    const concreteGrind=grind.active&&!metalGrind;
+    const grindTexture=grind.active?grind.intensity*(metalGrind?.024:.030):0;
+    mixer.setTarget(graph.skateSlide.gain.gain,(mix.slide+grindTexture)*audible,.055);
     mixer.setTarget(graph.skateWheelLow.filter.frequency,mix.lowFrequency,.12);
     mixer.setTarget(graph.skateBearing.filter.frequency,mix.bearingFrequency,.10);
     mixer.setTarget(graph.skateRoad.filter.frequency,mix.roadFrequency,.12);
-    mixer.setTarget(graph.skateSlide.filter.frequency,mix.slideFrequency,.08);
+    mixer.setTarget(
+      graph.skateSlide.filter.frequency,
+      grind.active?(metalGrind?2350:720+Math.abs(Number(grind.balance)||0)*180):mix.slideFrequency,
+      grind.active?.045:.08
+    );
+    if(concreteGrind)mixer.setTarget(graph.skateRoad.gain.gain,(mix.roadHiss*.45+grind.intensity*.010)*audible,.08);
     void countdown;
   }
 

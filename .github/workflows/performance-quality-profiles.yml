@@ -121,6 +121,19 @@ jobs:
           done
           env $BENCH_ENV QUALITY_PROFILE=max BASE_URL=http://127.0.0.1:4173 RESULTS_PATH="$GITHUB_WORKSPACE/benchmark-artifacts/benchmark-max.json" node scripts/benchmark-ski-runtime.mjs
 
+      - name: Enforce current release performance budgets
+        id: release_budgets
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s benchmark-artifacts/benchmark-high.json
+          test -s benchmark-artifacts/benchmark-low.json
+          test -s benchmark-artifacts/benchmark-max.json
+          node scripts/enforce-release-benchmark.mjs benchmark-artifacts/benchmark-high.json high
+          node scripts/enforce-release-benchmark.mjs benchmark-artifacts/benchmark-low.json low
+          node scripts/enforce-release-benchmark.mjs benchmark-artifacts/benchmark-max.json max
+
       - name: Compare benchmark results
         id: compare
         continue-on-error: true
@@ -151,10 +164,12 @@ jobs:
           LOW_OUTCOME: ${{ steps.low.outcome }}
           MAX_OUTCOME: ${{ steps.max.outcome }}
           COMPARE_OUTCOME: ${{ steps.compare.outcome }}
+          RELEASE_BUDGET_OUTCOME: ${{ steps.release_budgets.outcome }}
         run: |
-          echo "baseline=$BASELINE_OUTCOME high=$HIGH_OUTCOME low=$LOW_OUTCOME max=$MAX_OUTCOME compare=$COMPARE_OUTCOME"
+          echo "baseline=$BASELINE_OUTCOME high=$HIGH_OUTCOME low=$LOW_OUTCOME max=$MAX_OUTCOME release_budgets=$RELEASE_BUDGET_OUTCOME compare=$COMPARE_OUTCOME"
           test "$BASELINE_OUTCOME" = success
           test "$HIGH_OUTCOME" = success
           test "$LOW_OUTCOME" = success
           test "$MAX_OUTCOME" = success
+          test "$RELEASE_BUDGET_OUTCOME" = success
           test "$COMPARE_OUTCOME" = success

@@ -3,11 +3,13 @@ import {DEFAULT_RIDE_MODE,getRideAudioProfile,getRideSpeedFeel,normalizeRideMode
 import {createTrickAudioState,getTrickFailProfile,getTrickStartProfile,getTrickSuccessProfile} from './trickAudio.js';
 import {getSkateContinuousMix,getSkateEventCue,normalizeSkateQualityProfile,normalizeSkateSurface} from './skateAudioProfile.js';
 import {calculateCarveFeedback} from './gameFeelFeedback.js';
+import {migrateUrbanPersistence,readUrbanSetting,writeUrbanSetting} from './urbanPersistence.js';
 
 const clamp=(value,min=0,max=1)=>Math.max(min,Math.min(max,value));
 const AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext;
 
 export function createSkiAudio(){
+  migrateUrbanPersistence();
   const JUMP_MUSIC_URL='/audio/music-full.mp3';
   let context=null;
   let graph=null;
@@ -50,29 +52,25 @@ export function createSkiAudio(){
   };
 
   const settings={
-    master:readNumber('chimpions-ski-master',.82),
-    sfx:readNumber('chimpions-ski-sfx',.25),
-    music:readNumber('chimpions-ski-music',.25),
-    sfxEnabled:readBool('chimpions-ski-sfx-enabled',true),
-    musicEnabled:readBool('chimpions-ski-music-enabled',true)
+    master:readNumber('master',.82),
+    sfx:readNumber('sfx',.25),
+    music:readNumber('music',.25),
+    sfxEnabled:readBool('sfxEnabled',true),
+    musicEnabled:readBool('musicEnabled',true)
   };
 
   function readNumber(key,fallback){
-    try{
-      const raw=localStorage.getItem(key);
-      if(raw===null)return fallback;
-      const value=Number(raw);
-      return Number.isFinite(value)?clamp(value):fallback;
-    }catch{return fallback;}
+    const raw=readUrbanSetting(key,null);
+    if(raw===null)return fallback;
+    const value=Number(raw);
+    return Number.isFinite(value)?clamp(value):fallback;
   }
   function readBool(key,fallback){
-    try{
-      const value=localStorage.getItem(key);
-      return value===null?fallback:value!=='0';
-    }catch{return fallback;}
+    const value=readUrbanSetting(key,null);
+    return value===null?fallback:value!=='0';
   }
   function write(key,value){
-    try{localStorage.setItem(key,String(value));}catch{}
+    writeUrbanSetting(key,value);
   }
   function ensureJumpMusic({load=false}={}){
     if(typeof Audio==='undefined')return null;
@@ -871,19 +869,19 @@ export function createSkiAudio(){
     syncJumpMusic(pendingState.mode||'menu');
   }
   function setMasterVolume(value){
-    settings.master=clamp(Number(value)||0);write('chimpions-ski-master',settings.master);refreshBuses();
+    settings.master=clamp(Number(value)||0);write('master',settings.master);refreshBuses();
   }
   function setSfxVolume(value){
-    settings.sfx=clamp(Number(value)||0);write('chimpions-ski-sfx',settings.sfx);refreshBuses();
+    settings.sfx=clamp(Number(value)||0);write('sfx',settings.sfx);refreshBuses();
   }
   function setMusicVolume(value){
-    settings.music=clamp(Number(value)||0);write('chimpions-ski-music',settings.music);refreshBuses();
+    settings.music=clamp(Number(value)||0);write('music',settings.music);refreshBuses();
   }
   function setSfxEnabled(value){
-    settings.sfxEnabled=!!value;write('chimpions-ski-sfx-enabled',settings.sfxEnabled?1:0);refreshBuses();
+    settings.sfxEnabled=!!value;write('sfxEnabled',settings.sfxEnabled?1:0);refreshBuses();
   }
   function setMusicEnabled(value){
-    settings.musicEnabled=!!value;write('chimpions-ski-music-enabled',settings.musicEnabled?1:0);refreshBuses();
+    settings.musicEnabled=!!value;write('musicEnabled',settings.musicEnabled?1:0);refreshBuses();
     if(settings.musicEnabled)unlock();
   }
   function getSettings(){return {...settings};}

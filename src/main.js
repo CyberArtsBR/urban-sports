@@ -560,16 +560,10 @@ ui.configureQuality?.({
   options:QUALITY_PROFILE_NAMES,
   onChange:profile=>{
     const next=String(profile||'auto').toLowerCase();
-    const currentCanvasAA=renderer.getContext().getContextAttributes?.()?.antialias===true;
-    const nextCanvasAA=next!=='max-cinematic';
     saveQualityPreference(next);
-    // WebGL antialias is a context-creation attribute. Recreate the renderer
-    // only when crossing the MAX CINEMATIC boundary so its MSAA-off contract is
-    // genuine while existing tiers retain their production canvas AA.
-    if(currentCanvasAA!==nextCanvasAA){
-      globalThis.location?.reload?.();
-      return;
-    }
+    // Quality changes are runtime-only. The universal canvas keeps its safe
+    // context attributes; MAX CINEMATIC controls MSAA on its own verified
+    // offscreen targets and must never require a page reload.
     quality.setProfile(next);
   }
 });

@@ -63,17 +63,20 @@ try{
   await controllerPage.evaluate(()=>window.__releasePad.release(0));
   await controllerPage.locator('#chimpion-selector').waitFor({state:'visible',timeout:5000});
 
-  const initialFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  await axisPulse(controllerPage,0,.92,120);
-  const analogFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  assert.notEqual(analogFocus,initialFocus,'analog navigation did not move the rider selector');
-  const stableFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  await controllerPage.waitForTimeout(150);
-  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),stableFocus,'single analog pulse double-navigated');
+  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.id),'chimpion-search','selector should begin at the search field');
+  await axisPulse(controllerPage,1,.92);
+  const gridEntryFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
+  assert.equal(gridEntryFocus,'0','analog DOWN did not enter the rider grid at the first card');
 
-  await pulse(controllerPage,13);
+  await axisPulse(controllerPage,0,.92);
+  const analogFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
+  assert.equal(analogFocus,'1','analog RIGHT did not move exactly one rider card');
+  await controllerPage.waitForTimeout(180);
+  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),'1','single analog pulse double-navigated');
+
+  await pulse(controllerPage,15);
   const dpadFocus=await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null);
-  assert.notEqual(dpadFocus,analogFocus,'D-pad navigation did not move the rider selector');
+  assert.equal(dpadFocus,'2','D-pad RIGHT did not move exactly one rider card');
 
   await pulse(controllerPage,0);
   await controllerPage.waitForFunction(()=>!document.querySelector('#ride-mode-step')?.hidden,null,{timeout:10000});

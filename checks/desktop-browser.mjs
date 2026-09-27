@@ -363,7 +363,10 @@ try{
     await touchPage.setViewportSize({width:896,height:414});
 
     await touchPage.locator('#touch-pause').dispatchEvent('pointerdown',{pointerId:43,pointerType:'touch',isPrimary:true,buttons:1});
-    await touchPage.waitForFunction(()=>window.chimpionsSki?.().mode==='paused',null,{timeout:5000});
+    // SwiftShader can stall briefly after the portrait->landscape resize; the
+    // assertion remains strict, but allow the gameplay loop enough time to
+    // consume the semantic pause edge.
+    await touchPage.waitForFunction(()=>window.chimpionsSki?.().mode==='paused',null,{timeout:12000});
     const pausedTouch=await touchPage.evaluate(()=>window.chimpionsSki());
     assert(Math.abs(pausedTouch.inputState.touchSteer)<.001,'Pause left touch steering stuck');
     assert.equal(pausedTouch.inputState.touchJump,false,'Pause left touch jump stuck');

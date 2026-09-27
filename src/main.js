@@ -1,9 +1,5 @@
 import * as THREE from 'three';
-import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
-import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
-import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
-import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
-import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {createCinematicRendering,createRiderContactShadow} from './cinematicRendering.js';
 import './style.css';
 import './floatingUI.css';
 import {createMountainWeather} from './mountainWeather.js';
@@ -48,6 +44,8 @@ import {resetPlayerOrientation,updateRidingOrientation,updateCrashOrientation} f
 import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
+import {createGpuTimer} from './gpuTimer.js';
+import {createTimingSeries,instrumentShadowMap} from './renderTimings.js';
 import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
 import {
   CAMERA_MOTION,CAMERA_VIEW,loadBestScore,loadUserPreferences,
@@ -159,24 +157,16 @@ cameraSystem.setMotionAmount?.(userPreferences.cameraShake);
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
-let composer=null,renderPass=null,bloomPass=null,ssaoPass=null,composerPixelRatio=0;
-
-function applyBloomQuality(){
-  if(!bloomPass)return;
-  const profile=quality.active;
-  bloomPass.strength=profile==='max'?.72:profile==='high'?.62:profile==='medium'?.48:.35;
-  bloomPass.radius=profile==='max'?.42:profile==='high'?.38:profile==='medium'?.34:.28;
-  bloomPass.threshold=profile==='max'?1.15:profile==='high'?1.22:profile==='medium'?1.35:1.55;
-}
+const gpuTimer=createGpuTimer(renderer);
+const directRenderTimer=createTimingSeries();
+const shadowRenderTimer=createTimingSeries();
+const restoreShadowInstrumentation=instrumentShadowMap(renderer,shadowRenderTimer);
+let cinematicRendering=null;
 
 function applyRendererResolution(){
   const next=quality.getPixelRatio(devicePixelRatio);
   if(Math.abs(renderer.getPixelRatio()-next)>.005)renderer.setPixelRatio(next);
-  if(composer&&Math.abs(composerPixelRatio-next)>.005){
-    composer.setPixelRatio(next);
-    composerPixelRatio=next;
-  }
-  applyBloomQuality();
+  cinematicRendering?.resize?.(innerWidth,innerHeight,next);
 }
 applyRendererResolution();
 renderer.setSize(innerWidth,innerHeight);
@@ -184,19 +174,13 @@ renderer.shadowMap.enabled=false;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
 app.prepend(renderer.domElement);
 
-// Stability hotfix: render the production gameplay scene directly with the
-// WebGLRenderer. The composed post-processing path can produce a black frame on
-// real client GPUs even when gameplay/HUD continue normally. Keep the pass
-// variables null so quality/diagnostic code remains compatible, but do not
-// allocate or execute EffectComposer until the pipeline is revalidated across
-// production hardware.
-composer=null;
-renderPass=null;
-ssaoPass=null;
-bloomPass=null;
-composerPixelRatio=0;
+// Direct rendering remains the universal safety path. MAX CINEMATIC is optional
+// and fail-open: any capability, pass, framebuffer or output-health failure
+// immediately returns control to renderer.render(scene,camera).
+cinematicRendering=createCinematicRendering({renderer,scene,camera,settings:quality.getSettings()});
 
 const world=new THREE.Group();scene.add(world);
 const environmentSystem=createEnvironmentSystem({
@@ -444,6 +428,7 @@ const skiTrails=createSkiTrails({world,terrainHeight,capacity:192,surface:'urban
 let trailTimer=0;
 
 const player=new THREE.Group();scene.add(player);
+const riderContactShadow=createRiderContactShadow({scene});
 player.position.set(0,.12,2.2);
 const impactVfx=createImpactVfx({scene,capacity:224});
 let lastSkateVfxEventId=0;
@@ -733,15 +718,8 @@ function applyRenderingQuality(settings=quality.getSettings()){
   applyStartShadowPolicy(realShadows);
   applyRiderShadowPolicy();
 
-  if(ssaoPass){
-    const aoEnabled=profile==='max'&&settings.contactAO!==false;
-    ssaoPass.enabled=aoEnabled;
-    ssaoPass.kernelRadius=Math.max(8,Number(settings.aoKernelRadius)||18);
-    ssaoPass.minDistance=.0025;
-    ssaoPass.maxDistance=.12;
-    if(renderPass)renderPass.enabled=!aoEnabled;
-  }
-  applyBloomQuality();
+  cinematicRendering?.configure?.(settings);
+  if(profile==='max-cinematic')cinematicRendering?.resize?.(innerWidth,innerHeight,renderer.getPixelRatio());
 }
 function applyRuntimeQuality(settings=quality.getSettings()){
   environmentSystem.applyQuality(settings);
@@ -1911,6 +1889,13 @@ function update(dt,frameMs=dt*1000){
   const urbanWeather=mountainWeather.getState?.();
   const wet=THREE.MathUtils.clamp(Number(urbanWeather?.rain)||0,0,1);
   roadWetness=wet;
+  cinematicRendering?.setContext?.({
+    weather:urbanWeather,mode:state.mode,sun:environment.weatherBindings?.sun||null,time:state.time
+  });
+  riderContactShadow.update({
+    enabled:currentRenderingSettings?.contactShadows===true,
+    player,state,terrainHeight
+  });
   performanceTelemetry.record('environmentUpdate',performance.now()-environmentUpdateStarted);
   updateBananaPowerVisual(state.time);
 
@@ -2011,9 +1996,17 @@ function render(now){
   if(firstPersonBody)firstPersonBody.visible=cameraViewMode!==CAMERA_VIEW.FIRST_PERSON||
     (state.mode!=='playing'&&state.mode!=='paused'&&state.mode!=='crashed');
   renderer.info.reset();
-  // Direct rendering is the production-safe path. This guarantees the world is
-  // presented even on GPUs/drivers that fail the offscreen composer pipeline.
-  renderer.render(scene,camera);
+  gpuTimer.begin();
+  try{
+    const composed=cinematicRendering?.active?cinematicRendering.render(dt):false;
+    if(!composed){
+      const directStarted=performance.now();
+      try{renderer.render(scene,camera);}
+      finally{directRenderTimer.record(performance.now()-directStarted);}
+    }
+  }finally{
+    gpuTimer.end();
+  }
   renderFrameHandle=requestAnimationFrame(render);
 }
 renderFrameHandle=requestAnimationFrame(render);
@@ -2046,6 +2039,7 @@ window.chimpionsSki=()=>{
     }
   }
   const pooledObjects=Object.values(coursePool).reduce((sum,pool)=>sum+pool.length,0);
+  const cinematicDiagnostics=cinematicRendering?.getDiagnostics?.()||null;
   return {
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
@@ -2053,14 +2047,28 @@ window.chimpionsSki=()=>{
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
     renderingQuality:{
       profile:quality.active,
+      effectiveDpr:renderer.getPixelRatio(),
+      canvasAntialias:renderer.getContext().getContextAttributes?.()?.antialias===true,
+      renderPath:quality.active==='max-cinematic'&&cinematicDiagnostics?.enabled?'cinematic-composer':'direct',
+      fallbackActive:quality.active==='max-cinematic'&&!cinematicDiagnostics?.enabled,
+      postResolution:cinematicDiagnostics?.postResolutionScale??0,
+      renderTargetType:cinematicDiagnostics?.renderTargetType??'direct-backbuffer',
+      renderTargetMemoryBytes:cinematicDiagnostics?.renderTargetMemoryBytes??0,
+      msaaSamples:cinematicDiagnostics?.msaaSamples??(quality.active==='max-cinematic'?0:null),
       shadowMapsEnabled:!!renderer.shadowMap.enabled,
       shadowMapSize:environment.weatherBindings?.sun?.shadow?.mapSize?.x??0,
       shadowDistance:environment.weatherBindings?.sun?.shadow?.camera?.far??0,
-      ssaoEnabled:!!ssaoPass?.enabled,
-      ssaoKernelRadius:ssaoPass?.kernelRadius??0,
-      bloomStrength:bloomPass?.strength??0,
-      bloomRadius:bloomPass?.radius??0,
-      bloomThreshold:bloomPass?.threshold??0,
+      ssaoEnabled:false,
+      ssaoKernelRadius:0,
+      bloomStrength:cinematicDiagnostics?.bloomStrength??0,
+      bloomRadius:cinematicDiagnostics?.bloomRadius??0,
+      bloomThreshold:cinematicDiagnostics?.bloomThreshold??0,
+      cinematic:cinematicDiagnostics,
+      gpuFrameTiming:gpuTimer.getDiagnostics(),
+      directRenderCpuTiming:directRenderTimer.getDiagnostics(),
+      shadowCpuTiming:shadowRenderTimer.getDiagnostics(),
+      contactShadow:riderContactShadow.getDiagnostics?.()||null,
+      anisotropy:urbanEnvironment.materials?.getDiagnostics?.()?.anisotropy??0,
       materialQuality:urbanEnvironment.materials?.getDiagnostics?.()||null,
       atmosphere:mountainWeather.getLightingDiagnostics?.()||null
     },
@@ -2206,8 +2214,10 @@ if(import.meta.hot){
     riderController.dispose();
     impactVfx.dispose?.();
     environmentSystem.dispose?.();
-    ssaoPass?.dispose?.();
-    composer?.dispose?.();
+    riderContactShadow.dispose?.();
+    cinematicRendering?.dispose?.();
+    gpuTimer.dispose?.();
+    restoreShadowInstrumentation?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();

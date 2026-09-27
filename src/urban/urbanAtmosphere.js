@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const QUALITY_FACTORS=Object.freeze({
+  'max-cinematic':Object.freeze({realLights:1.04,pools:1.00,emissive:1.06}),
   max:Object.freeze({realLights:1.10,pools:1.00,emissive:1.06}),
   high:Object.freeze({realLights:1.00,pools:.92,emissive:1.00}),
   medium:Object.freeze({realLights:.58,pools:.72,emissive:.84}),

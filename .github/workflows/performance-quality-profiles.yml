@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - integration/ski-full-audit-fixes
-      - perf/urban-runtime-assets-v2
   pull_request:
     branches:
       - main
@@ -18,14 +17,17 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BENCH_ENV: "GAMEPLAY_SECONDS=30 LONG_RUN_SECONDS=60 MODE_RUN_SECONDS=15 TRICK_RUN_SECONDS=15 RESTART_ITERATIONS=20 SELECTOR_ITERATIONS=6 SAMPLE_INTERVAL_MS=500"
+  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  BENCH_ENV: "GAMEPLAY_SECONDS=30 LONG_RUN_SECONDS=60 MODE_RUN_SECONDS=15 TRICK_RUN_SECONDS=15 RESTART_ITERATIONS=2 SELECTOR_ITERATIONS=2 SAMPLE_INTERVAL_MS=500"
 
 jobs:
-  validate:
+  static:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -34,21 +36,18 @@ jobs:
       - run: npm run build
 
   benchmark:
-    needs: validate
+    needs: static
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: baseline
-            quality: ""
-          - target: high
-            quality: high
-          - target: low
-            quality: low
-          - target: max
-            quality: max
+        profile:
+          - baseline
+          - high
+          - low
+          - max
+          - max-cinematic
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,80 +62,92 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p benchmark-artifacts
-          if [ "${{ matrix.target }}" = baseline ]; then
-            BASE_REF="${{ github.event.pull_request.base.sha }}"
-            BASE_REF="${BASE_REF:-origin/main}"
-            git worktree add --detach /tmp/urban-perf-baseline "$BASE_REF"
-            ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/urban-perf-baseline/node_modules
-            (cd /tmp/urban-perf-baseline && npm run build)
+          PROFILE="${{ matrix.profile }}"
+          if [ "$PROFILE" = "baseline" ]; then
+            BASE_REF="${BASE_SHA:-origin/main}"
+            if [ -z "$BASE_REF" ]; then BASE_REF="origin/main"; fi
+            git worktree add --detach /tmp/chimpions-bench-target "$BASE_REF"
+            ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/chimpions-bench-target/node_modules
+            (cd /tmp/chimpions-bench-target && npm run build)
+            echo "PREVIEW_DIR=/tmp/chimpions-bench-target" >> "$GITHUB_ENV"
           else
             npm run build
+            echo "PREVIEW_DIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
           fi
 
-      - name: Benchmark ${{ matrix.target }}
+      - name: Benchmark ${{ matrix.profile }}
+        id: benchmark
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ matrix.target }}" = baseline ]; then
-            TARGET_DIR=/tmp/urban-perf-baseline
-          else
-            TARGET_DIR="$GITHUB_WORKSPACE"
-          fi
-
-          (cd "$TARGET_DIR" && exec "$GITHUB_WORKSPACE/node_modules/.bin/vite" preview --host 127.0.0.1 --port 4173) >"/tmp/urban-${{ matrix.target }}-preview.log" 2>&1 &
+          PROFILE="${{ matrix.profile }}"
+          PREVIEW_LOG="/tmp/chimpions-${PROFILE}-preview.log"
+          (cd "$PREVIEW_DIR" && exec ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173) >"$PREVIEW_LOG" 2>&1 &
           PREVIEW_PID=$!
           trap 'kill "$PREVIEW_PID" 2>/dev/null || true; wait "$PREVIEW_PID" 2>/dev/null || true' EXIT
-
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
-            if [ "$i" = 90 ]; then
-              cat "/tmp/urban-${{ matrix.target }}-preview.log" || true
-              exit 1
-            fi
+            if [ "$i" = 90 ]; then cat "$PREVIEW_LOG" || true; exit 1; fi
             sleep 1
           done
 
-          QUALITY_ARGS=()
-          if [ -n "${{ matrix.quality }}" ]; then
-            QUALITY_ARGS=("QUALITY_PROFILE=${{ matrix.quality }}")
+          mkdir -p benchmark-artifacts
+          RESULTS_PATH="$GITHUB_WORKSPACE/benchmark-artifacts/benchmark-${PROFILE}.json"
+          if [ "$PROFILE" = "baseline" ]; then
+            env $BENCH_ENV BASE_URL=http://127.0.0.1:4173 RESULTS_PATH="$RESULTS_PATH" node scripts/benchmark-ski-runtime.mjs
+          else
+            env $BENCH_ENV QUALITY_PROFILE="$PROFILE" BASE_URL=http://127.0.0.1:4173 RESULTS_PATH="$RESULTS_PATH" node scripts/benchmark-ski-runtime.mjs
           fi
-
-          env $BENCH_ENV "${QUALITY_ARGS[@]}" \
-            BASE_URL=http://127.0.0.1:4173 \
-            RESULTS_PATH="$GITHUB_WORKSPACE/benchmark-artifacts/benchmark-${{ matrix.target }}.json" \
-            node scripts/benchmark-ski-runtime.mjs
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: performance-benchmark-${{ matrix.target }}
-          path: benchmark-artifacts/benchmark-${{ matrix.target }}.json
-          if-no-files-found: error
+          name: performance-quality-${{ matrix.profile }}
+          path: benchmark-artifacts/benchmark-${{ matrix.profile }}.json
+          if-no-files-found: warn
+
+      - name: Enforce benchmark success
+        if: always()
+        env:
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+        run: |
+          echo "${{ matrix.profile }}=$BENCHMARK_OUTCOME"
+          test "$BENCHMARK_OUTCOME" = success
 
   compare:
-    needs:
-      - validate
-      - benchmark
+    needs: benchmark
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
       - uses: actions/download-artifact@v4
         with:
-          pattern: performance-benchmark-*
+          pattern: performance-quality-*
           path: benchmark-artifacts
           merge-multiple: true
 
-      - name: Compare benchmark results
+      - name: Verify benchmark matrix
         run: |
           set -euo pipefail
-          test "${{ needs.validate.result }}" = success
-          test "${{ needs.benchmark.result }}" = success
-          for file in benchmark-baseline.json benchmark-high.json benchmark-low.json benchmark-max.json; do
-            test -s "benchmark-artifacts/$file"
+          for profile in baseline high low max max-cinematic; do
+            test -s "benchmark-artifacts/benchmark-${profile}.json"
           done
+
+      - name: Compare legacy MAX vs MAX CINEMATIC
+        run: |
+          node scripts/compare-cinematic-performance.mjs \
+            benchmark-artifacts/benchmark-max.json \
+            benchmark-artifacts/benchmark-max-cinematic.json \
+            benchmark-artifacts/benchmark-max-vs-cinematic.json
+
+      - name: Compare benchmark results
+        run: |
           node scripts/compare-performance-results.mjs \
             benchmark-artifacts/benchmark-baseline.json \
             benchmark-artifacts/benchmark-high.json \

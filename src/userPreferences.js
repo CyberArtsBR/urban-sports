@@ -43,7 +43,7 @@ export function loadUserPreferences(){
     avatarName:readUrbanSetting('avatar',''),
     sportMode:normalizedChoice(readUrbanSetting('sportMode','skateboard'),['skateboard','inline','bmx'],'skateboard'),
     rideMode:normalizedChoice(readUrbanSetting('rideMode','ski'),['ski','snowboard'],'ski'),
-    quality:normalizedChoice(readUrbanSetting('quality','auto'),['auto','high','max','medium','low'],'auto'),
+    quality:normalizedChoice(readUrbanSetting('quality','auto'),['auto','high','max-cinematic','max','medium','low'],'auto'),
     cameraMotion:normalizedChoice(readUrbanSetting('cameraMotion',CAMERA_MOTION.FULL),Object.values(CAMERA_MOTION),CAMERA_MOTION.FULL),
     cameraView:normalizedChoice(readUrbanSetting('cameraView',CAMERA_VIEW.CHASE),Object.values(CAMERA_VIEW),CAMERA_VIEW.CHASE),
     haptics:readUrbanSetting('haptics','1')!=='0',
@@ -64,7 +64,7 @@ export function saveRideModePreference(mode){
   return writeUrbanSetting('rideMode',normalizedChoice(mode,['ski','snowboard'],'ski'));
 }
 export function saveQualityPreference(mode){
-  return writeUrbanSetting('quality',normalizedChoice(mode,['auto','high','max','medium','low'],'auto'));
+  return writeUrbanSetting('quality',normalizedChoice(mode,['auto','high','max-cinematic','max','medium','low'],'auto'));
 }
 export function saveCameraMotionPreference(mode){
   return writeUrbanSetting('cameraMotion',normalizedChoice(mode,Object.values(CAMERA_MOTION),CAMERA_MOTION.FULL));

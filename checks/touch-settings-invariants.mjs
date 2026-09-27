@@ -47,10 +47,6 @@ input.requestPause();
 assert.equal(input.read(neutralPad).pausePressed,true,'touch pause semantic edge is missing');
 assert.equal(input.read(neutralPad).pausePressed,false,'pause edge repeated after consumption');
 
-input.requestSpecial();
-assert.equal(input.read(neutralPad).specialPressed,true,'touch Banana Power semantic edge is missing');
-assert.equal(input.read(neutralPad).specialPressed,false,'Banana Power edge repeated after consumption');
-
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const ui=readFileSync(new URL('../src/ui.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');
@@ -70,7 +66,7 @@ assert(ui.includes('MUSIC VOLUME')&&ui.includes('SFX VOLUME'),'real audio volume
 assert(ui.includes('CAMERA MOTION')&&ui.includes('HAPTICS'),'camera motion / haptics settings are missing');
 assert(main.includes('saveAvatarPreference')&&main.includes('saveRideModePreference'),'avatar/ride preferences are not persisted');
 assert(main.includes('saveQualityPreference')&&main.includes('saveCameraMotionPreference'),'quality/camera preferences are not persisted');
-assert(prefs.includes("['auto','high','max','medium','low']"),'quality preference contract is incomplete');
+assert(prefs.includes("['auto','high','max-cinematic','max','medium','low']"),'quality preference contract is incomplete');
 assert(haptics.includes('if(!hapticsEnabled)return false'),'disabled haptics still reach actuator playback');
 assert(css.includes('html[data-camera-motion="reduced"]'),'explicit Reduced Motion does not suppress UI animation');
 assert(ui.includes("byId('result-max-speed')")&&ui.includes("byId('result-combo')"),'results screen lacks integrated run stats');

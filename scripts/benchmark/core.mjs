@@ -31,7 +31,7 @@ function qualityProfileEnv(){
   const value=String(process.env.QUALITY_PROFILE||'').trim().toLowerCase();
   if(!value)return null;
   if(value==='reduced')return 'medium';
-  if(!['auto','high','max','medium','low'].includes(value))throw new Error('QUALITY_PROFILE must be auto, high, max, medium or low');
+  if(!['auto','high','max-cinematic','max','medium','low'].includes(value))throw new Error('QUALITY_PROFILE must be auto, high, max-cinematic, max, medium or low');
   return value;
 }
 function normalizeBaseUrl(value){
@@ -70,10 +70,6 @@ export const CONFIG=Object.freeze({
 
 export function benchmarkTargetUrl(){
   const url=new URL(CONFIG.baseUrl);
-  // Local CI benchmarks should exercise the deterministic browser-audit path:
-  // skip the first-session tutorial and drive countdown independently of slow
-  // software-renderer frame pacing. Public benchmarks keep production behavior.
-  if(CONFIG.targetMode==='local')url.searchParams.set('test','1');
   if(CONFIG.qualityProfile)url.searchParams.set('quality',CONFIG.qualityProfile);
   return url.toString();
 }

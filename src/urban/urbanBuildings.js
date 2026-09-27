@@ -5,9 +5,9 @@ import {resolveUrbanDistrict} from './urbanDistricts.js';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:.90,medium:.66,low:.44});
-const PROFILE_LIGHT_DENSITY=Object.freeze({max:1,high:.92,medium:.68,low:.42});
-const PROFILE_LED_DENSITY=Object.freeze({max:1,high:.72,medium:.34,low:0});
+const PROFILE_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.90,medium:.66,low:.44});
+const PROFILE_LIGHT_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.92,medium:.68,low:.42});
+const PROFILE_LED_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.72,medium:.34,low:0});
 const ARCHETYPE_HEIGHT=Object.freeze([1,1.18,.58,1.02,1.28,.82,1.08]);
 const ARCHETYPE_WIDTH=Object.freeze([1,.88,1.16,.92,.82,1.08,.90]);
 const ARCHETYPE_DEPTH=Object.freeze([1,.92,1.18,.94,.84,1.02,.94]);
@@ -55,7 +55,10 @@ function makeMesh(geometry,material,capacity,name){
   const mesh=new THREE.InstancedMesh(geometry,material,capacity);
   mesh.name=name;
   mesh.count=0;
-  mesh.castShadow=true;
+  // Skyline massing is visual context, not a gameplay shadow caster. Keeping
+  // these large instanced batches out of the directional shadow map preserves
+  // the budget for rider, skateboard, nearby obstacles and important vehicles.
+  mesh.castShadow=false;
   mesh.receiveShadow=true;
   mesh.frustumCulled=false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

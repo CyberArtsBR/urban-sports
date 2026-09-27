@@ -5,7 +5,7 @@ import {analyzeGraphicsStability,evaluateGraphicsBudget,normalizeGraphicsBudgetP
 
 const BASE_URL=process.env.BASE_URL||'http://127.0.0.1:4173';
 const REQUESTED_QUALITY_PROFILE=String(process.env.QUALITY_PROFILE||'high').trim().toLowerCase();
-assert(['low','medium','high','max'].includes(REQUESTED_QUALITY_PROFILE),'QUALITY_PROFILE must be low, medium, high or max');
+assert(['low','medium','high','max-cinematic','max'].includes(REQUESTED_QUALITY_PROFILE),'QUALITY_PROFILE must be low, medium, high, max-cinematic or max');
 const BUDGET_PROFILE=normalizeGraphicsBudgetProfile(REQUESTED_QUALITY_PROFILE);
 const SAMPLE_SECONDS=Math.max(6,Math.min(120,Number(process.env.GRAPHICS_SAMPLE_SECONDS)||18));
 const SAMPLE_INTERVAL_MS=Math.max(250,Math.min(5000,Number(process.env.GRAPHICS_SAMPLE_INTERVAL_MS)||1000));
@@ -28,7 +28,13 @@ async function completeStartFlow(page){
   const play=page.locator('.start-screen-play');
   await play.waitFor({state:'visible',timeout:30000});
   await page.waitForFunction(()=>!document.querySelector('.start-screen-play')?.disabled,null,{timeout:30000});
-  await play.click();
+  const startClicked=await page.evaluate(()=>{
+    const button=document.querySelector('.start-screen-play');
+    if(!button||button.disabled)return false;
+    button.click();
+    return true;
+  });
+  assert.equal(startClicked,true,'Start Game control unavailable after readiness');
 
   const selector=page.locator('#chimpion-selector');
   await selector.waitFor({state:'visible',timeout:15000});
@@ -68,7 +74,7 @@ async function completeStartFlow(page){
   });
   assert(rideResult.ok,rideResult.reason||'Failed to choose Skateboard');
 
-  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
+  await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:120000});
   // beginRun is scheduled after the async rider-selection close handler. Wait
   // for the tutorial/countdown/run hand-off rather than sampling the tutorial
   // visibility on the same task that closed the modal.
@@ -88,7 +94,7 @@ async function completeStartFlow(page){
   await page.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return d?.mode==='playing';
-  },null,{timeout:30000});
+  },null,{timeout:120000});
 
   const state=await diagnostics(page);
   assert.equal(state?.sportMode,'skateboard','Urban runtime must remain in Skateboard sport mode');
@@ -126,17 +132,53 @@ try{
   const tierProbe=await diagnostics(page);
   const rendering=tierProbe?.renderingQuality||{};
   assert.equal(rendering.profile,REQUESTED_QUALITY_PROFILE,'runtime rendering profile did not match requested graphics tier');
-  if(REQUESTED_QUALITY_PROFILE==='max'){
-    assert.equal(rendering.shadowMapsEnabled,true,'MAX must enable real shadow maps');
-    assert(rendering.shadowMapSize>=2048,'MAX must use the premium directional shadow resolution');
-    assert.equal(rendering.ssaoEnabled,true,'MAX must enable contact AO');
-    assert((rendering.materialQuality?.anisotropy??0)>=16,'MAX must use premium road anisotropy when supported');
+  if(REQUESTED_QUALITY_PROFILE==='max-cinematic'){
+    const cinematic=rendering.cinematic||{};
+    const capabilities=cinematic.capabilities||{};
+    assert.equal(tierProbe?.qualitySettings?.dprCap,1.6,'MAX CINEMATIC must request DPR 1.6');
+    assert((tierProbe?.rendererPixelRatio??99)<=1.6001,'MAX CINEMATIC effective DPR must not exceed 1.6');
+    assert.equal(rendering.msaaSamples,0,'MAX CINEMATIC offscreen target must use zero MSAA samples');
+    assert.equal(rendering.shadowMapsEnabled,false,'MAX CINEMATIC must spend the shadow-map budget on cinematic/contact techniques');
+    assert.equal(cinematic.depthOfField,false,'DOF must stay off during normal high-speed gameplay');
+    assert.equal(cinematic.depthOfFieldMode,'cinematic','DOF must remain context-controlled');
+    assert.equal(tierProbe?.qualitySettings?.contactShadows,true,'MAX CINEMATIC rider contact shadow must be configured');
+    assert.equal(rendering.renderPath,cinematic.enabled?'cinematic-composer':'direct','diagnostics must reflect the actual presentation path');
+
+    if(cinematic.enabled){
+      assert.equal(cinematic.failed,false,'active cinematic composition cannot also be failed');
+      assert(['half-float','unsigned-byte-fallback'].includes(cinematic.renderTargetType),'cinematic target must be capability-selected');
+      if(capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&capabilities.depthTextureRenderable){
+        assert.equal(cinematic.ambientOcclusion,true,'verified HalfFloat + depth support should enable GTAO');
+        assert.equal(cinematic.aoType,'GTAO','MAX CINEMATIC must use GTAO rather than legacy SSAO');
+        assert.equal(cinematic.aoResolutionScale,.5,'MAX CINEMATIC GTAO must run at half resolution');
+        assert.equal(cinematic.volumetricFog,true,'verified GTAO depth should enable reduced-resolution atmosphere');
+        assert.equal(cinematic.volumetricResolutionScale,.5,'MAX CINEMATIC atmosphere must be half resolution');
+      }
+      if(capabilities.halfFloatRenderable&&capabilities.halfFloatLinear){
+        assert(Math.abs((cinematic.bloomStrength??0)-.65)<.001,'MAX CINEMATIC bloom strength drifted');
+        assert(Math.abs((cinematic.bloomRadius??0)-.48)<.001,'MAX CINEMATIC bloom radius drifted');
+        assert(Math.abs((cinematic.bloomThreshold??0)-1.60)<.001,'MAX CINEMATIC bloom threshold drifted');
+      }
+      assert.equal(cinematic.colorGrading,true,'compatible MAX CINEMATIC composition must retain LUT grading');
+      assert.equal(cinematic.sharpenEnabled,true,'compatible MAX CINEMATIC composition must retain sharpening');
+      assert(cinematic.renderTargetMemoryBytes>0,'active composition must report render-target memory');
+    }else{
+      assert.equal(rendering.fallbackActive,true,'unsupported cinematic composition must fail open to direct rendering');
+    }
+
+    const expectedAnisotropy=Math.min(8,Math.max(1,capabilities.maxAnisotropy||8));
+    assert((rendering.materialQuality?.anisotropy??0)>=expectedAnisotropy,'MAX CINEMATIC must use the supported road anisotropy budget');
+  }else if(REQUESTED_QUALITY_PROFILE==='max'){
+    assert.equal(rendering.shadowMapsEnabled,true,'Legacy MAX must retain real shadow maps');
+    assert(rendering.shadowMapSize>=2048,'Legacy MAX must retain the premium directional shadow resolution');
+    assert.equal(rendering.ssaoEnabled,false,'Legacy MAX remains on the production-safe direct-render path');
+    assert((rendering.materialQuality?.anisotropy??0)>=16,'Legacy MAX must retain premium road anisotropy when supported');
   }else if(REQUESTED_QUALITY_PROFILE==='high'){
     assert.equal(rendering.shadowMapsEnabled,true,'HIGH must retain budgeted real shadows');
     assert(rendering.shadowMapSize>=1024&&rendering.shadowMapSize<2048,'HIGH shadow resolution must remain below MAX');
-    assert.equal(rendering.ssaoEnabled,false,'HIGH must not pay the MAX SSAO render cost');
+    assert.equal(rendering.ssaoEnabled,false,'HIGH must not pay the cinematic AO render cost');
   }else{
-    assert.equal(rendering.ssaoEnabled,false,REQUESTED_QUALITY_PROFILE+' must not enable MAX SSAO');
+    assert.equal(rendering.ssaoEnabled,false,REQUESTED_QUALITY_PROFILE+' must not enable cinematic AO');
     assert.equal(rendering.shadowMapsEnabled,false,REQUESTED_QUALITY_PROFILE+' must use lightweight contact grounding instead of real shadow maps');
   }
 
@@ -156,22 +198,40 @@ try{
 
   const restartSamples=[];
   for(let cycle=1;cycle<=4;cycle++){
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(()=>{
-      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.mode==='paused';
-    },null,{timeout:5000});
+    const beforeRestart=await diagnostics(page);
+    if(beforeRestart?.mode==='playing'){
+      // SwiftShader HIGH/MAX can take seconds to present a frame while shadow
+      // maps are active. Retry the real gameplay Escape edge until the update
+      // loop consumes it, rather than treating renderer slowness as a game bug.
+      let pausedOrCrashed=false;
+      for(let attempt=0;attempt<12&&!pausedOrCrashed;attempt++){
+        await page.evaluate(()=>{
+          window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape',key:'Escape'}));
+          window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape',key:'Escape'}));
+        });
+        pausedOrCrashed=await page.waitForFunction(()=>{
+          const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+          return d?.mode==='paused'||d?.mode==='crashed';
+        },null,{timeout:5000}).then(()=>true).catch(()=>false);
+      }
+      assert(pausedOrCrashed,`pause/crash transition was not consumed on restart cycle ${cycle}`);
+    }
     const restarted=await page.evaluate(()=>{
-      const button=document.querySelector('#restart-pause');
-      if(!button||button.disabled)return false;
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      const button=d?.mode==='paused'
+        ?document.querySelector('#restart-pause')
+        :d?.mode==='crashed'
+          ?document.querySelector('#restart-result')
+          :null;
+      if(!button||button.disabled)return {ok:false,mode:d?.mode??null};
       button.click();
-      return true;
+      return {ok:true,mode:d?.mode??null};
     });
-    assert(restarted,`pause restart control unavailable on cycle ${cycle}`);
+    assert(restarted.ok,`restart control unavailable on cycle ${cycle} from mode ${restarted.mode}`);
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.mode==='playing';
-    },null,{timeout:45000});
+    },null,{timeout:120000});
 
     await page.waitForTimeout(1500);
     const afterRestart=await diagnostics(page);

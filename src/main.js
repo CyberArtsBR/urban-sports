@@ -1490,7 +1490,7 @@ function update(dt,frameMs=dt*1000){
     if(steerSign)state.lastSteerSign=steerSign;
 
     const carveStep=nativeSkateboard
-      ?stepSkateboardSteering(state,steer,controlDt,{powered:bananaPower.active,wetness:roadWetness})
+      ?stepSkateboardSteering(state,steer,controlDt,{powered:bananaPower.active,wetness:roadWetness,powerslideIntent:actions.trickModifier&&Math.abs(steer)>.28})
       :stepCarving(state,steer,controlDt);
     if(carveStep?.edgeScrape){
       const edgeFeedback=feedback.onEdgeContact(carveStep.edgeScrape.intensity,state.time);

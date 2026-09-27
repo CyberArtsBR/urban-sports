@@ -138,10 +138,16 @@ assert(main.includes('quality.observeFrame'),'AUTO quality must observe runtime 
 assert(!workflow.includes('$(run_preview'),'workflow must not start a long-lived preview inside command substitution');
 assert(workflow.includes('continue-on-error: true'),'benchmark profiles should preserve partial results');
 assert(workflow.includes('if: always()'),'benchmark artifacts must survive partial profile failures');
-assert(workflow.includes('QUALITY_PROFILE=max'),'performance workflow must benchmark the MAX profile');
-assert(workflow.includes('QUALITY_PROFILE=max-cinematic'),'performance workflow must benchmark MAX CINEMATIC');
-assert(workflow.includes('MAX_OUTCOME'),'performance workflow must enforce the MAX benchmark result');
-assert(workflow.includes('MAX_CINEMATIC_OUTCOME'),'performance workflow must enforce the MAX CINEMATIC benchmark result');
+assert(workflow.includes('matrix:')&&workflow.includes('profile:'),'performance workflow must use a profile matrix');
+for(const profile of ['baseline','high','low','max','max-cinematic']){
+  assert(workflow.includes('- '+profile),'performance workflow matrix must include '+profile);
+}
+assert(workflow.includes('QUALITY_PROFILE="$PROFILE"'),'matrix benchmark must pass the selected non-baseline quality profile to the harness');
+assert(workflow.includes('BENCHMARK_OUTCOME'),'each matrix cell must enforce its own benchmark outcome');
+assert(workflow.includes('actions/download-artifact@v4'),'comparison job must gather all matrix benchmark artifacts');
+assert(workflow.includes('merge-multiple: true'),'comparison job must merge matrix artifacts before analysis');
+assert(workflow.includes('benchmark-max-vs-cinematic.json'),'performance workflow must compare legacy MAX vs MAX CINEMATIC');
+assert(workflow.includes('needs: benchmark'),'comparison job must wait for the complete benchmark matrix');
 assert(graphicsWorkflow.includes('quality: [low, medium, high, max-cinematic, max]'),'graphics browser matrix must exercise legacy MAX and MAX CINEMATIC');
 
 console.log(JSON.stringify({

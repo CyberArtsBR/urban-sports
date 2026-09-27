@@ -47,6 +47,10 @@ input.requestPause();
 assert.equal(input.read(neutralPad).pausePressed,true,'touch pause semantic edge is missing');
 assert.equal(input.read(neutralPad).pausePressed,false,'pause edge repeated after consumption');
 
+input.requestSpecial();
+assert.equal(input.read(neutralPad).specialPressed,true,'touch Banana Power semantic edge is missing');
+assert.equal(input.read(neutralPad).specialPressed,false,'Banana Power edge repeated after consumption');
+
 const main=readFileSync(new URL('../src/main.js',import.meta.url),'utf8');
 const ui=readFileSync(new URL('../src/ui.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../src/style.css',import.meta.url),'utf8');

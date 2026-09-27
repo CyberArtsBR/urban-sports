@@ -272,6 +272,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   let bestCelebrated=false;
   let activeControllerSelector=null;
   let qualityMode='auto';
+  let hapticIntensityCallback=null;
   let qualityOptions=[];
   let qualityCallback=null;
   let cameraViewMode='chase';
@@ -367,8 +368,10 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     }
     if(hapticsButton){
       const enabled=haptics?.isEnabled?.()!==false;
-      hapticsButton.textContent='HAPTICS · '+(enabled?'ON':'OFF');
-      hapticsButton.setAttribute('aria-pressed',String(enabled));
+      const intensity=enabled?(haptics?.getIntensityPreference?.()||'high'):'off';
+      hapticsButton.textContent='HAPTICS · '+String(intensity).toUpperCase();
+      hapticsButton.setAttribute('aria-pressed',String(enabled&&intensity!=='off'));
+      hapticsButton.setAttribute('aria-label','Haptic intensity '+String(intensity));
     }
   }
   function showSettings(origin=null){
@@ -662,7 +665,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
     qualityCallback(qualityMode);
     return true;
   }
-  function configureSettings({cameraView='chase',onCameraViewChange=null,cameraMotion='full',onCameraMotionChange=null,onHapticsChange=null}={}){
+  function configureSettings({cameraView='chase',onCameraViewChange=null,cameraMotion='full',onCameraMotionChange=null,onHapticsChange=null,onHapticIntensityChange=null}={}){
     cameraViewMode=['chase','fixed','high-far','first-person'].includes(String(cameraView).toLowerCase())
       ?String(cameraView).toLowerCase()
       :'chase';
@@ -672,6 +675,7 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
       :'full';
     cameraMotionCallback=typeof onCameraMotionChange==='function'?onCameraMotionChange:null;
     hapticsCallback=typeof onHapticsChange==='function'?onHapticsChange:null;
+    hapticIntensityCallback=typeof onHapticIntensityChange==='function'?onHapticIntensityChange:null;
     syncSettingsButtons();
   }
   function setCameraViewMode(mode='chase'){
@@ -809,10 +813,15 @@ export function createGameUI({audio,haptics,onStart,onPause,onResume,onRestart,o
   cameraViewButton?.addEventListener('click',cycleCameraView);
   cameraMotionButton?.addEventListener('click',cycleCameraMotion);
   hapticsButton?.addEventListener('click',()=>{
-    const next=!(haptics?.isEnabled?.()!==false);
-    haptics?.setEnabled?.(next);
+    const options=['off','low','medium','high'];
+    const enabled=haptics?.isEnabled?.()!==false;
+    const current=enabled?(haptics?.getIntensityPreference?.()||'high'):'off';
+    const next=options[(Math.max(0,options.indexOf(current))+1)%options.length];
+    haptics?.setIntensityPreference?.(next);
+    haptics?.setEnabled?.(next!=='off');
     syncSettingsButtons();
-    hapticsCallback?.(next);
+    hapticIntensityCallback?.(next);
+    hapticsCallback?.(next!=='off');
   });
   howToPlayButton?.addEventListener('click',()=>{
     hideSettings();

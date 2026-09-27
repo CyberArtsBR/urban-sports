@@ -131,6 +131,10 @@ assert(touch.includes('pointercancel')&&touch.includes('setPointerCapture'),'tou
 assert(main.includes('configureControllerInput({deadzone:userPreferences.controllerDeadzone})'),'saved controller deadzone is not applied');
 assert(main.includes('gameplayInput.setSteeringSensitivity?.(userPreferences.steeringSensitivity)'),'saved steering sensitivity is not applied');
 assert(main.includes('ui.updateControllerConnection?.(pad)'),'controller status is not polled across screens');
+assert(main.includes('sessionTutorialPreviousFocus=document.activeElement'),'tutorial does not preserve previous focus');
+assert(main.includes('sessionTutorialRoot.tabIndex=-1'),'tutorial modal cannot receive programmatic focus');
+assert(main.includes("focusTarget?.isConnected&&!focusTarget.disabled&&!focusTarget.closest?.('[hidden]')"),'tutorial focus restoration is not guarded');
+assert(main.includes('sessionTutorialRoot.focus({preventScroll:true})'),'tutorial modal does not claim focus when opened');
 assert(main.includes('localization=createLocalization'),'shared localization runtime is missing');
 assert(main.includes('applyAccessibilityPreferences'),'accessibility settings are not applied');
 assert(main.includes('sportMode:selectedSportMode'),'results still receive a legacy Ski ride identity');

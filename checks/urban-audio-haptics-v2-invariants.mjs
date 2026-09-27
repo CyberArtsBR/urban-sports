@@ -143,6 +143,8 @@ assert(facadeSource.includes("addListener(globalThis.navigator?.mediaDevices,'de
 assert(facadeSource.includes('mixer.suspend()')&&facadeSource.includes('mixer.resume()'),'AudioContext suspension/resume lifecycle missing');
 assert(facadeSource.includes('weather.dispose();world.dispose();music.dispose()'),'Subsystem teardown missing');
 assert(mainSource.includes('consumeSkateboardFeedbackEvents(wet)'),'Native Skateboard events are not consumed by audio/haptics');
+assert(mainSource.includes('new Array(MAX_FORWARDED_SKATEBOARD_EVENTS)'),'Skateboard debug-event mirror is not fixed-capacity');
+assert(!mainSource.includes('forwardedSkateboardEvents.push('),'Skateboard debug-event mirror can grow unbounded');
 assert(mainSource.includes("lower==='grindloop'")&&mainSource.includes('audio:false'),'Grind loop should update sustained state without transient spam');
 assert(mainSource.includes("lower==='powerslideloop'")&&mainSource.includes('audio:false'),'Powerslide loop should update sustained state without transient spam');
 assert(mainSource.includes('audio.dispose?.()'),'Game teardown does not release audio');

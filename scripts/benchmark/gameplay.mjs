@@ -72,9 +72,10 @@ async function clickStart(page){
     return null;
   });
   if(!action)return pending('No enabled start control was available');
-  const selection=action==='start-screen'
-    ?await completeStartSelectionIfNeeded(page)
-    :{status:'PASS',selectionRequired:false};
+  // Both entry points can route back through SELECT_RIDER when no avatar has
+  // been committed yet. Always resolve the post-click state instead of assuming
+  // the menu Start button goes directly to gameplay.
+  const selection=await completeStartSelectionIfNeeded(page);
   if(selection.status!=='PASS')return selection;
   try{
     await page.waitForFunction(()=>{

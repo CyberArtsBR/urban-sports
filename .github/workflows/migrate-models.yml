@@ -2,6 +2,11 @@ name: One-time Chimpion GLB migration
 
 on:
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: Branch that receives migrated GLBs (main is forbidden)
+        required: true
+        default: chore/chimpion-glb-migration
 
 permissions:
   contents: write
@@ -21,6 +26,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22.23.2
+      - name: Refuse direct main mutation
+        env:
+          TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
+        run: |
+          set -euo pipefail
+          test -n "$TARGET_BRANCH"
+          if [ "$TARGET_BRANCH" = "main" ]; then
+            echo "Direct writes to main are forbidden. Use a review branch and PR."
+            exit 1
+          fi
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
@@ -28,6 +43,7 @@ jobs:
       - name: Download and commit GLBs in batches
         env:
           CHIMP_SOURCE_URL: https://chimp-jump.onrender.com
+          TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
         run: |
           TOTAL=$(node -e "console.log(require('./public/avatars.json').length)")
           BATCH=12
@@ -38,7 +54,7 @@ jobs:
             git add public/model/characters
             if ! git diff --cached --quiet; then
               git commit -m "Migrate Chimpion GLBs batch $START [skip ci]"
-              git push origin HEAD:main
+              git push origin "HEAD:$TARGET_BRANCH"
             fi
             START=$((START+BATCH))
           done

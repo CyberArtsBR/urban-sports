@@ -121,6 +121,9 @@ assert(selectorBenchmark.includes('.start-screen-play'),'selector benchmark must
 assert(selectorBenchmark.includes(':not(.is-upload-avatar):not([aria-disabled="true"])'),'selector benchmark must wait for an enabled built-in Chimpion');
 assert(gameplayBenchmark.includes('chimpionsUrbanSports'),'gameplay benchmark must prefer Urban Sports diagnostics');
 assert(gameplayBenchmark.includes('.session-tutorial:not([hidden])'),'gameplay benchmark must deterministically clear the tutorial handoff');
+assert(gameplayBenchmark.includes('START_FLOW_TIMEOUT'),'benchmark must allow the real rider load/start flow to complete under software rendering');
+assert(gameplayBenchmark.includes('[data-sport-mode="skateboard"]'),'benchmark must prefer the Urban sport selector instead of legacy-only ride attributes');
+assert(gameplayBenchmark.includes("!document.querySelector('#chimpion-selector')?.open"),'benchmark must wait for rider selection to finish before timing gameplay');
 assert(core.includes("'max'"),'benchmark quality parser must accept MAX');
 assert(core.includes("'max-cinematic'"),'benchmark quality parser must accept MAX CINEMATIC');
 assert(core.includes('chimpionsUrbanSports'),'benchmark must prefer the Urban Sports diagnostics alias');

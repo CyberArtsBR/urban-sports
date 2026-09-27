@@ -1315,7 +1315,21 @@ function update(dt,frameMs=dt*1000){
       :stepCarving(state,steer,controlDt);
     if(carveStep?.edgeScrape){
       const edgeFeedback=feedback.onEdgeContact(carveStep.edgeScrape.intensity,state.time);
-      if(edgeFeedback?.play)haptics.edgeScrape?.(edgeFeedback.hapticStrength);
+      if(edgeFeedback?.play){
+        haptics.edgeScrape?.(edgeFeedback.hapticStrength);
+        impactVfx.skateEvent?.(
+          {type:'boardScrape',intensity:carveStep.edgeScrape.intensity},
+          {
+            x:state.x,
+            y:Math.max(.10,(state.y||0)+.08),
+            z:player.position.z,
+            direction:Math.sign(state.vx)||1,
+            speed:state.speed,
+            wetness:roadWetness,
+            reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED
+          }
+        );
+      }
     }
     const contactTarget=sampleSkiGround(terrainHeight,state.x,player.position.z-state.travel,state.heading,riderController.trackSpacing);
     dampTerrainContact(contactTarget,state,dt);

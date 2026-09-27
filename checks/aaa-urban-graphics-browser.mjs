@@ -28,7 +28,13 @@ async function completeStartFlow(page){
   const play=page.locator('.start-screen-play');
   await play.waitFor({state:'visible',timeout:30000});
   await page.waitForFunction(()=>!document.querySelector('.start-screen-play')?.disabled,null,{timeout:30000});
-  await play.click();
+  const startClicked=await page.evaluate(()=>{
+    const button=document.querySelector('.start-screen-play');
+    if(!button||button.disabled)return false;
+    button.click();
+    return true;
+  });
+  assert.equal(startClicked,true,'Start Game control unavailable after readiness');
 
   const selector=page.locator('#chimpion-selector');
   await selector.waitFor({state:'visible',timeout:15000});

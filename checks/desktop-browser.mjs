@@ -132,35 +132,8 @@ try{
   assert.equal(await page.locator('.chimpion-card.is-menu-selected').count(),1,'Horizontal selector navigation lost visible state');
   await runChimpion.focus();
   assert.equal(await page.locator('.chimpion-card.is-menu-selected').count(),1,'Keyboard focus did not share the selector visual state');
+  assert.equal(await selector.locator('#skateboard-setup-step:not([hidden])').count(),0,'UI exposed a fake Skateboard setup without a gameplay contract');
   await runChimpion.evaluate(button=>button.click());
-  await page.waitForFunction(()=>{
-    const step=document.querySelector('#ride-mode-step');
-    return !!step&&!step.hidden;
-  },null,{timeout:20000});
-  const activeRideMode=await page.evaluate(()=>
-    (window.chimpionsUrbanSports?.()??window.chimpionsSki?.())?.rideMode||'snowboard'
-  );
-  const rideChoice=selector.locator(`.ride-mode-card[data-ride-mode="${activeRideMode}"]`).first();
-  await rideChoice.waitFor({state:'visible',timeout:10000});
-  await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
-  await assertElementWithinViewport(selector,'ride selector');
-  await assertElementWithinViewport(rideChoice,'urban ride choice');
-  await assertElementWithinViewport(selector.locator('.ride-mode-back'),'ride back');
-
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(()=>document.activeElement?.classList?.contains('chimpion-card'));
-  assert.equal(await selector.locator('#ride-mode-step').isHidden(),true,'Escape/B-style cancel did not return ride selection to avatars');
-  await runChimpion.evaluate(button=>button.click());
-  await page.waitForFunction(()=>{
-    const step=document.querySelector('#ride-mode-step');
-    return !!step&&!step.hidden;
-  },null,{timeout:20000});
-  await rideChoice.waitFor({state:'visible',timeout:10000});
-  await page.waitForFunction(()=>document.activeElement?.classList?.contains('ride-mode-card'));
-  // Focus/navigation semantics were already verified above. Trigger the actual
-  // button handler through DOM click so headless SwiftShader does not make this
-  // release smoke depend on pointer hit-testing or transition stability.
-  await rideChoice.evaluate(button=>button.click());
 
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   // beginRun is scheduled immediately after the async rider selection closes.
@@ -253,8 +226,8 @@ try{
 
   const settingsOverlay=page.locator('#settings-overlay');
   await settingsOverlay.waitFor({state:'visible',timeout:5000});
-  await page.waitForFunction(()=>document.activeElement?.id==='settings-close');
-  assert.equal(await page.locator('#settings-close.is-menu-selected').count(),1,'Settings default focus is not visibly selected');
+  await page.waitForFunction(()=>document.activeElement?.id==='how-to-play');
+  assert.equal(await page.locator('#how-to-play.is-menu-selected').count(),1,'Settings default focus is not visibly selected');
 
   for(const viewport of responsiveViewports){
     await page.setViewportSize({width:viewport.width,height:viewport.height});
@@ -263,25 +236,26 @@ try{
   await page.setViewportSize({width:1440,height:900});
 
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'toggle-music','Settings navigation did not wrap to Music');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'controller-deadzone','Settings navigation missed controller deadzone');
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'music-volume','Settings navigation missed music volume');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'steering-sensitivity','Settings navigation missed steering sensitivity');
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'toggle-sfx','Settings navigation missed SFX');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'toggle-haptics','Settings navigation missed haptics');
   await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'sfx-volume','Settings navigation missed SFX volume');
-  await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'quality-profile','Settings navigation missed quality profile');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'haptics-intensity','Settings navigation missed haptics intensity');
   await page.keyboard.press('ArrowDown');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'camera-view','Settings navigation missed camera view');
   await page.keyboard.press('ArrowDown');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'camera-motion','Settings navigation missed camera motion');
-  await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'toggle-haptics','Settings navigation missed haptics');
 
   const cameraMotionButton=page.locator('#camera-motion');
-  await cameraMotionButton.evaluate(button=>button.click()); // AUTO -> FULL
-  await cameraMotionButton.evaluate(button=>button.click()); // FULL -> REDUCED
+  const initialCameraMotion=await page.evaluate(()=>document.documentElement.dataset.cameraMotion);
+  if(initialCameraMotion==='full'){
+    await cameraMotionButton.evaluate(button=>button.click()); // FULL -> FIXED
+    await cameraMotionButton.evaluate(button=>button.click()); // FIXED -> REDUCED
+  }else if(initialCameraMotion==='fixed'){
+    await cameraMotionButton.evaluate(button=>button.click()); // FIXED -> REDUCED
+  }
   await page.waitForFunction(()=>document.documentElement.dataset.cameraMotion==='reduced');
   const explicitReduced=await settingsOverlay.locator('.settings-card').evaluate(element=>({
     animation:getComputedStyle(element).animationName,
@@ -289,7 +263,7 @@ try{
   }));
   assert.equal(explicitReduced.animation,'none','Explicit Reduced camera motion did not disable settings animation');
   assert(explicitReduced.transition.split(',').every(value=>parseFloat(value)===0),'Explicit Reduced camera motion did not disable transitions');
-  await cameraMotionButton.evaluate(button=>button.click()); // REDUCED -> AUTO
+  await cameraMotionButton.evaluate(button=>button.click()); // REDUCED -> FULL
 
   const hapticsButton=page.locator('#toggle-haptics');
   await hapticsButton.evaluate(button=>button.click());
@@ -350,17 +324,8 @@ try{
     await touchSearch.fill(touchRiderName);
     const touchRider=touchSelector.locator('.chimpion-card:not([aria-disabled="true"])').filter({hasText:touchRiderName}).first();
     await touchRider.waitFor({state:'visible',timeout:10000});
+    assert.equal(await touchSelector.locator('#skateboard-setup-step:not([hidden])').count(),0,'Touch flow exposed a fake setup step');
     await touchRider.evaluate(button=>button.click());
-    await touchPage.waitForFunction(()=>{
-      const step=document.querySelector('#ride-mode-step');
-      return !!step&&!step.hidden;
-    },null,{timeout:20000});
-    const touchRideMode=await touchPage.evaluate(()=>
-      (window.chimpionsUrbanSports?.()??window.chimpionsSki?.())?.rideMode||'snowboard'
-    );
-    const touchRideChoice=touchSelector.locator(`.ride-mode-card[data-ride-mode="${touchRideMode}"]`).first();
-    await touchRideChoice.waitFor({state:'visible',timeout:10000});
-    await touchRideChoice.evaluate(button=>button.click());
     await touchPage.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
     const touchTutorial=touchPage.locator('.session-tutorial:not([hidden])');
     if(await touchTutorial.isVisible().catch(()=>false)){
@@ -388,6 +353,8 @@ try{
 
     const jumpButton=touchPage.locator('#touch-jump');
     assert.equal(await jumpButton.isVisible(),true,'Touch Jump button is not visible during mobile gameplay');
+    const powerButton=touchPage.locator('#touch-special');
+    assert.equal(await powerButton.isVisible(),true,'Touch Banana Power button is not visible during mobile gameplay');
     // Jump pointer lifecycle is covered deterministically by touch-settings-invariants.
     // Keep browser QA focused on layout, steer, cancellation and pause behavior.
 
@@ -404,7 +371,7 @@ try{
     await touchContext.close();
   }
 
-  console.log('PASS desktop browser UI focus / Settings / responsive overlays / reduced motion / leave confirmation / touch pointer gameplay');
+  console.log('PASS desktop browser Urban direct-selection / UI focus / grouped Settings / responsive overlays / reduced motion / leave confirmation / touch pointer gameplay');
 }finally{
   await browser.close();
 }

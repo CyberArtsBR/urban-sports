@@ -60,8 +60,8 @@ function applyUrbanPresentationCopy(localization=defaultLocalization){
   if(title&&title.textContent.trim()!=='CHIMPIONS URBAN SPORTS')title.innerHTML='CHIMPIONS <span>URBAN SPORTS</span>';
   setPresentationText(overlay?.querySelector('.tagline'),'Own the endless street, collect bananas, clear obstacles and keep your line as the run gets faster.');
   setPresentationText(overlay?.querySelector('.tip'),'A / D or LEFT STICK / D-PAD · STEER · SPACE / A · CROSS · JUMP · ESC / START · MENU · PAUSE');
-  const ride=byId('selected-ride-mode');
-  setPresentationText(ride,'SKATEBOARD · STREET READY');
+  const sport=byId('selected-sport-mode');
+  setPresentationText(sport,localization?.t?.('sport.skateboard','SKATEBOARD')||'SKATEBOARD');
   const start=byId('start');
   if(start)start.setAttribute('aria-label','Start skateboarding');
   ensureUrbanSportSelector(overlay,localization);

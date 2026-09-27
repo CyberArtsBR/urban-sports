@@ -147,7 +147,9 @@ assert(mainSource.includes('new Array(MAX_FORWARDED_SKATEBOARD_EVENTS)'),'Skateb
 assert(!mainSource.includes('forwardedSkateboardEvents.push('),'Skateboard debug-event mirror can grow unbounded');
 assert(mainSource.includes("lower==='grindloop'")&&mainSource.includes('audio:false'),'Grind loop should update sustained state without transient spam');
 assert(mainSource.includes("lower==='powerslideloop'")&&mainSource.includes('audio:false'),'Powerslide loop should update sustained state without transient spam');
+assert(mainSource.includes("const audioMode=gameFlow.is(GAME_FLOW.RESULTS)?'results':state.mode;"),'Results mix snapshot is overwritten by the legacy crashed mode');
 assert(mainSource.includes('audio.dispose?.()'),'Game teardown does not release audio');
+assert(facadeSource.includes('if(!hidden&&focused)mixer.resume();'),'Device changes can resume AudioContext while backgrounded');
 assert(mainSource.includes('haptics.setIntensityPreference?.'),'Runtime haptic intensity bridge missing');
 
 console.log(JSON.stringify({

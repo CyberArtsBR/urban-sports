@@ -21,6 +21,11 @@ export function createRiderController({visualRoot,disposeRider=null}={}){
     update?.(frame);
   }
 
+  function resetPose(){
+    rider?.userData?.skateAnimator?.reset?.();
+    return !!rider;
+  }
+
   function snapshot(){
     return {
       riderAttached:!!rider,
@@ -33,7 +38,9 @@ export function createRiderController({visualRoot,disposeRider=null}={}){
       modelForwardAxis:rider?.userData?.modelForwardAxis||'procedural',
       animationState:rider?.userData?.animationState||'unknown',
       animationHooks:rider?.userData?.skateAnimationHooks||null,
-      footPlacementMode:rider?.userData?.skateAnimator?.footPlacementMode||'legacy'
+      footPlacementMode:rider?.userData?.skateAnimator?.footPlacementMode||'legacy',
+      skateStance:rider?.userData?.skateStance||rider?.userData?.skateAnimator?.stanceMode||'regular',
+      animationDiagnostics:rider?.userData?.skateAnimator?.getDiagnostics?.()||null
     };
   }
 
@@ -45,6 +52,7 @@ export function createRiderController({visualRoot,disposeRider=null}={}){
     replace,
     setRideMode,
     updatePose,
+    resetPose,
     snapshot,
     dispose,
     get rider(){return rider;},

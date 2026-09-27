@@ -1,5 +1,18 @@
 export const MAX_LOCAL_GLB_BYTES=50*1024*1024;
+export const MAX_LOCAL_GLB_JSON_BYTES=4*1024*1024;
 export const LOCAL_AVATAR_ID='local-user-glb';
+
+export const LOCAL_GLB_CONTAINER_LIMITS=Object.freeze({
+  nodes:800,
+  meshes:160,
+  materials:128,
+  textures:96,
+  images:96,
+  accessors:1600,
+  bufferViews:1600,
+  animations:32,
+  animationChannels:1200
+});
 
 export const LOCAL_GLB_COMPLEXITY_LIMITS=Object.freeze({
   vertices:500000,
@@ -26,21 +39,119 @@ export function isUploadAvatarAction(entry){
   return entry?.id===UPLOAD_AVATAR_ACTION.id||entry?.localUploadAction===true;
 }
 
-export async function validateLocalGlbFile(file,{maxBytes=MAX_LOCAL_GLB_BYTES}={}){
+const GLB_MAGIC=0x46546c67;
+const GLB_VERSION=2;
+const GLB_JSON_CHUNK=0x4e4f534a;
+const ACCESSOR_COMPONENT_TYPES=new Set([5120,5121,5122,5123,5125,5126]);
+const ACCESSOR_TYPES=new Set(['SCALAR','VEC2','VEC3','VEC4','MAT2','MAT3','MAT4']);
+
+function localGlbError(message,code){
+  const error=new Error(message);
+  error.code=code;
+  return error;
+}
+
+function boundedArrayLength(json,key,limit,label=key){
+  const value=json?.[key];
+  if(value==null)return 0;
+  if(!Array.isArray(value))throw localGlbError('Malformed GLB JSON: '+label+' must be an array.','LOCAL_GLB_MALFORMED_JSON');
+  if(value.length>limit)throw localGlbError('This local GLB declares too many '+label+' ('+value.length+', limit '+limit+').','LOCAL_GLB_CONTAINER_TOO_COMPLEX');
+  return value.length;
+}
+
+export function inspectLocalGlbJson(json,{limits=LOCAL_GLB_CONTAINER_LIMITS}={}){
+  if(!json||typeof json!=='object'||Array.isArray(json))throw localGlbError('Malformed GLB JSON document.','LOCAL_GLB_MALFORMED_JSON');
+
+  const stats={
+    nodes:boundedArrayLength(json,'nodes',limits.nodes),
+    meshes:boundedArrayLength(json,'meshes',limits.meshes),
+    materials:boundedArrayLength(json,'materials',limits.materials),
+    textures:boundedArrayLength(json,'textures',limits.textures),
+    images:boundedArrayLength(json,'images',limits.images),
+    accessors:boundedArrayLength(json,'accessors',limits.accessors),
+    bufferViews:boundedArrayLength(json,'bufferViews',limits.bufferViews),
+    animations:boundedArrayLength(json,'animations',limits.animations),
+    animationChannels:0
+  };
+
+  const externalUris=[];
+  for(const [collectionName,items] of [['buffers',json.buffers],['images',json.images]]){
+    if(items==null)continue;
+    if(!Array.isArray(items))throw localGlbError('Malformed GLB JSON: '+collectionName+' must be an array.','LOCAL_GLB_MALFORMED_JSON');
+    for(const item of items){
+      const uri=typeof item?.uri==='string'?item.uri.trim():'';
+      if(uri&&!/^data:/i.test(uri))externalUris.push({collection:collectionName,uri});
+    }
+  }
+  if(externalUris.length){
+    throw localGlbError('Local GLB files must be self-contained and cannot reference external URIs.','LOCAL_GLB_EXTERNAL_URI');
+  }
+
+  for(const [index,accessor] of (json.accessors||[]).entries()){
+    if(!accessor||typeof accessor!=='object')throw localGlbError('Malformed accessor '+index+'.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(!ACCESSOR_COMPONENT_TYPES.has(accessor.componentType))throw localGlbError('Malformed accessor '+index+': unsupported componentType.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(!ACCESSOR_TYPES.has(accessor.type))throw localGlbError('Malformed accessor '+index+': unsupported type.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(!Number.isInteger(accessor.count)||accessor.count<0)throw localGlbError('Malformed accessor '+index+': invalid count.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(accessor.bufferView!=null&&(!Number.isInteger(accessor.bufferView)||accessor.bufferView<0||accessor.bufferView>=stats.bufferViews)){
+      throw localGlbError('Malformed accessor '+index+': invalid bufferView.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    }
+    if(accessor.byteOffset!=null&&(!Number.isInteger(accessor.byteOffset)||accessor.byteOffset<0)){
+      throw localGlbError('Malformed accessor '+index+': invalid byteOffset.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    }
+  }
+
+  for(const animation of json.animations||[]){
+    const channels=Array.isArray(animation?.channels)?animation.channels:[];
+    const samplers=Array.isArray(animation?.samplers)?animation.samplers:[];
+    stats.animationChannels+=channels.length;
+    if(stats.animationChannels>limits.animationChannels){
+      throw localGlbError('This local GLB declares too many animation channels ('+stats.animationChannels+', limit '+limits.animationChannels+').','LOCAL_GLB_CONTAINER_TOO_COMPLEX');
+    }
+    for(const channel of channels){
+      const sampler=channel?.sampler;
+      if(!Number.isInteger(sampler)||sampler<0||sampler>=samplers.length){
+        throw localGlbError('Malformed animation channel sampler.','LOCAL_GLB_MALFORMED_ANIMATION');
+      }
+    }
+  }
+
+  return stats;
+}
+
+export async function validateLocalGlbFile(file,{maxBytes=MAX_LOCAL_GLB_BYTES,maxJsonBytes=MAX_LOCAL_GLB_JSON_BYTES,containerLimits=LOCAL_GLB_CONTAINER_LIMITS}={}){
   const name=String(file?.name||'');
   const size=Number(file?.size)||0;
   if(!/\.glb$/i.test(name))throw new Error('Choose a .glb file.');
-  if(size<12)throw new Error('This GLB is empty or incomplete.');
+  if(size<20)throw new Error('This GLB is empty or incomplete.');
   if(size>maxBytes)throw new Error('This GLB is too large. Maximum size is '+Math.round(maxBytes/1048576)+' MB.');
   if(typeof file?.slice!=='function')throw new Error('The selected file cannot be read.');
 
-  const header=await file.slice(0,12).arrayBuffer();
-  if(header.byteLength<12)throw new Error('This GLB is incomplete.');
-  const view=new DataView(header);
-  if(view.getUint32(0,true)!==0x46546c67)throw new Error('Invalid GLB file header.');
-  if(view.getUint32(4,true)!==2)throw new Error('Only GLB version 2 is supported.');
+  const prefix=await file.slice(0,20).arrayBuffer();
+  if(prefix.byteLength<20)throw new Error('This GLB is incomplete.');
+  const view=new DataView(prefix);
+  if(view.getUint32(0,true)!==GLB_MAGIC)throw new Error('Invalid GLB file header.');
+  if(view.getUint32(4,true)!==GLB_VERSION)throw new Error('Only GLB version 2 is supported.');
   if(view.getUint32(8,true)!==size)throw new Error('The GLB file length does not match its header.');
-  return {name,size};
+
+  const jsonLength=view.getUint32(12,true);
+  const jsonType=view.getUint32(16,true);
+  if(jsonType!==GLB_JSON_CHUNK)throw localGlbError('The GLB JSON chunk is missing or malformed.','LOCAL_GLB_MALFORMED_JSON');
+  if(jsonLength<=0||jsonLength>maxJsonBytes){
+    throw localGlbError('The GLB JSON chunk is too large or invalid. Maximum JSON size is '+Math.round(maxJsonBytes/1048576)+' MB.','LOCAL_GLB_JSON_TOO_LARGE');
+  }
+  if(20+jsonLength>size)throw localGlbError('The GLB JSON chunk length exceeds the file length.','LOCAL_GLB_MALFORMED_JSON');
+
+  const jsonBuffer=await file.slice(20,20+jsonLength).arrayBuffer();
+  if(jsonBuffer.byteLength!==jsonLength)throw localGlbError('The GLB JSON chunk is incomplete.','LOCAL_GLB_MALFORMED_JSON');
+  let json;
+  try{
+    const text=new TextDecoder().decode(jsonBuffer).replace(/\u0000+$/g,'').trim();
+    json=JSON.parse(text);
+  }catch{
+    throw localGlbError('The GLB JSON chunk cannot be parsed.','LOCAL_GLB_MALFORMED_JSON');
+  }
+  const containerStats=inspectLocalGlbJson(json,{limits:containerLimits});
+  return {name,size,jsonBytes:jsonLength,containerStats};
 }
 
 function textureSize(texture){

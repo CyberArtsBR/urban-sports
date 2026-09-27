@@ -1468,7 +1468,7 @@ function update(dt,frameMs=dt*1000){
       crashType:state.crashVisualCause||state.crashType||'',
       reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED,
       roadWetness,
-      roadRoughness:roadWetness>.2?.16:.28
+      roadRoughness:roadWetness>.2 ? .16 : .28
     });
     if(!state.air&&!ridingRamp){
       trailTimer-=dt;
@@ -1659,7 +1659,7 @@ function update(dt,frameMs=dt*1000){
       crashType:state.crashVisualCause||state.crashType||'collision',
       reducedMotion:cameraMotionMode===CAMERA_MOTION.REDUCED,
       roadWetness,
-      roadRoughness:roadWetness>.2?.16:.28
+      roadRoughness:roadWetness>.2 ? .16 : .28
     });
     state.crashVisualX=player.position.x;
     state.crashVisualY=player.position.y;

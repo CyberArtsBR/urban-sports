@@ -237,7 +237,9 @@ export function createAudioMixer({getSettings=()=>({master:.82,sfx:.25,music:.25
       peakRequestedGain,
       bufferCount:buffers.size,
       bufferCountEstimate:buffers.size+(graph?9:0),
-      activeNodeEstimate:persistent+activeTransientSources.size+(graph?18:0)};
+      // Persistent graph: 10 sources + 18 layer filter/gains + 2 music nodes + 9 buses/processors.
+      // Transients use source + gain and may add one StereoPanner, so count the safe upper bound.
+      activeNodeEstimate:graph?39+activeTransientSources.size*3:0};
   }
 
   function dispose(){

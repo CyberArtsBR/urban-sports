@@ -28,7 +28,8 @@ export function loadUserPreferences(){
     quality:normalizedChoice(readUrbanSetting('quality','auto'),['auto','high','max','medium','low'],'auto'),
     cameraMotion:normalizedChoice(readUrbanSetting('cameraMotion',CAMERA_MOTION.FULL),Object.values(CAMERA_MOTION),CAMERA_MOTION.FULL),
     cameraView:normalizedChoice(readUrbanSetting('cameraView',CAMERA_VIEW.CHASE),Object.values(CAMERA_VIEW),CAMERA_VIEW.CHASE),
-    haptics:readUrbanSetting('haptics','1')!=='0'
+    haptics:readUrbanSetting('haptics','1')!=='0',
+    hapticIntensity:normalizedChoice(readUrbanSetting('hapticIntensity','high'),['off','low','medium','high'],'high')
   };
 }
 
@@ -53,6 +54,9 @@ export function saveCameraViewPreference(mode){
 }
 export function saveHapticsPreference(enabled){
   return writeUrbanSetting('haptics',enabled?1:0);
+}
+export function saveHapticIntensityPreference(intensity){
+  return writeUrbanSetting('hapticIntensity',normalizedChoice(intensity,['off','low','medium','high'],'high'));
 }
 export function loadBestScore(fallback=0){
   const value=Number(readUrbanSetting('best',fallback));

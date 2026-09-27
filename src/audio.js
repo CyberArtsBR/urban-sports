@@ -1,694 +1,248 @@
 import {SKI_TUNING} from './gameplayTuning.js';
 import {DEFAULT_RIDE_MODE,getRideAudioProfile,getRideSpeedFeel,normalizeRideMode} from './rideAudioProfile.js';
 import {createTrickAudioState,getTrickFailProfile,getTrickStartProfile,getTrickSuccessProfile} from './trickAudio.js';
-import {getSkateContinuousMix,getSkateEventCue,normalizeSkateQualityProfile,normalizeSkateSurface} from './skateAudioProfile.js';
+import {getSkateEventCue} from './skateAudioProfile.js';
 import {calculateCarveFeedback} from './gameFeelFeedback.js';
-import {migrateUrbanPersistence,readUrbanSetting,writeUrbanSetting} from './urbanPersistence.js';
+import {createAudioMixer} from './audio/AudioMixer.js';
+import {createAudioEventRouter} from './audio/AudioEventRouter.js';
+import {loadAudioSettings,writeAudioSetting,getAudioStorageDiagnostics} from './audio/AudioPersistence.js';
+import {createSkateboardAudio} from './audio/SkateboardAudio.js';
+import {createWeatherAudio} from './audio/WeatherAudio.js';
+import {createWorldAudio} from './audio/WorldAudio.js';
+import {createMusicSystem,URBAN_MUSIC_URL} from './audio/MusicSystem.js';
+import {getUIAudioCue} from './audio/UIAudio.js';
 
-const clamp=(value,min=0,max=1)=>Math.max(min,Math.min(max,value));
-const AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext;
+const clamp=(value,min=0,max=1)=>Math.max(min,Math.min(max,Number(value)||0));
+const performanceNow=()=>globalThis.performance?.now?.()??Date.now();
 
+export const AUDIO_ARCHITECTURE=Object.freeze({
+  facade:'AudioEventRouter',
+  mixer:'AudioMixer',
+  skateboard:'SkateboardAudio',
+  world:'WorldAudio',
+  weather:'WeatherAudio',
+  music:'MusicSystem',
+  ui:'UIAudio'
+});
+
+// Historical API name is intentionally retained as a stable facade for the
+// rest of the runtime while the internals are Urban-native and modular.
 export function createSkiAudio(){
-  migrateUrbanPersistence();
-  const JUMP_MUSIC_URL='/audio/music-full.mp3';
-  let context=null;
-  let graph=null;
-  let weatherGraph=null,weatherNoise=null,lastWeatherUpdate=-1;
-  let jumpMusic=null;
-  let jumpMusicReady=false;
-  let jumpMusicFailed=false;
+  const JUMP_MUSIC_URL=URBAN_MUSIC_URL;
+  const settings=loadAudioSettings();
+  const router=createAudioEventRouter();
+  const trickState=createTrickAudioState();
+  const mixer=createAudioMixer({getSettings:()=>settings});
+  const skateboard=createSkateboardAudio({mixer,emitSemantic:(type,payload)=>router.emit(type,payload)});
+  const weather=createWeatherAudio({mixer,emitSemantic:(type,payload)=>router.emit(type,payload)});
+  const world=createWorldAudio({mixer,playEvent:(type,payload={})=>play(type,payload.gain??.2,payload.rate??1,payload.pan??0)});
+  const music=createMusicSystem({mixer,getSettings:()=>settings});
+
   let rideMode=DEFAULT_RIDE_MODE;
-  let pendingState={mode:'menu',speed:SKI_TUNING.BASE_SPEED,baseSpeed:SKI_TUNING.BASE_SPEED,carve:0,edge:0,carveLoad:0,lateralVelocity:0,air:false,grounded:true,groundRoll:0,groundPitch:0,landingGripLoss:0,intensity:0,jumpSource:'',specialActive:false,time:0};
-  let lastClearEventId=0;
-  let lastGoVoiceAt=-Infinity;
-  let lastBananaAt=-Infinity;
-  let bananaChain=0;
-  const activeTransientSources=new Set();
-  const MAX_TRANSIENT_SOURCES=24;
-  let eventDuckUntil=-Infinity;
-  let skateSurface='dry_asphalt';
-  let skateQuality='high';
-  let skateManual='none';
-  let skateDistrict='downtown';
-  let skateGrind={active:false,intensity:0,type:'50-50',surface:'grind_rail'};
-  const skateMixScratch={
-    lowRoll:0,bearing:0,roadHiss:0,wetHiss:0,slide:0,wind:0,city:0,
-    lowFrequency:210,bearingFrequency:1450,roadFrequency:2600,slideFrequency:1850
+  let sportMode='skateboard';
+  let pendingState={
+    mode:'menu',speed:SKI_TUNING.BASE_SPEED,baseSpeed:SKI_TUNING.BASE_SPEED,maxSpeed:SKI_TUNING.MAX_SPEED,
+    carve:0,edge:0,carveLoad:0,lateralVelocity:0,air:false,grounded:true,groundRoll:0,groundPitch:0,
+    landingGripLoss:0,intensity:0,jumpSource:'',specialActive:false,time:0,surface:'dry_asphalt',
+    wetness:0,grip:1,lateralSlip:0,powerslide:0,manual:'none',district:'downtown'
   };
   let lastSemanticFeedback={carve:calculateCarveFeedback(pendingState)};
-  const trickState=createTrickAudioState();
-  const buffers=new Map();
-  const eventLast=new Map();
-  const eventCooldown={
-    banana:.035,jump:.10,ramp:.12,land:.08,hardLand:.13,oil:.18,edgeScrape:.115,clear:.07,crash:.34,deathCry:.85,
-    nearMiss:.14,specialReady:.45,specialActivate:.60,specialEnd:.35,newBest:1,
-    menu:.025,button:.025,countTick:.10,countTickStrong:.10,speedUp:.28,go:.14,
-    trick360Start:.20,trick360Success:.12,trickBackflipStart:.24,trickBackflipSuccess:.14,trickFail:.20,
-    'skate-tail-pop':.075,'skate-nollie-pop':.075,'skate-wheel-land':.07,'skate-hard-land':.12,
-    'skate-slide-start':.10,'skate-slide-loop':.085,'skate-slide-end':.10,
-    'skate-grind-start':.09,'skate-grind-loop':.075,'skate-grind-end':.10,'skate-ledge-scrape':.085,
-    'skate-truck-creak':.16,'skate-trick-flip':.09,'skate-board-air':.10,'skate-trick-fail':.16,
-    'skate-near-miss':.14,'skate-power-ready':.45,'skate-power-start':.55,'skate-power-end':.30
-  };
+  let lastClearEventId=0,lastGoVoiceAt=-Infinity,lastBananaAt=-Infinity,bananaChain=0;
+  let disposed=false,hidden=false,focused=true,deviceChangeCount=0;
+  let updateCpuTotal=0,updateCpuMax=0,updateCpuSamples=0;
+  const removers=[];
 
-  const settings={
-    master:readNumber('master',.82),
-    sfx:readNumber('sfx',.25),
-    music:readNumber('music',.25),
-    sfxEnabled:readBool('sfxEnabled',true),
-    musicEnabled:readBool('musicEnabled',true)
-  };
+  function isSkateboard(){
+    return sportMode==='skateboard'||rideMode==='skateboard';
+  }
 
-  function readNumber(key,fallback){
-    const raw=readUrbanSetting(key,null);
-    if(raw===null)return fallback;
-    const value=Number(raw);
-    return Number.isFinite(value)?clamp(value):fallback;
+  function currentSpeed01(){
+    return clamp(getRideSpeedFeel(pendingState.speed,rideMode));
   }
-  function readBool(key,fallback){
-    const value=readUrbanSetting(key,null);
-    return value===null?fallback:value!=='0';
-  }
-  function write(key,value){
-    writeUrbanSetting(key,value);
-  }
-  function ensureJumpMusic({load=false}={}){
-    if(typeof Audio==='undefined')return null;
-    if(!jumpMusic){
-      try{
-        jumpMusic=new Audio();
-        jumpMusic.loop=true;
-        jumpMusic.preload='none';
-        jumpMusic.volume=0;
-        jumpMusic.src=JUMP_MUSIC_URL;
-        jumpMusic.addEventListener('canplay',()=>{jumpMusicReady=true;jumpMusicFailed=false;applyState(pendingState,true);},{once:true});
-        jumpMusic.addEventListener('error',()=>{jumpMusicFailed=true;jumpMusicReady=false;applyState(pendingState,true);});
-      }catch{jumpMusicFailed=true;return null;}
+
+  function ensureUnlocked(){
+    if(disposed)return false;
+    const ok=mixer.unlock();
+    if(ok){
+      mixer.setLifecycleAudible(!hidden&&focused);
+      mixer.setBusLevels();
     }
-    if(load&&jumpMusic.preload!=='auto'){
-      jumpMusic.preload='auto';
-      try{jumpMusic.load();}catch{}
-    }
-    return jumpMusic;
-  }
-  function syncJumpMusic(mode){
-    const needsMusic=mode==='playing'||mode==='countdown';
-    if(!jumpMusic&&!needsMusic)return false;
-    const media=ensureJumpMusic({load:needsMusic});
-    if(!media)return false;
-    const playing=settings.musicEnabled&&jumpMusicReady&&!jumpMusicFailed;
-    const levelBase=mode==='playing'?.38:mode==='countdown'?.22:mode==='paused'?.08:mode==='crashed'?.07:.16;
-    const level=levelBase*(pendingState.specialActive?.58:1);
-    media.volume=playing?clamp(settings.master*settings.music*level):0;
-    if(playing&&media.paused)media.play().catch(()=>{});
-    if(!playing&&!media.paused)media.pause();
-    return playing;
+    return ok;
   }
 
-  function noiseBuffer(duration=2,seed=92821){
-    const length=Math.ceil(context.sampleRate*duration);
-    const buffer=context.createBuffer(1,length,context.sampleRate);
-    const data=buffer.getChannelData(0);
-    let n=seed>>>0,last=0;
-    for(let i=0;i<length;i++){
-      n=(Math.imul(n,1664525)+1013904223)>>>0;
-      const white=n/4294967296*2-1;
-      last=last*.68+white*.32;
-      data[i]=last*.78+white*.22;
-    }
-    return buffer;
-  }
-  function eventBuffer(type){
-    if(buffers.has(type))return buffers.get(type);
-    const duration={
-      banana:.28,jump:.25,ramp:.34,land:.30,hardLand:.38,oil:.42,edgeScrape:.22,clear:.16,crash:.72,deathCry:1.08,
-      nearMiss:.24,specialReady:.58,specialActivate:.52,specialEnd:.30,newBest:.66,
-      menu:.09,button:.075,countTick:.11,countTickStrong:.14,speedUp:.26,go:.34,
-      trick360Start:.32,trick360Success:.28,trickBackflipStart:.42,trickBackflipSuccess:.36,trickFail:.30
-    }[type]||.18;
-    const length=Math.ceil(context.sampleRate*duration);
-    const buffer=context.createBuffer(1,length,context.sampleRate);
-    const data=buffer.getChannelData(0);
-    let phase=0,phase2=0,seed=311+(type.length*971),smoothNoise=0;
-    for(let i=0;i<length;i++){
-      const t=i/context.sampleRate;
-      const u=t/duration;
-      seed=(Math.imul(seed,1664525)+1013904223)>>>0;
-      const white=seed/4294967296*2-1;
-      smoothNoise=smoothNoise*.62+white*.38;
-      let hz=220,tone=0,noise=0,env=Math.pow(1-u,2.2)*Math.min(1,t/.006);
-      if(type.startsWith('skate-')){
-        const impact=/tail-pop|nollie-pop|wheel-land|hard-land/.test(type);
-        const metal=/grind/.test(type);
-        const slide=/slide|ledge-scrape/.test(type);
-        const power=/power/.test(type);
-        const flip=/trick-flip|board-air/.test(type);
-        hz=impact
-          ?(type==='skate-hard-land'?92:170+260*(1-u))
-          :metal
-            ?620+980*u
-            :slide
-              ?310+210*Math.sin(u*Math.PI*5)
-              :power
-                ?520+760*u
-                :flip?360+540*u:480+330*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*(metal?2.12:1.48))/context.sampleRate;
-        tone=Math.sin(phase)*(impact?.38:power?.42:.16)+Math.sin(phase2)*(metal?.10:power?.12:.04);
-        noise=smoothNoise*(
-          impact
-            ?(type==='skate-hard-land'?.92:.60)
-            :metal?.76:slide?.70:flip?.28:power?.18:.34
-        );
-        env=impact
-          ?Math.pow(1-u,3.0)*Math.min(1,t/.0025)
-          :metal
-            ?Math.pow(1-u,1.35)*Math.min(1,t/.002)
-            :slide
-              ?Math.pow(1-u,1.55)*Math.min(1,t/.003)
-              :Math.pow(1-u,1.8)*Math.min(1,t/.004);
-      }else if(type==='banana'){
-        hz=u<.45?660:990;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
-        tone=Math.sin(phase)*.72+Math.sin(phase2)*.20;
-        env=Math.pow(1-u,1.8)*Math.min(1,t/.008);
-      }else if(type==='jump'){
-        hz=245+390*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.48)/context.sampleRate;
-        tone=Math.sin(phase)*.55+Math.sin(phase2)*.14;
-        noise=smoothNoise*.22;
-        env=Math.pow(1-u,2.0)*Math.min(1,t/.005);
-      }else if(type==='ramp'){
-        hz=190+590*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.48;
-        noise=smoothNoise*.40;
-        env=Math.pow(1-u,1.5)*Math.min(1,t/.008);
-      }else if(type==='land'){
-        hz=105-34*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.68;
-        noise=smoothNoise*.58;
-        env=Math.pow(1-u,3.2)*Math.min(1,t/.003);
-      }else if(type==='hardLand'){
-        hz=88-30*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*.52)/context.sampleRate;
-        tone=Math.sin(phase)*.72+Math.sin(phase2)*.20;
-        noise=smoothNoise*.92;
-        env=Math.pow(1-u,2.45)*Math.min(1,t/.0025);
-      }else if(type==='oil'){
-        hz=240-150*u+Math.sin(u*Math.PI*7)*24;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.18;
-        noise=smoothNoise*(.72+.22*Math.sin(u*Math.PI*5));
-        env=Math.pow(1-u,1.55)*Math.min(1,t/.003);
-      }else if(type==='edgeScrape'){
-        hz=285+105*Math.sin(u*Math.PI*6)+75*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.07;
-        noise=smoothNoise*(.82+.14*Math.sin(u*Math.PI*9));
-        env=Math.pow(1-u,1.85)*Math.min(1,t/.0025);
-      }else if(type==='clear'){
-        hz=610+190*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
-        tone=Math.sin(phase)*.66+Math.sin(phase2)*.16;
-        env=Math.pow(1-u,2.8)*Math.min(1,t/.0025);
-      }else if(type==='nearMiss'){
-        hz=420+760*u+Math.sin(u*Math.PI*3)*90;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.16;
-        noise=smoothNoise*(.58+.18*Math.sin(u*Math.PI));
-        env=Math.pow(Math.sin(Math.PI*u),.72)*Math.min(1,t/.004);
-      }else if(type==='specialReady'){
-        const step=u<.32?0:u<.64?1:2;
-        hz=[560,760,1040][step]+110*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
-        tone=Math.sin(phase)*.62+Math.sin(phase2)*.22;
-        noise=smoothNoise*.045;
-        env=Math.pow(1-u,1.15)*Math.min(1,t/.004);
-      }else if(type==='specialActivate'){
-        hz=920-610*u+Math.sin(u*Math.PI*6)*72;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*.5)/context.sampleRate;
-        tone=Math.sin(phase)*.46+Math.sin(phase2)*.20;
-        noise=smoothNoise*(.34+.24*u);
-        env=Math.pow(Math.sin(Math.PI*u),.50)*Math.min(1,t/.003);
-      }else if(type==='specialEnd'){
-        hz=300+330*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
-        tone=Math.sin(phase)*.48+Math.sin(phase2)*.13;
-        env=Math.pow(1-u,2.0)*Math.min(1,t/.004);
-      }else if(type==='newBest'){
-        hz=430+520*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
-        tone=Math.sin(phase)*.58+Math.sin(phase2)*.24;
-        noise=smoothNoise*.04;
-        env=Math.pow(1-u,1.35)*Math.min(1,t/.004);
-      }else if(type==='crash'){
-        hz=82-26*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.42;
-        noise=smoothNoise*1.18;
-        env=Math.pow(1-u,1.25)*Math.min(1,t/.003);
-      }else if(type==='deathCry'){
-        hz=560-350*u+Math.sin(u*Math.PI*5)*26;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.94)/context.sampleRate;
-        tone=Math.sin(phase)*.62+Math.sin(phase2)*.17;
-        noise=smoothNoise*(.15+.10*u);
-        env=Math.pow(1-u,1.15)*Math.min(1,t/.010)*(0.80+Math.sin(Math.PI*u)*.20);
-      }else if(type==='trick360Start'){
-        hz=230+470*u+Math.sin(u*Math.PI*4)*55;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase)*.18;
-        noise=smoothNoise*(.62+.16*Math.sin(u*Math.PI*6));
-        env=Math.pow(Math.sin(Math.PI*u),.62)*Math.min(1,t/.008);
-      }else if(type==='trickBackflipStart'){
-        hz=150+720*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*.52)/context.sampleRate;
-        tone=Math.sin(phase)*.24+Math.sin(phase2)*.12;
-        noise=smoothNoise*(.82-.18*u);
-        env=Math.pow(Math.sin(Math.PI*u),.48)*Math.min(1,t/.006);
-      }else if(type==='trick360Success'||type==='trickBackflipSuccess'){
-        const backflip=type==='trickBackflipSuccess';
-        hz=(backflip?430:520)+(backflip?520:360)*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*(backflip?1.52:1.5))/context.sampleRate;
-        tone=Math.sin(phase)*.62+Math.sin(phase2)*(backflip?.24:.18);
-        noise=smoothNoise*(backflip?.12:.06);
-        env=Math.pow(1-u,backflip?1.65:2.05)*Math.min(1,t/.004);
-      }else if(type==='trickFail'){
-        hz=120-48*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*.54)/context.sampleRate;
-        tone=Math.sin(phase)*.55+Math.sin(phase2)*.18;
-        noise=smoothNoise*.70;
-        env=Math.pow(1-u,2.25)*Math.min(1,t/.0025);
-      }else if(type==='countTick'||type==='countTickStrong'){
-        hz=type==='countTickStrong'?560:485;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.51)/context.sampleRate;
-        tone=Math.sin(phase)*.72+Math.sin(phase2)*.10;
-        env=Math.pow(1-u,type==='countTickStrong'?2.8:3.4)*Math.min(1,t/.002);
-      }else if(type==='speedUp'){
-        hz=360+420*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*1.5)/context.sampleRate;
-        tone=Math.sin(phase)*.50+Math.sin(phase2)*.12;
-        env=Math.pow(1-u,2.1)*Math.min(1,t/.004);
-      }else if(type==='go'){
-        hz=500+640*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        phase2+=Math.PI*2*(hz*2)/context.sampleRate;
-        // Square-wave harmonics make the launch stinger read like a compact 16-bit arcade cue.
-        tone=Math.sign(Math.sin(phase))*.62+Math.sign(Math.sin(phase2))*.12;
-        noise=smoothNoise*.045;
-        env=Math.pow(1-u,1.42)*Math.min(1,t/.004);
-      }else{
-        hz=type==='button'?620+130*u:470+90*u;
-        phase+=Math.PI*2*hz/context.sampleRate;
-        tone=Math.sin(phase);
-        env=Math.pow(1-u,3.5)*Math.min(1,t/.002);
-      }
-      const scale=type.startsWith('skate-')?.30:type==='crash'?.34:type==='deathCry'?.29:type==='hardLand'?.31:type==='oil'?.25:type==='edgeScrape'?.22:type==='land'?.27:type==='clear'?.20:
-        type==='nearMiss'?.20:type==='specialReady'?.24:type==='specialActivate'?.28:type==='specialEnd'?.18:type==='newBest'?.25:
-        type==='jump'?.24:type==='trickBackflipStart'?.25:type==='trick360Start'?.20:
-        type==='trickBackflipSuccess'?.25:type==='trick360Success'?.22:type==='trickFail'?.27:.22;
-      data[i]=(tone+noise)*env*scale;
-    }
-    buffers.set(type,buffer);
-    return buffer;
-  }
-  function musicBuffer(){
-    if(buffers.has('music-bed'))return buffers.get('music-bed');
-    const duration=12;
-    const length=Math.ceil(context.sampleRate*duration);
-    const buffer=context.createBuffer(2,length,context.sampleRate);
-    const left=buffer.getChannelData(0),right=buffer.getChannelData(1);
-    const chords=[
-      [110,138.59,164.81],
-      [98,123.47,146.83],
-      [87.31,110,130.81],
-      [98,123.47,164.81]
-    ];
-    let seed=83177;
-    for(let i=0;i<length;i++){
-      const t=i/context.sampleRate;
-      const segment=Math.min(3,Math.floor(t/3));
-      const local=(t-segment*3)/3;
-      const chord=chords[segment];
-      const phrase=Math.pow(Math.sin(Math.PI*local),.55);
-      let l=0,r=0;
-      for(let n=0;n<chord.length;n++){
-        const hz=chord[n];
-        const drift=Math.sin(t*.21+n*1.7)*.12;
-        const phase=Math.PI*2*(hz*t+drift);
-        const overtone=Math.sin(phase*2.003)*.16;
-        const voice=Math.sin(phase)+overtone;
-        const pan=(n-1)*.23;
-        l+=voice*(.38-pan*.22);
-        r+=voice*(.38+pan*.22);
-      }
-      const beat=t%1.5;
-      const pluck=Math.exp(-beat*7.2)*Math.sin(Math.PI*2*(220*(1+segment*.055))*t)*.11;
-      seed=(Math.imul(seed,1103515245)+12345)>>>0;
-      const shimmer=(seed/4294967296*2-1)*.008;
-      left[i]=(l*.105*phrase)+pluck+shimmer;
-      right[i]=(r*.105*phrase)+pluck*.82-shimmer;
-    }
-    buffers.set('music-bed',buffer);
-    return buffer;
-  }
-  function makeLoop(buffer){
-    const source=context.createBufferSource();
-    source.buffer=buffer;
-    source.loop=true;
-    return source;
-  }
-  function setTarget(param,value,time=.08){
-    if(!context)return;
-    param.setTargetAtTime(value,context.currentTime,time);
-  }
-  function ensureGraph(){
-    if(graph||!context)return graph;
-    const master=context.createGain();
-    const sfxBus=context.createGain();
-    const musicBus=context.createGain();
-    const continuousBus=context.createGain();
-    const eventBus=context.createGain();
-    const worldFilter=context.createBiquadFilter();
-    const compressor=context.createDynamicsCompressor();
-    worldFilter.type='lowpass';
-    worldFilter.frequency.value=14000;
-    worldFilter.Q.value=.35;
-    compressor.threshold.value=-11;
-    compressor.knee.value=12;
-    compressor.ratio.value=3.2;
-    compressor.attack.value=.004;
-    compressor.release.value=.16;
-    sfxBus.connect(master);
-    musicBus.connect(master);
-    continuousBus.connect(worldFilter);
-    worldFilter.connect(sfxBus);
-    eventBus.connect(sfxBus);
-    master.connect(compressor);
-    compressor.connect(context.destination);
-
-    const contactSource=makeLoop(noiseBuffer(2.4,19531));
-    const contactFilter=context.createBiquadFilter();
-    const contactGain=context.createGain();
-    contactFilter.type='bandpass';
-    contactFilter.Q.value=.55;
-    contactSource.connect(contactFilter);
-    contactFilter.connect(contactGain);
-    contactGain.connect(continuousBus);
-
-    const carveSource=makeLoop(noiseBuffer(2.1,72317));
-    const carveFilter=context.createBiquadFilter();
-    const carveGain=context.createGain();
-    carveFilter.type='bandpass';
-    carveFilter.Q.value=.9;
-    carveSource.connect(carveFilter);
-    carveFilter.connect(carveGain);
-    carveGain.connect(continuousBus);
-
-    const boardScrapeSource=makeLoop(noiseBuffer(2.3,66571));
-    const boardScrapeFilter=context.createBiquadFilter();
-    const boardScrapeGain=context.createGain();
-    boardScrapeFilter.type='bandpass';
-    boardScrapeFilter.Q.value=.48;
-    boardScrapeSource.connect(boardScrapeFilter);
-    boardScrapeFilter.connect(boardScrapeGain);
-    boardScrapeGain.connect(continuousBus);
-
-    const windSource=makeLoop(noiseBuffer(2.7,44963));
-    const windFilter=context.createBiquadFilter();
-    const windGain=context.createGain();
-    windFilter.type='bandpass';
-    windFilter.Q.value=.38;
-    windSource.connect(windFilter);
-    windFilter.connect(windGain);
-    windGain.connect(continuousBus);
-
-    const makeSkateLayer=(seed,frequency,q=.55,type='bandpass')=>{
-      const source=makeLoop(noiseBuffer(2.6,seed));
-      const filter=context.createBiquadFilter();
-      const gain=context.createGain();
-      filter.type=type;
-      filter.frequency.value=frequency;
-      filter.Q.value=q;
-      gain.gain.value=0;
-      source.connect(filter);
-      filter.connect(gain);
-      gain.connect(continuousBus);
-      source.start();
-      return {source,filter,gain};
-    };
-    const skateWheelLow=makeSkateLayer(54121,260,.72);
-    const skateBearing=makeSkateLayer(93481,1700,1.2);
-    const skateRoad=makeSkateLayer(61211,3100,.50,'highpass');
-    const skateWet=makeSkateLayer(71867,2400,.46,'highpass');
-    const skateSlide=makeSkateLayer(82723,1550,.90);
-    const skateCity=makeSkateLayer(44717,430,.42,'lowpass');
-
-    const musicSource=makeLoop(musicBuffer());
-    const musicFilter=context.createBiquadFilter();
-    const musicGain=context.createGain();
-    musicFilter.type='lowpass';
-    musicFilter.frequency.value=1750;
-    musicSource.connect(musicFilter);
-    musicFilter.connect(musicGain);
-    musicGain.connect(musicBus);
-
-    master.gain.value=settings.master;
-    sfxBus.gain.value=settings.sfxEnabled?settings.sfx:0;
-    musicBus.gain.value=settings.musicEnabled?settings.music:0;
-    contactGain.gain.value=0;
-    carveGain.gain.value=0;
-    boardScrapeGain.gain.value=0;
-    windGain.gain.value=0;
-    musicGain.gain.value=0;
-
-    contactSource.start();
-    carveSource.start();
-    boardScrapeSource.start();
-    windSource.start();
-    musicSource.start();
-
-    graph={
-      master,sfxBus,musicBus,continuousBus,eventBus,worldFilter,compressor,
-      contactFilter,contactGain,carveFilter,carveGain,boardScrapeFilter,boardScrapeGain,
-      windFilter,windGain,musicFilter,musicGain,
-      skateWheelLow,skateBearing,skateRoad,skateWet,skateSlide,skateCity,
-      sources:[
-        contactSource,carveSource,boardScrapeSource,windSource,musicSource,
-        skateWheelLow.source,skateBearing.source,skateRoad.source,
-        skateWet.source,skateSlide.source,skateCity.source
-      ]
-    };
-    applyState(pendingState,true);
-    return graph;
-  }
   function unlock(){
-    try{
-      if(!AudioContextClass)return;
-      context??=new AudioContextClass();
-      ensureGraph();
-      if(context.state==='suspended')context.resume().catch(()=>{});
-      if(jumpMusic&&settings.musicEnabled&&jumpMusic.paused)jumpMusic.play().catch(()=>{});
-    }catch{}
+    const ok=ensureUnlocked();
+    music.update(pendingState);
+    return ok;
   }
-  function applyState(state,instant=false){
-    pendingState={...pendingState,...state};
-    if(!graph||!context)return;
+
+  function zeroSkateLayers(){
+    const graph=mixer.getGraph();if(!graph)return;
+    for(const layer of [graph.skateWheelLow,graph.skateBearing,graph.skateRoad,graph.skateWet,graph.skateSlide]){
+      mixer.setTarget(layer.gain.gain,0,.08);
+    }
+  }
+
+  function zeroLegacyRideLayers(){
+    const graph=mixer.getGraph();if(!graph)return;
+    mixer.setTarget(graph.contact.gain.gain,0,.08);
+    mixer.setTarget(graph.carve.gain.gain,0,.08);
+    mixer.setTarget(graph.boardScrape.gain.gain,0,.08);
+  }
+
+  function applyLegacyRide(speed01,carveFeedback,running,countdown){
+    const graph=mixer.getGraph();if(!graph)return;
     const profile=getRideAudioProfile(rideMode);
-    const speed01=getRideSpeedFeel(pendingState.speed,rideMode);
+    const air=!!pendingState.air,carve=carveFeedback.intensity;
+    const rampAir=air&&pendingState.jumpSource==='ramp';
+    const response=.09;
+    const contact=air?0:(running?(0.024+speed01*.058+carve*.032)*profile.contactGain:0);
+    const edge=air?0:(running?carve*(.014+speed01*.072)*profile.carveGain:0);
+    const scrape=air?0:(running?carve*(.010+speed01*.038)*profile.snowboardScrapeGain:0);
+    const airWind=air?(rampAir?.058:.038):0;
+    const wind=(running?(0.014+speed01*.076+airWind):countdown?.006:0)*profile.windGain;
+    mixer.setTarget(graph.contact.gain.gain,contact,response);
+    mixer.setTarget(graph.carve.gain.gain,edge,response);
+    mixer.setTarget(graph.boardScrape.gain.gain,scrape,response);
+    mixer.setTarget(graph.wind.gain.gain,wind,response);
+    mixer.setTarget(graph.contact.filter.frequency,(560+speed01*720+carve*300)*profile.contactFrequencyScale,.12);
+    mixer.setTarget(graph.carve.filter.frequency,(980+carve*1280+speed01*520)*profile.carveFrequencyScale,.10);
+    mixer.setTarget(graph.carve.filter.Q,profile.carveQ,.12);
+    mixer.setTarget(graph.boardScrape.filter.frequency,360+speed01*420+carve*260,.12);
+    mixer.setTarget(graph.wind.filter.frequency,620+speed01*1640+(air?(rampAir?460:300):0),.20);
+  }
+
+  function applyState(next={},instant=false){
+    const started=performanceNow();
+    pendingState={...pendingState,...next};
+    if(disposed)return;
+    if(!mixer.getGraph()){
+      updateCpuSamples++;
+      updateCpuTotal+=Math.max(0,performanceNow()-started);
+      return;
+    }
+    const speed01=currentSpeed01();
     const air=!!pendingState.air;
-    const specialActive=!!pendingState.specialActive;
-    const isSkateboard=rideMode==='skateboard';
     const carveFeedback=calculateCarveFeedback({
       ...pendingState,
       edge:pendingState.edge??pendingState.carve,
       grounded:pendingState.grounded??!air,
       air
     });
-    const carve=carveFeedback.intensity;
     lastSemanticFeedback={...lastSemanticFeedback,carve:carveFeedback};
-    const mode=pendingState.mode||'menu';
-    const running=mode==='playing';
-    const countdown=mode==='countdown';
-    const response=instant?.01:.09;
+    const mode=String(pendingState.mode||'menu').toLowerCase();
+    const running=mode==='playing',countdown=mode==='countdown';
 
-    const rampAir=air&&pendingState.jumpSource==='ramp';
-    const contact=isSkateboard?0:(air?0:(running?(0.024+speed01*.058+carve*.032)*profile.contactGain:0));
-    const edge=isSkateboard?0:(air?0:(running?carve*(.014+speed01*.072)*profile.carveGain:0));
-    const boardScrape=isSkateboard?0:(air?0:(running?carve*(.010+speed01*.038)*profile.snowboardScrapeGain:0));
-    const airWind=air?(rampAir?.058:.038):0;
-    const wind=(running?(0.014+speed01*.076+airWind):countdown?.006:0)*profile.windGain;
-    const musicBase=running?.13:countdown?.07:mode==='paused'?.025:mode==='crashed'?.018:.035;
-    const intensity=clamp(pendingState.intensity??speed01);
-    const usingJumpMusic=syncJumpMusic(mode);
-    skateSurface=normalizeSkateSurface(pendingState.surface??skateSurface);
-    const slideAmount=clamp(Math.max(
-      Number(pendingState.slideAmount)||0,
-      Number(pendingState.landingGripLoss)||0,
-      skateGrind.active?skateGrind.intensity*.18:0
-    ));
-    const manual=pendingState.manual??skateManual;
-    const skateMix=getSkateContinuousMix(
-      speed01,
-      slideAmount,
-      pendingState.wetness||0,
-      air,
-      skateSurface,
-      manual,
-      skateQuality,
-      skateMixScratch
-    );
-    const skateAudible=isSkateboard&&running?1:0;
-    setTarget(graph.skateWheelLow.gain.gain,skateMix.lowRoll*skateAudible,response);
-    setTarget(graph.skateBearing.gain.gain,skateMix.bearing*skateAudible,response);
-    setTarget(graph.skateRoad.gain.gain,skateMix.roadHiss*skateAudible,response);
-    setTarget(graph.skateWet.gain.gain,skateMix.wetHiss*skateAudible,response);
-    setTarget(
-      graph.skateSlide.gain.gain,
-      (skateMix.slide+(skateGrind.active?skateGrind.intensity*.024:0))*skateAudible,
-      .055
-    );
-    setTarget(
-      graph.skateCity.gain.gain,
-      skateMix.city*(isSkateboard&&(running||countdown)?1:0),
-      .35
-    );
-    setTarget(graph.skateWheelLow.filter.frequency,skateMix.lowFrequency,.12);
-    setTarget(graph.skateBearing.filter.frequency,skateMix.bearingFrequency,.10);
-    setTarget(graph.skateRoad.filter.frequency,skateMix.roadFrequency,.12);
-    setTarget(graph.skateSlide.filter.frequency,skateMix.slideFrequency,.08);
-    const districtFrequency=skateDistrict==='industrial'
-      ?300
-      :skateDistrict==='commercial'
-        ?520
-        :skateDistrict==='entertainment'
-          ?610
-          :skateDistrict==='construction'?360:430;
-    setTarget(graph.skateCity.filter.frequency,districtFrequency,.4);
-    setTarget(graph.continuousBus.gain,context.currentTime<eventDuckUntil?.68:1,.045);
+    if(isSkateboard()){
+      zeroLegacyRideLayers();
+      skateboard.update({
+        surface:pendingState.surface,
+        wetness:pendingState.wetness,
+        grip:pendingState.grip,
+        lateralSlip:pendingState.lateralSlip,
+        powerslide:pendingState.powerslide??pendingState.slideAmount,
+        slideAmount:pendingState.slideAmount,
+        landingGripLoss:pendingState.landingGripLoss,
+        landingState:pendingState.landingState,
+        manual:pendingState.manual,
+        district:pendingState.district,
+        air,
+        grind:pendingState.grind
+      },speed01,{running,countdown});
+      const graph=mixer.getGraph();
+      const profile=getRideAudioProfile(rideMode);
+      const airWind=air?.050:0;
+      mixer.setTarget(graph.wind.gain.gain,(running?(.012+speed01*.082+airWind):countdown?.004:0)*profile.windGain,instant?.01:.09);
+      mixer.setTarget(graph.wind.filter.frequency,650+speed01*1500+(air?320:0),.18);
+    }else{
+      zeroSkateLayers();
+      applyLegacyRide(speed01,carveFeedback,running,countdown);
+    }
 
-    setTarget(graph.contactGain.gain,contact,response);
-    setTarget(graph.carveGain.gain,edge,response);
-    setTarget(graph.boardScrapeGain.gain,boardScrape,response);
-    setTarget(graph.windGain.gain,isSkateboard?(skateMix.wind*(running?1:countdown?.24:0)*profile.windGain):wind,response);
-    setTarget(graph.contactFilter.frequency,(560+speed01*720+carve*300)*profile.contactFrequencyScale,.12);
-    setTarget(graph.carveFilter.frequency,(980+carve*1280+speed01*520)*profile.carveFrequencyScale,.10);
-    setTarget(graph.carveFilter.Q,profile.carveQ,.12);
-    setTarget(graph.boardScrapeFilter.frequency,360+speed01*420+carve*260,.12);
-    setTarget(graph.windFilter.frequency,620+speed01*1640+(air?(rampAir?460:300):0),.20);
-    setTarget(graph.worldFilter.frequency,specialActive?1380:14000,specialActive?.08:.22);
-    setTarget(graph.musicFilter.frequency,specialActive?920:1250+intensity*1100,specialActive?.10:.28);
-    // Keep the procedural bed as a graceful fallback if the bundled local Chimp Jump track cannot play.
-    setTarget(graph.musicGain.gain,usingJumpMusic?0:musicBase*(.86+intensity*.14)*(specialActive?.58:1),.35);
+    const graph=mixer.getGraph();
+    if(graph){
+      mixer.setTarget(graph.worldFilter.frequency,pendingState.specialActive?1600:14000,pendingState.specialActive?.10:.22);
+    }
+    world.update({mode,district:pendingState.district||'downtown',speed01,audible:!hidden,time:pendingState.time});
+    music.update({mode,intensity:pendingState.intensity??speed01,specialActive:!!pendingState.specialActive});
+    mixer.updateDucking();
+
+    const elapsed=Math.max(0,performanceNow()-started);
+    updateCpuSamples++;updateCpuTotal+=elapsed;updateCpuMax=Math.max(updateCpuMax,elapsed);
   }
+
   function update(state){applyState(state,false);}
-  function setRideMode(mode){
-    const next=normalizeRideMode(mode);
-    if(next===rideMode)return rideMode;
-    rideMode=next;
-    applyState(pendingState,false);
-    return rideMode;
+
+  function classifyImportantDuck(type){
+    if(type==='crash'||type==='deathCry')return {depth:.30,duration:.20,musicKind:'crash'};
+    if(type==='specialActivate'||type==='skate-power-start')return {depth:.24,duration:.18,musicKind:'bananaPower'};
+    if(type==='newBest')return {depth:.14,duration:.12,musicKind:'results'};
+    return null;
   }
-  function getRideMode(){return rideMode;}
 
   function play(type,gain=1,rateScale=1,pan=0){
-    if(rideMode==='skateboard'){
-      const skateCue=getSkateEventCue(type,{intensity:gain});
+    if(disposed)return false;
+    let sound=String(type||'');
+    const uiCue=getUIAudioCue(sound);
+    if(uiCue){
+      gain=Math.min(Number(gain)||0,uiCue.gain);
+      rateScale*=uiCue.rate;
+    }
+    if(isSkateboard()){
+      const skateCue=getSkateEventCue(sound,{intensity:gain});
       if(skateCue){
-        type=skateCue.sound;
+        sound=skateCue.sound;
         gain*=skateCue.gain;
         rateScale*=skateCue.rate;
       }
     }
-    unlock();
-    if(!context||!graph||!settings.sfxEnabled)return false;
-    const now=context.currentTime;
-    const cooldown=eventCooldown[type]??.035;
-    const last=eventLast.get(type)??-Infinity;
-    if(now-last<cooldown)return false;
-    eventLast.set(type,now);
-    if(activeTransientSources.size>=MAX_TRANSIENT_SOURCES)return false;
-    eventDuckUntil=Math.max(
-      eventDuckUntil,
-      now+(/hard-land|power-start|crash/.test(type)?.18:.07)
-    );
-    const source=context.createBufferSource();
-    activeTransientSources.add(source);
-    const amp=context.createGain();
-    const canPan=Math.abs(pan)>.001&&typeof context.createStereoPanner==='function';
-    const panner=canPan?context.createStereoPanner():null;
-    source.buffer=eventBuffer(type);
-    const variation=type==='go'?0:type==='crash'?.035:type==='deathCry'?.022:type==='banana'?.055:type==='jump'?.04:type==='clear'?.012:
-      type.startsWith('trick')?.012:.03;
-    source.playbackRate.value=clamp(rateScale,.72,1.65)*(1+(Math.random()*2-1)*variation);
-    amp.gain.value=Math.min(1.08,Math.max(0,gain));
-    source.connect(amp);
-    if(panner){
-      panner.pan.value=clamp(pan,-1,1);
-      amp.connect(panner);
-      panner.connect(graph.eventBus);
-    }else{
-      amp.connect(graph.eventBus);
+    const important=classifyImportantDuck(sound)||classifyImportantDuck(type);
+    if(important){
+      mixer.duckImportant(important);
+      music.duck(important.musicKind,important.depth,important.duration);
     }
-    source.onended=()=>{
-      activeTransientSources.delete(source);
-      source.disconnect();
-      amp.disconnect();
-      panner?.disconnect();
-      source.onended=null;
-    };
-    source.start();
-    return true;
+    const played=mixer.playTransient(sound,gain*settings.impactIntensity,rateScale,pan);
+    if(played){
+      if(type==='crash')router.emit('CRASH',{intensity:clamp(gain),source:'game'});
+      if(type==='hardLand'||sound==='skate-hard-land')router.emit('HARD_LANDING',{intensity:clamp(gain),source:'game'});
+    }
+    return played;
   }
+
+  function playSpatialEvent(type,{x=0,listenerX=0,range=18,gain=.35,rate=1,source='world'}={}){
+    const pan=clamp((Number(x)-Number(listenerX))/Math.max(1,Number(range)||18),-1,1);
+    const distance=Math.abs(Number(x)-Number(listenerX));
+    const attenuation=clamp(1-distance/Math.max(1,Number(range)||18),.18,1);
+    return play(type,gain*attenuation,rate,pan)||false;
+  }
+
   function playGoVoice(){
     if(!settings.sfxEnabled)return false;
-    const synth=globalThis.speechSynthesis;
-    const Utterance=globalThis.SpeechSynthesisUtterance;
+    const synth=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance;
     if(!synth||!Utterance)return false;
-    const now=globalThis.performance?.now?.()??Date.now();
-    if(now-lastGoVoiceAt<700)return false;
-    lastGoVoiceAt=now;
+    const now=performanceNow();if(now-lastGoVoiceAt<700)return false;lastGoVoiceAt=now;
     try{
       const utterance=new Utterance('GO!');
-      utterance.lang='en-US';
-      utterance.rate=1.42;
-      utterance.pitch=.86;
-      utterance.volume=clamp(settings.master*settings.sfx*.94);
+      utterance.lang='en-US';utterance.rate=1.42;utterance.pitch=.86;utterance.volume=clamp(settings.master*settings.sfx*.90);
       const voices=synth.getVoices?.()||[];
       utterance.voice=voices.find(voice=>/^en(?:-|_)?US/i.test(voice.lang)&&/(google|microsoft|samantha|daniel|alex|david)/i.test(voice.name))
-        ||voices.find(voice=>/^en/i.test(voice.lang))
-        ||null;
-      synth.speak(utterance);
-      return true;
+        ||voices.find(voice=>/^en/i.test(voice.lang))||null;
+      synth.speak(utterance);return true;
     }catch{return false;}
   }
+
   function playGoCue({allowVoiceFallback=false}={}){
-    // The bundled procedural WebAudio stinger is the deterministic primary cue.
-    // Speech synthesis is optional fallback only because voices/timing vary by platform.
     const chip=play('go',.76,1.0);
     if(chip||!allowVoiceFallback)return chip;
     return playGoVoice();
   }
+
   function playEdgeContact(edgeContactIntensity=0){
-    const amount=clamp(Number(edgeContactIntensity)||0);
+    const amount=clamp(edgeContactIntensity);
     if(amount<.08)return false;
     return play('edgeScrape',.12+amount*.42,.90+amount*.18);
   }
+
   function playClear(clearEvent){
     const id=Number(clearEvent?.id)||0;
     if(!id||id===lastClearEventId)return false;
@@ -696,224 +250,219 @@ export function createSkiAudio(){
     const kind=String(clearEvent?.kind||'');
     if(kind==='near-miss'||kind==='thread'||kind==='risk-banana')return true;
     const chain=Math.max(1,Number(clearEvent?.combo)||1);
-    const pitch=1+Math.min(5,chain-1)*.08;
-    const gain=.22+Math.min(5,chain-1)*.018;
-    play('clear',gain,pitch);
-    return true;
+    return play('clear',.22+Math.min(5,chain-1)*.018,1+Math.min(5,chain-1)*.08);
   }
+
   function playBananaPickup({ready=false}={}){
-    const now=globalThis.performance?.now?.()??Date.now();
-    bananaChain=now-lastBananaAt<=900?Math.min(4,bananaChain+1):0;
-    lastBananaAt=now;
+    const now=performanceNow();
+    bananaChain=now-lastBananaAt<=900?Math.min(4,bananaChain+1):0;lastBananaAt=now;
     return play('banana',ready?.40:.54,1+bananaChain*.035);
   }
+
   function playNearMiss(event={}){
-    const intensity=clamp(Number(event.intensity)||0);
-    const threaded=String(event.kind||'')==='thread';
-    return play('nearMiss',.24+intensity*.20+(threaded?.06:0),.94+intensity*.16+(threaded?.05:0));
+    const intensity=clamp(event.intensity),threaded=String(event.kind||'')==='thread';
+    const played=play('nearMiss',.24+intensity*.20+(threaded?.06:0),.94+intensity*.16+(threaded?.05:0));
+    if(played)router.emit('NEAR_MISS',{intensity,source:'game'});
+    return played;
   }
-  function playBananaReady(){return play('specialReady',.78,1);}
-  function playBananaPowerActivate(){return play('specialActivate',.82,1);}
+
+  function playBananaReady(){
+    const played=play('specialReady',.78,1);
+    if(played)router.emit('BANANA_POWER_READY',{intensity:.8,source:'game'});
+    return played;
+  }
+
+  function playBananaPowerActivate(){
+    const played=play('specialActivate',.82,1);
+    if(played)router.emit('BANANA_POWER_ACTIVATE',{intensity:1,source:'game'});
+    return played;
+  }
   function playBananaPowerEnd(){return play('specialEnd',.42,1);}
   function playNewBest(){return play('newBest',.78,1);}
+
   function playTrickStart(type,eventId){
-    const event=trickState.start(type,eventId);
-    if(!event.play)return false;
+    const event=trickState.start(type,eventId);if(!event.play)return false;
     const cue=getTrickStartProfile(event.type,event.generation);
     return cue?play(cue.sound,cue.gain,cue.rate,cue.pan):false;
   }
+
   function playTrickSuccess(type,combo=1,eventId){
-    const event=trickState.result(type,'success',eventId);
-    if(!event.play)return false;
+    const event=trickState.result(type,'success',eventId);if(!event.play)return false;
     const cue=getTrickSuccessProfile(event.type,combo);
-    return cue?play(cue.sound,cue.gain,cue.rate,cue.pan):false;
+    if(!cue)return false;
+    if(Number(combo)>=3){
+      mixer.duckImportant({depth:.12,duration:.11});
+      music.duck('majorTrick',.16,.13);
+    }
+    return play(cue.sound,cue.gain,cue.rate,cue.pan);
   }
+
   function playTrickFail(type,eventId){
-    const event=trickState.result(type,'fail',eventId);
-    if(!event.play)return false;
+    const event=trickState.result(type,'fail',eventId);if(!event.play)return false;
     const cue=getTrickFailProfile(event.type);
     return cue?play(cue.sound,cue.gain,cue.rate,cue.pan):false;
   }
-  function setSkateSurface(surface){
-    skateSurface=normalizeSkateSurface(surface);
-    pendingState.surface=skateSurface;
-    return skateSurface;
-  }
-
-  function setAudioQualityProfile(profile){
-    skateQuality=normalizeSkateQualityProfile(profile);
-    applyState(pendingState,false);
-    return skateQuality;
-  }
-
-  function updateSkateState(next={}){
-    if(next.surface!=null)setSkateSurface(next.surface);
-    if(next.manual!=null){
-      skateManual=String(next.manual||'none').toLowerCase().replace(/\s+/g,'_');
-      pendingState.manual=skateManual;
-    }
-    if(next.slideAmount!=null)pendingState.slideAmount=clamp(next.slideAmount);
-    if(next.wetness!=null)pendingState.wetness=clamp(next.wetness);
-    if(next.district!=null)skateDistrict=String(next.district||'downtown').toLowerCase();
-    if(next.grind){
-      skateGrind={
-        ...skateGrind,
-        ...next.grind,
-        active:next.grind.active!==false
-      };
-    }
-    applyState(pendingState,false);
-    return {
-      surface:skateSurface,
-      manual:skateManual,
-      district:skateDistrict,
-      grind:{...skateGrind}
-    };
-  }
 
   function playSkateEvent(name,payload={}){
-    const key=String(name||'').replace(/[\s-]+/g,'_').toLowerCase();
-    if(key==='surfacechanged'||key==='surface_changed'){
-      setSkateSurface(payload.surface);
-      return true;
-    }
-    if(key==='powerslideloop'||key==='powerslide_loop'){
-      pendingState.slideAmount=clamp(payload.intensity??payload.amount??.5);
-    }
-    if(key==='powerslideend'||key==='powerslide_end')pendingState.slideAmount=0;
-    if(key==='manualstart'||key==='manual_start'){
-      skateManual=String(payload.type||'manual').toLowerCase().replace(/\s+/g,'_');
-    }
-    if(key==='manualend'||key==='manual_end')skateManual='none';
-    if(
-      key==='grindstart'||key==='grind_start'||
-      key==='grindloop'||key==='grind_loop'
-    ){
-      skateGrind={
-        active:true,
-        intensity:clamp(payload.intensity??.6),
-        type:payload.type||skateGrind.type,
-        surface:payload.surface||skateGrind.surface
-      };
-    }
-    if(key==='grindend'||key==='grind_end'){
-      skateGrind={...skateGrind,active:false,intensity:0};
-    }
-    pendingState.manual=skateManual;
-    const cue=getSkateEventCue(name,payload);
-    applyState(pendingState,false);
-    return cue
-      ?play(cue.sound,cue.gain*(payload.gain??1),cue.rate*(payload.rate??1),payload.pan??0)
-      :false;
+    const cue=skateboard.routeEvent(name,payload);
+    applyState({
+      surface:payload.surface??pendingState.surface,
+      manual:skateboard.diagnostics().manual,
+      slideAmount:/powerslide/i.test(String(name))?clamp(payload.intensity??payload.amount??pendingState.slideAmount):pendingState.slideAmount,
+      grind:skateboard.diagnostics().grind
+    },false);
+    if(payload.audio===false)return !!cue;
+    return cue?mixer.playTransient(cue.sound,cue.gain*(payload.gain??1)*settings.impactIntensity,cue.rate*(payload.rate??1),payload.pan??0):false;
   }
 
-  function stopTransientSources(){
-    for(const source of activeTransientSources){
-      try{source.stop();}catch{}
-      try{source.disconnect();}catch{}
-    }
-    activeTransientSources.clear();
+  function setSkateSurface(surface){
+    const next=skateboard.setSurface(surface);pendingState.surface=next;return next;
+  }
+
+  function setAudioQualityProfile(profile){return skateboard.setQuality(profile);}
+
+  function updateSkateState(next={}){
+    pendingState={...pendingState,...next};
+    if(next.surface!=null)skateboard.setSurface(next.surface);
+    applyState(pendingState,false);
+    return skateboard.diagnostics();
+  }
+
+  function updateWeather(weatherState,mode='playing'){
+    weather.update(weatherState,mode,{audible:!hidden,intensityScale:settings.impactIntensity});
+  }
+
+  function playWeatherThunder(){
+    return weather.playThunder({intensity:.76,intensityScale:settings.impactIntensity});
   }
 
   function resetRun(){
-    lastClearEventId=0;
-    lastGoVoiceAt=-Infinity;
-    lastBananaAt=-Infinity;
-    bananaChain=0;
-    stopTransientSources();
-    eventDuckUntil=-Infinity;
-    skateSurface='dry_asphalt';
-    skateManual='none';
-    skateDistrict='downtown';
-    skateGrind={active:false,intensity:0,type:'50-50',surface:'grind_rail'};
-    pendingState.slideAmount=0;
-    pendingState.wetness=0;
-    pendingState.surface=skateSurface;
-    pendingState.manual=skateManual;
-    trickState.reset();
-    eventLast.clear();
-    pendingState={...pendingState,carve:0,edge:0,carveLoad:0,lateralVelocity:0,air:false,grounded:true,groundRoll:0,groundPitch:0,landingGripLoss:0,intensity:0,jumpSource:'',specialActive:false};
+    lastClearEventId=0;lastGoVoiceAt=-Infinity;lastBananaAt=-Infinity;bananaChain=0;
+    mixer.resetTransientState();trickState.reset();skateboard.reset();weather.reset();world.reset();router.reset();
+    pendingState={...pendingState,carve:0,edge:0,carveLoad:0,lateralVelocity:0,air:false,grounded:true,
+      groundRoll:0,groundPitch:0,landingGripLoss:0,intensity:0,jumpSource:'',specialActive:false,
+      surface:'dry_asphalt',wetness:0,grip:1,lateralSlip:0,powerslide:0,slideAmount:0,manual:'none',grind:null};
     lastSemanticFeedback={carve:calculateCarveFeedback(pendingState)};
-    if(graph&&context)applyState(pendingState,true);
+    if(mixer.getGraph())applyState(pendingState,true);
   }
-  function getSemanticFeedback(){
-    return {carve:{...lastSemanticFeedback.carve}};
+
+  function setRideMode(mode){
+    rideMode=normalizeRideMode(mode);applyState(pendingState,false);return rideMode;
   }
+  function getRideMode(){return rideMode;}
+
+  function setSportMode(mode='skateboard'){
+    sportMode=String(mode||'skateboard').toLowerCase();
+    applyState(pendingState,false);return sportMode;
+  }
+  function getSportMode(){return sportMode;}
+
+  function getSettings(){return {...settings};}
+  function setMasterVolume(value){settings.master=clamp(value);writeAudioSetting('master',settings.master);mixer.setBusLevels();}
+  function setSfxVolume(value){settings.sfx=clamp(value);writeAudioSetting('sfx',settings.sfx);mixer.setBusLevels();}
+  function setMusicVolume(value){settings.music=clamp(value);writeAudioSetting('music',settings.music);mixer.setBusLevels();music.update(pendingState);}
+  function setSfxEnabled(value){settings.sfxEnabled=!!value;writeAudioSetting('sfxEnabled',settings.sfxEnabled?1:0);mixer.setBusLevels();}
+  function setMusicEnabled(value){
+    settings.musicEnabled=!!value;writeAudioSetting('musicEnabled',settings.musicEnabled?1:0);mixer.setBusLevels();
+    if(settings.musicEnabled)unlock();music.update(pendingState);
+  }
+  function setImpactIntensity(value){
+    settings.impactIntensity=clamp(value);writeAudioSetting('impactIntensity',settings.impactIntensity);return settings.impactIntensity;
+  }
+
+  function setMixSnapshot(name){
+    const normalized=String(name||'').toLowerCase();
+    const mode=normalized==='banana power'?'playing':normalized;
+    const specialActive=normalized==='banana power'||normalized==='banana_power';
+    music.update({mode,intensity:pendingState.intensity,specialActive});
+    if(normalized==='results')music.duck('results',.12,.12);
+    return normalized;
+  }
+
+  function getSemanticFeedback(){return {carve:{...lastSemanticFeedback.carve}};}
+  function subscribeSemanticEvents(listener){return router.subscribe(listener);}
+
+  function addListener(target,type,handler,options){
+    if(!target?.addEventListener)return;
+    target.addEventListener(type,handler,options);
+    removers.push(()=>{try{target.removeEventListener(type,handler,options);}catch{}});
+  }
+
+  function handleVisibility(){
+    hidden=!!globalThis.document?.hidden;
+    mixer.setLifecycleAudible(!hidden&&focused);
+    if(hidden){
+      weather.silence();
+      mixer.suspend();
+    }else{
+      mixer.resume();
+      applyState(pendingState,true);
+    }
+  }
+
+  function handleBlur(){focused=false;mixer.setLifecycleAudible(false);}
+  function handleFocus(){focused=true;mixer.setLifecycleAudible(!hidden);if(!hidden)mixer.resume();}
+  function handleDeviceChange(){
+    deviceChangeCount++;
+    if(!hidden&&focused)mixer.resume();
+  }
+  function handlePageHide(event){if(event?.persisted)mixer.suspend();else dispose();}
+
+  const unlockHandler=()=>unlock();
+  addListener(globalThis.document,'pointerdown',unlockHandler,{once:true,capture:true});
+  addListener(globalThis.document,'keydown',unlockHandler,{once:true,capture:true});
+  addListener(globalThis.document,'visibilitychange',handleVisibility);
+  addListener(globalThis.window,'blur',handleBlur);
+  addListener(globalThis.window,'focus',handleFocus);
+  addListener(globalThis.window,'pagehide',handlePageHide);
+  addListener(globalThis.navigator?.mediaDevices,'devicechange',handleDeviceChange);
+
   function getDiagnostics(){
+    const m=mixer.diagnostics(),w=weather.diagnostics(),wa=world.diagnostics(),mu=music.diagnostics(),events=router.diagnostics(),skate=skateboard.diagnostics();
     return {
-      contextState:context?.state??'uninitialized',
-      graphInitialized:!!graph,
-      persistentLoopCount:(graph?.sources?.length||0)+(weatherGraph?2:0),
-      activeTransientCount:activeTransientSources.size,
-      maxTransientCount:MAX_TRANSIENT_SOURCES,
+      ...m,
+      persistentLoopCount:m.persistentLoopCount+w.persistentLoopCount+wa.persistentLoopCount,
+      bufferCountEstimate:(m.bufferCountEstimate??m.bufferCount)+w.bufferCount+wa.bufferCount,
+      activeNodeEstimate:m.activeNodeEstimate+w.activeNodeEstimate+wa.activeNodeEstimate,
+      activeEnvironmentalTransientCount:w.activeThunderCount,
       rideAudioMode:rideMode,
-      skateSurface,
-      skateQuality,
-      skateManual,
-      skateDistrict,
-      grindActive:skateGrind.active,
-      bufferCount:buffers.size,
-      recentEventCount:eventLast.size,
-      jumpMusicInitialized:!!jumpMusic,
-      jumpMusicReady,
-      jumpMusicFailed,
-      jumpMusicPreload:jumpMusic?.preload||'none',
+      sportMode,
+      skateSurface:skate.surface,
+      skateQuality:skate.quality,
+      skateManual:skate.manual,
+      skateDistrict:skate.district,
+      grindActive:skate.grind.active,
+      weather:w,
+      world:wa,
+      music:mu,
+      semanticEvents:events,
+      storage:getAudioStorageDiagnostics(),
+      updateCpuMs:{average:updateCpuSamples?updateCpuTotal/updateCpuSamples:0,max:updateCpuMax,samples:updateCpuSamples},
+      deviceChangeCount,
+      lifecycle:{hidden,focused,disposed},
+      jumpMusicInitialized:mu.mediaInitialized,
+      jumpMusicReady:mu.mediaReady,
+      jumpMusicFailed:mu.mediaFailed,
+      jumpMusicPreload:mu.mediaPreload,
       goCue:'procedural-web-audio'
     };
   }
-  function refreshBuses(){
-    if(!graph)return;
-    setTarget(graph.master.gain,settings.master,.04);
-    setTarget(graph.sfxBus.gain,settings.sfxEnabled?settings.sfx:0,.04);
-    setTarget(graph.musicBus.gain,settings.musicEnabled?settings.music:0,.08);
-    syncJumpMusic(pendingState.mode||'menu');
-  }
-  function setMasterVolume(value){
-    settings.master=clamp(Number(value)||0);write('master',settings.master);refreshBuses();
-  }
-  function setSfxVolume(value){
-    settings.sfx=clamp(Number(value)||0);write('sfx',settings.sfx);refreshBuses();
-  }
-  function setMusicVolume(value){
-    settings.music=clamp(Number(value)||0);write('music',settings.music);refreshBuses();
-  }
-  function setSfxEnabled(value){
-    settings.sfxEnabled=!!value;write('sfxEnabled',settings.sfxEnabled?1:0);refreshBuses();
-  }
-  function setMusicEnabled(value){
-    settings.musicEnabled=!!value;write('musicEnabled',settings.musicEnabled?1:0);refreshBuses();
-    if(settings.musicEnabled)unlock();
-  }
-  function getSettings(){return {...settings};}
 
-  function updateWeather(weather,mode='playing'){
-    if(!graph||!context)return;
-    if(!weatherGraph){
-      weatherNoise=noiseBuffer(3.8,32941);
-      const layer=(type,frequency)=>{const source=makeLoop(weatherNoise),filter=context.createBiquadFilter(),gain=context.createGain();filter.type=type;filter.frequency.value=frequency;filter.Q.value=.4;gain.gain.value=0;source.connect(filter);filter.connect(gain);gain.connect(graph.sfxBus);source.start();return gain;};
-      weatherGraph={rain:layer('highpass',1400),wind:layer('lowpass',420)};
-    }
-    const stamp=context.currentTime;if(stamp-lastWeatherUpdate<.12)return;lastWeatherUpdate=stamp;
-    const audible=globalThis.document?.hidden||mode==='paused'?0:1;
-    setTarget(weatherGraph.rain.gain,weather.rain*.13*audible,.3);setTarget(weatherGraph.wind.gain,weather.wind*.05*audible,.5);
+  function dispose(){
+    if(disposed)return;disposed=true;
+    while(removers.length){try{removers.pop()?.();}catch{}}
+    try{globalThis.speechSynthesis?.cancel?.();}catch{}
+    weather.dispose();world.dispose();music.dispose();skateboard.reset();router.reset();mixer.dispose();
   }
-  function playWeatherThunder(){
-    if(!graph||!context||!weatherNoise||!settings.sfxEnabled||globalThis.document?.hidden)return;
-    const source=context.createBufferSource(),filter=context.createBiquadFilter(),gain=context.createGain(),t=context.currentTime;
-    source.buffer=weatherNoise;filter.type='lowpass';filter.frequency.setValueAtTime(400,t);filter.frequency.exponentialRampToValueAtTime(65,t+3.2);
-    gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(1.1,t+.065);gain.gain.exponentialRampToValueAtTime(.22,t+.7);gain.gain.exponentialRampToValueAtTime(.001,t+3.5);
-    source.connect(filter);filter.connect(gain);gain.connect(graph.sfxBus);source.start();source.stop(t+3.6);source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};
-  }
-  document.addEventListener('visibilitychange',()=>{if(document.hidden&&weatherGraph){setTarget(weatherGraph.rain.gain,0,.1);setTarget(weatherGraph.wind.gain,0,.1);}lastWeatherUpdate=-1;});
-
-  document.addEventListener('pointerdown',unlock,{once:true,capture:true});
-  document.addEventListener('keydown',unlock,{once:true,capture:true});
 
   return {
-    updateWeather,playWeatherThunder,play,playGoCue,playEdgeContact,playClear,playBananaPickup,playNearMiss,
+    JUMP_MUSIC_URL,
+    updateWeather,playWeatherThunder,play,playSpatialEvent,playGoCue,playEdgeContact,playClear,playBananaPickup,playNearMiss,
     playBananaReady,playBananaPowerActivate,playBananaPowerEnd,playNewBest,
     playTrickStart,playTrickSuccess,playTrickFail,playSkateEvent,setSkateSurface,updateSkateState,setAudioQualityProfile,
-    resetRun,unlock,update,
-    getSemanticFeedback,getDiagnostics,setRideMode,getRideMode,getSettings,setMasterVolume,setSfxVolume,setMusicVolume,setSfxEnabled,setMusicEnabled
+    resetRun,unlock,update,dispose,setMixSnapshot,
+    getSemanticFeedback,subscribeSemanticEvents,getDiagnostics,
+    setRideMode,getRideMode,setSportMode,getSportMode,getSettings,
+    setMasterVolume,setSfxVolume,setMusicVolume,setSfxEnabled,setMusicEnabled,setImpactIntensity
   };
 }

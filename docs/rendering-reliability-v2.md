@@ -41,10 +41,10 @@ AUTO uses HIGH / MEDIUM / LOW only. It never promotes into MAX or MAX CINEMATIC.
 
 | Failure | Runtime response |
 | --- | --- |
-| HalfFloat framebuffer fails | compatible UnsignedByte target |
+| HalfFloat framebuffer fails or HDR output is invalid | compatible UnsignedByte target; GTAO/bloom/dependent volumetrics stay off, while safe LUT/sharpen can remain |
 | HalfFloat linear filtering fails | HalfFloat nearest may support basic composition; GTAO/bloom remain disabled |
 | Depth texture fails | GTAO and dependent volumetrics disabled |
-| GTAO construction/runtime failure | GTAO disabled |
+| GTAO construction/runtime failure | GTAO disabled; dependent volumetric pass is disabled with it |
 | Bloom construction/runtime failure | bloom disabled |
 | LUT failure | LUT disabled |
 | Volumetric failure | atmosphere/light shafts disabled |

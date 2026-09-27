@@ -247,7 +247,7 @@ function modelFromGlbJson(json){
 
 const avatarAudit=[];
 for(const name of BUILTIN_AVATAR_NAMES){
-  const path=join(process.cwd(),'model','characters',name+'.glb');
+  const path=join(process.cwd(),'public','model','characters',name+'.glb');
   assert.ok(existsSync(path),'missing built-in avatar file: '+name);
   const model=modelFromGlbJson(readGlbJson(path));
   const resolution=resolveAvatarRig(model,getAvatarCompatibility(name));

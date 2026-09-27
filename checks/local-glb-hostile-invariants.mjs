@@ -159,6 +159,24 @@ await rejectsCode(
   'malformed accessor bufferView'
 );
 
+await rejectsCode(
+  fileLike(makeGlb({
+    asset:{version:'2.0'},
+    accessors:[{componentType:5126,type:'SCALAR',count:LOCAL_GLB_CONTAINER_LIMITS.accessorElements+1}]
+  })),
+  'LOCAL_GLB_CONTAINER_TOO_COMPLEX',
+  'excessive accessor elements'
+);
+
+await rejectsCode(
+  fileLike(makeGlb({
+    asset:{version:'2.0'},
+    buffers:[{byteLength:LOCAL_GLB_CONTAINER_LIMITS.declaredBufferBytes+1}]
+  })),
+  'LOCAL_GLB_CONTAINER_TOO_COMPLEX',
+  'excessive declared buffer bytes'
+);
+
 const dataUri=await validateLocalGlbFile(fileLike(makeGlb({
   asset:{version:'2.0'},
   images:[{uri:'data:image/png;base64,iVBORw0KGgo='}]
@@ -175,5 +193,7 @@ console.log(JSON.stringify({
   excessiveTextures:true,
   externalUriBlocked:true,
   pathologicalAnimations:true,
-  malformedAccessors:true
+  malformedAccessors:true,
+  excessiveAccessorElements:true,
+  excessiveDeclaredBufferBytes:true
 }));

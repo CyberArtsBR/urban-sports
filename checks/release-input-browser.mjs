@@ -123,7 +123,11 @@ try{
   // results UI, and prove controller confirm restarts from results.
   await pulse(controllerPage,1);
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:5000});
-  const crashTriggered=await controllerPage.evaluate(()=>window.__urbanReleaseTest?.forceCrash?.('test')!==undefined);
+  const crashTriggered=await controllerPage.evaluate(()=>{
+    if(typeof window.__urbanReleaseTest?.forceCrash!=='function')return false;
+    window.__urbanReleaseTest.forceCrash('test');
+    return true;
+  });
   assert.equal(crashTriggered,true,'test-mode crash hook was unavailable');
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='crashed';},null,{timeout:5000});
   const resultsShown=await controllerPage.evaluate(()=>window.__urbanReleaseTest?.showCrashResults?.()===true);

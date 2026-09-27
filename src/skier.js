@@ -6,9 +6,48 @@ import {RIDE_MODE,getRideSpeedFeel,normalizeRideMode} from './rideMode.js';
 import {createSkateboardEquipment} from './skateboardEquipment.js';
 import {createSkateboardAnimator} from './rider/SkateboardAnimator.js';
 import {AvatarCompatibilityError,assertAvatarPlayable,isCatalogAvatarUrl,resolveAvatarRig} from './avatarCompatibility.js';
-import {validateParsedLocalGlb} from './localAvatarUpload.js';
+import {inspectGlbContainerBytes,validateParsedLocalGlb} from './localAvatarUpload.js';
 
 const riderLoader=new GLTFLoader();
+const MAX_RIDER_SOURCE_CACHE_ENTRIES=2;
+const MAX_RIDER_SOURCE_CACHE_BYTES=24*1024*1024;
+const riderSourceCache=new Map();
+let riderSourceCacheBytes=0;
+
+function cacheableRiderUrl(url=''){
+  return isCatalogAvatarUrl(url)&&!/^blob:|^data:/i.test(String(url));
+}
+function touchRiderSourceCache(key,entry){
+  riderSourceCache.delete(key);
+  riderSourceCache.set(key,entry);
+}
+function cacheRiderSource(key,buffer){
+  if(!key||!(buffer instanceof ArrayBuffer)||buffer.byteLength>MAX_RIDER_SOURCE_CACHE_BYTES)return;
+  const existing=riderSourceCache.get(key);
+  if(existing)riderSourceCacheBytes-=existing.bytes;
+  const entry={buffer,bytes:buffer.byteLength};
+  touchRiderSourceCache(key,entry);
+  riderSourceCacheBytes+=entry.bytes;
+  while(riderSourceCache.size>MAX_RIDER_SOURCE_CACHE_ENTRIES||riderSourceCacheBytes>MAX_RIDER_SOURCE_CACHE_BYTES){
+    const oldestKey=riderSourceCache.keys().next().value;
+    const oldest=riderSourceCache.get(oldestKey);
+    riderSourceCache.delete(oldestKey);
+    riderSourceCacheBytes-=oldest?.bytes||0;
+  }
+}
+export function getRiderAssetCacheDiagnostics(){
+  return {
+    entries:riderSourceCache.size,
+    bytes:riderSourceCacheBytes,
+    maxEntries:MAX_RIDER_SOURCE_CACHE_ENTRIES,
+    maxBytes:MAX_RIDER_SOURCE_CACHE_BYTES,
+    policy:'compressed-source-only'
+  };
+}
+export function clearRiderAssetCache(){
+  riderSourceCache.clear();
+  riderSourceCacheBytes=0;
+}
 
 function createAbortError(){
   const error=new Error('Avatar load aborted');
@@ -31,13 +70,26 @@ function resourceBaseUrl(url=''){
     return '';
   }
 }
-async function loadRiderGltf(url,{signal=null}={}){
+async function getRiderSourceBuffer(url,{signal=null}={}){
   throwIfAborted(signal);
+  const key=cacheableRiderUrl(url)?String(url):'';
+  if(key&&riderSourceCache.has(key)){
+    const cached=riderSourceCache.get(key);
+    touchRiderSourceCache(key,cached);
+    return cached.buffer;
+  }
   const requestOptions={signal};
   if(!/^blob:|^data:/i.test(String(url)))requestOptions.cache='force-cache';
   const response=await fetch(url,requestOptions);
   if(!response.ok)throw new Error(`Could not load rider asset (${response.status})`);
   const buffer=await response.arrayBuffer();
+  throwIfAborted(signal);
+  if(key)cacheRiderSource(key,buffer);
+  return buffer;
+}
+async function loadRiderGltf(url,{signal=null}={}){
+  const buffer=await getRiderSourceBuffer(url,{signal});
+  if(/^blob:|^data:/i.test(String(url)))inspectGlbContainerBytes(buffer);
   throwIfAborted(signal);
   const gltf=await riderLoader.parseAsync(buffer,resourceBaseUrl(url));
   if(signal?.aborted){

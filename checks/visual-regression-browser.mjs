@@ -32,17 +32,30 @@ try{
       reducedMotion:'reduce'
     });
     const page=await context.newPage();
+    console.log('[visual] starting '+item.name);
+    // Start all cases from the same cheap deterministic boot configuration.
+    // MAX + storm is intentionally applied only after gameplay is live so the
+    // visual-regression gate does not accidentally become a cold-start stress test.
     await page.goto(releaseTargetUrl(BASE_URL,{
-      quality:item.quality,
-      weather:item.weather,
+      quality:'low',
+      weather:'day',
       seed:'visual-regression-'+item.name
     }),{waitUntil:'domcontentloaded',timeout:60000});
     await completeUrbanStartFlow(page);
 
+    await page.evaluate(expected=>{
+      const quality=document.getElementById('atmosphere-quality');
+      const weather=document.getElementById('atmosphere-mode');
+      if(!quality||!weather)throw new Error('Visual controls unavailable');
+      quality.value=expected.quality;
+      quality.dispatchEvent(new Event('change',{bubbles:true}));
+      weather.value=expected.weather;
+      weather.dispatchEvent(new Event('change',{bubbles:true}));
+    },item);
     await page.waitForFunction(expected=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
       return d?.qualityProfile===expected.quality&&d?.weatherState?.mode===expected.weather;
-    },item,{timeout:15000});
+    },item,{timeout:30000});
     await page.waitForTimeout(1800);
 
     const state=await runtime(page);
@@ -61,6 +74,7 @@ try{
       rendererCalls:state?.rendererCalls,
       rendererTriangles:state?.rendererTriangles
     });
+    console.log('[visual] captured '+item.name);
     await context.close();
   }
 

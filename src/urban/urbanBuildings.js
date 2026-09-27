@@ -55,7 +55,10 @@ function makeMesh(geometry,material,capacity,name){
   const mesh=new THREE.InstancedMesh(geometry,material,capacity);
   mesh.name=name;
   mesh.count=0;
-  mesh.castShadow=true;
+  // Skyline massing is visual context, not a gameplay shadow caster. Keeping
+  // these large instanced batches out of the directional shadow map preserves
+  // the budget for rider, skateboard, nearby obstacles and important vehicles.
+  mesh.castShadow=false;
   mesh.receiveShadow=true;
   mesh.frustumCulled=false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

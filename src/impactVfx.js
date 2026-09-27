@@ -239,6 +239,19 @@ export function createImpactVfx({scene,capacity=224}={}){
     if(type==='manualEnd'&&String(event.reason||'')==='balance'){
       return emitCloud({...common,kind:RIDER_VFX_KIND.SPARK,severity:.55,amount:4,spread:1.4,vertical:.65,life:.20,size:2.8,alpha:.74});
     }
+    if(type==='boardScrape'){
+      return emitCloud({
+        ...common,
+        kind:RIDER_VFX_KIND.SPARK,
+        severity:.55+eventIntensity*.30,
+        amount:5,
+        spread:1.6,
+        vertical:.72,
+        life:.22,
+        size:3.0,
+        alpha:.80
+      });
+    }
     return 0;
   }
 

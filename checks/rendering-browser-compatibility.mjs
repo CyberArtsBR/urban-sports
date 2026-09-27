@@ -25,19 +25,25 @@ for(const engine of engines){
   try{
     browser=await engine.launcher.launch(engine.options);
     const context=await browser.newContext({viewport:{width:1024,height:720}});
-    const page=await context.newPage();
     const errors=[];
-    page.on('pageerror',error=>errors.push(String(error?.message||error)));
-    page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
-
     const profiles={};
     for(const quality of ['low','max-cinematic']){
+      // Use a fresh page for each profile. Reusing one WebGL page across a
+      // full navigation can serialize context teardown on headless Firefox and
+      // turn a renderer smoke test into an unrelated lifecycle timeout.
+      const page=await context.newPage();
+      const profileErrors=[];
+      page.on('pageerror',error=>profileErrors.push(String(error?.message||error)));
+      page.on('console',message=>{if(message.type()==='error')profileErrors.push(message.text());});
       await page.goto(target(quality),{waitUntil:'domcontentloaded',timeout:TIMEOUT});
       await page.waitForFunction(()=>{
         const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-        return d?.ready===true&&!!d?.renderingQuality;
+        // Browser-engine compatibility is a rendering initialization check.
+        // Avatar/catalog readiness is covered by the gameplay/browser smokes
+        // and must not gate this engine-level graphics probe.
+        return !!d?.renderingQuality&&!!document.querySelector('canvas');
       },null,{timeout:TIMEOUT});
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(500);
       const d=await page.evaluate(()=>window.chimpionsUrbanSports?.()??window.chimpionsSki?.()??null);
       assert(d,engine.name+' diagnostics unavailable');
       assert.equal(d.qualityProfile,quality,engine.name+' failed requested quality '+quality);
@@ -55,6 +61,8 @@ for(const engine of engines){
         fallbackActive:d.renderingQuality?.fallbackActive,
         capabilities:d.renderingQuality?.cinematic?.capabilities||null
       };
+      errors.push(...profileErrors.map(error=>quality+': '+error));
+      await page.close();
     }
 
     assert.deepEqual(errors,[],engine.name+' emitted JavaScript/console errors');

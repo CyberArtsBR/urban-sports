@@ -132,25 +132,18 @@ try{
   }
 
   for(let i=0;i<RESTART_CYCLES;i++){
-    const restartStateReady=await page.evaluate(()=>{
-      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      if(typeof window.__urbanReleaseTest?.showCrashResults!=='function')return false;
-      if(d?.phase==='PLAYING')window.__urbanReleaseTest.forceCrash('soak-restart');
-      return true;
+    const restartPhase=await page.evaluate(()=>{
+      const hooks=window.__urbanReleaseTest;
+      if(typeof hooks?.forceCrash!=='function'||typeof hooks?.showCrashResults!=='function')return 'HOOKS_UNAVAILABLE';
+      let d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      if(d?.phase==='PLAYING')hooks.forceCrash('soak-restart');
+      d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      if(d?.phase==='CRASHED')hooks.showCrashResults();
+      d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      return d?.phase||'UNKNOWN';
     });
-    assert.equal(restartStateReady,true,'soak restart test hooks are unavailable');
-    await page.waitForFunction(()=>{
-      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.phase==='CRASHED'||d?.phase==='RESULTS';
-    },null,{timeout:5000});
-    await page.evaluate(()=>{
-      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      if(d?.phase==='CRASHED')window.__urbanReleaseTest?.showCrashResults?.();
-    });
-    await page.waitForFunction(()=>{
-      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.phase==='RESULTS';
-    },null,{timeout:5000});
+    assert.equal(restartPhase,'RESULTS','soak could not normalize run to RESULTS before restart; phase='+restartPhase);
+    await page.locator('#result-overlay').waitFor({state:'visible',timeout:5000});
     const restartInvoked=await page.evaluate(()=>{
       const button=document.querySelector('#restart-result');
       if(!button||button.disabled)return false;

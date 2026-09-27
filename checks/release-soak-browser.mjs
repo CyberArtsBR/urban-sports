@@ -134,18 +134,22 @@ try{
   for(let i=0;i<RESTART_CYCLES;i++){
     const restartStateReady=await page.evaluate(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      if(d?.mode==='playing')window.__urbanReleaseTest?.forceCrash?.('soak-restart');
-      return typeof window.__urbanReleaseTest?.showCrashResults==='function';
+      if(typeof window.__urbanReleaseTest?.showCrashResults!=='function')return false;
+      if(d?.phase==='PLAYING')window.__urbanReleaseTest.forceCrash('soak-restart');
+      return true;
     });
     assert.equal(restartStateReady,true,'soak restart test hooks are unavailable');
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.mode==='crashed'||d?.mode==='results';
+      return d?.phase==='CRASHED'||d?.phase==='RESULTS';
     },null,{timeout:5000});
-    await page.evaluate(()=>window.__urbanReleaseTest?.showCrashResults?.());
+    await page.evaluate(()=>{
+      const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
+      if(d?.phase==='CRASHED')window.__urbanReleaseTest?.showCrashResults?.();
+    });
     await page.waitForFunction(()=>{
       const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
-      return d?.mode==='results';
+      return d?.phase==='RESULTS';
     },null,{timeout:5000});
     const restartInvoked=await page.evaluate(()=>{
       const button=document.querySelector('#restart-result');

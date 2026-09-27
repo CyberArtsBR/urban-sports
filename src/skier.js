@@ -872,7 +872,7 @@ export async function loadSkier(url='/models/default.glb',{rideMode=RIDE_MODE.SK
           trickProgress:state.trickProgress??0,
           landing,
           powerslide:state.powerslideAmount??Number(!!state.powerslide),
-          roadRoughness:state.roadRoughness??(Number(state.roadWetness)>0?.16:.28),
+          roadRoughness:state.roadRoughness??(Number(state.roadWetness)>0 ? .16 : .28),
           reducedMotion:!!state.reducedMotion,
           externalPose:!!skateAnimator?.active
         });

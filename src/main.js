@@ -61,6 +61,7 @@ import {createGlobalListenerScope} from './globalListeners.js';
 import {createRiderController} from './riderController.js';
 import {createRuntimeDiagnostics} from './runtimeDiagnostics.js';
 import {createImpactVfx} from './impactVfx.js';
+import {CONTROL_COPY} from './controlCopy.js';
 import {createLocalization} from './localization.js';
 import {applyAccessibilityPreferences} from './uiAccessibility.js';
 
@@ -117,7 +118,7 @@ app.innerHTML=`
         <button class="secondary" id="choose" aria-label="Choose Chimpion" data-i18n="menu.chooseRider" disabled>CHOOSE CHIMPION</button>
         <button class="primary" id="start" aria-label="Start riding" data-i18n="menu.loadingRider" disabled>LOADING CHIMPION…</button>
       </div>
-      <div class="tip">A / D or LEFT STICK / D-PAD · CARVE &nbsp; · &nbsp; SPACE / A · CROSS · JUMP &nbsp; · &nbsp; ESC / START · MENU · PAUSE</div>
+      <div class="tip">${CONTROL_COPY.carve} · STEER &nbsp; · &nbsp; ${CONTROL_COPY.jump} · JUMP &nbsp; · &nbsp; ${CONTROL_COPY.pause} · PAUSE</div>
     </section>
   </div>
 `;
@@ -751,12 +752,12 @@ sessionTutorialRoot.innerHTML=`
       <em>HOW TO PLAY</em>
     </header>
     <div class="session-tutorial-grid">
-      <section><h3><b>1</b> MOVEMENT</h3><div class="tutorial-controls"><kbd>A</kbd><kbd>D</kbd><span>or</span><i>LEFT STICK / D-PAD</i></div><p>Carve left and right to avoid obstacles.</p></section>
-      <section><h3><b>2</b> JUMP + TRICKS</h3><div class="tutorial-controls"><kbd>SPACE</kbd><span>or</span><i class="pad-a">A</i></div><p>Jump ramps and clear hazards.</p><strong class="tutorial-highlight">↑ + JUMP · 360° SPIN &nbsp; ↓ + JUMP · BACKFLIP</strong></section>
-      <section><h3><b>3</b> 🍌 BANANA POWER</h3><p>Collect 10 bananas to charge 1 Banana Power.</p><div class="tutorial-controls"><kbd>Q</kbd><span>or</span><i class="pad-x">X</i><strong>= BULLET TIME</strong></div><p>Bullet Time lasts 3 seconds.</p></section>
-      <section><h3><b>4</b> CAMERA</h3><div class="tutorial-controls"><kbd>E</kbd><span>or</span><i class="pad-y">Y</i><strong>CHANGE VIEW</strong></div><p>Chase · Fixed View · High + Far · First Person</p><div class="tutorial-controls tutorial-motion-row"><kbd>R</kbd><span>or</span><i class="pad-b">B</i><strong>CAMERA MOTION</strong></div><p>Full · Fixed · Reduced</p></section>
+      <section><h3><b>1</b> MOVEMENT</h3><div class="tutorial-controls"><strong>${CONTROL_COPY.carve}</strong></div><p>Steer left and right to avoid obstacles.</p></section>
+      <section><h3><b>2</b> JUMP + TRICKS</h3><div class="tutorial-controls"><strong>${CONTROL_COPY.jump}</strong></div><p>Jump ramps and clear hazards.</p><strong class="tutorial-highlight">↑ + JUMP · 360° SPIN &nbsp; ↓ + JUMP · BACKFLIP</strong></section>
+      <section><h3><b>3</b> 🍌 BANANA POWER</h3><p>Collect 10 bananas to charge 1 Banana Power.</p><div class="tutorial-controls"><strong>${CONTROL_COPY.special} · BULLET TIME</strong></div><p>Bullet Time lasts 3 seconds.</p></section>
+      <section><h3><b>4</b> CAMERA</h3><div class="tutorial-controls"><strong>${CONTROL_COPY.camera} · CHANGE VIEW</strong></div><p>Chase · Fixed · High + Far · First Person</p><div class="tutorial-controls tutorial-motion-row"><strong>${CONTROL_COPY.cameraMotion} · CAMERA MOTION</strong></div><p>Full Motion · Reduced · Fixed</p></section>
       <section><h3><b>5</b> GOAL</h3><p>🌆 Ride as far as possible through the city.</p><p>🚧 Avoid street hazards and construction obstacles.</p><p>🍌 Grab bananas and survive the increasing speed.</p></section>
-      <section><h3><b>6</b> PAUSE</h3><div class="tutorial-controls"><kbd>ESC</kbd><span>or</span><i>START</i></div><p>Pause or resume the run.</p></section>
+      <section><h3><b>6</b> PAUSE</h3><div class="tutorial-controls"><strong>${CONTROL_COPY.pause}</strong></div><p>Pause or resume the run.</p></section>
     </div>
     <footer class="session-tutorial-start">PRESS ANY KEY OR BUTTON TO START</footer>
   </div>

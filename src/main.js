@@ -42,6 +42,7 @@ import {quality,QUALITY_PROFILE_NAMES} from './renderQuality.js';
 import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,createBuiltinAvatarEntry} from './avatarRoster.js';
 import {createPerformanceTelemetry} from './performanceTelemetry.js';
 import {createGpuTimer} from './gpuTimer.js';
+import {createTimingSeries,instrumentShadowMap} from './renderTimings.js';
 import {captureGraphicsDiagnostics} from './graphicsDiagnostics.js';
 import {CAMERA_MOTION,CAMERA_VIEW,loadUserPreferences,saveAvatarPreference,saveCameraMotionPreference,saveCameraViewPreference,saveHapticsPreference,saveQualityPreference,saveRideModePreference} from './userPreferences.js';
 import {GAME_FLOW,createGameFlow} from './gameFlow.js';
@@ -136,6 +137,9 @@ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-per
 renderer.info.autoReset=false;
 const performanceTelemetry=createPerformanceTelemetry();
 const gpuTimer=createGpuTimer(renderer);
+const directRenderTimer=createTimingSeries();
+const shadowRenderTimer=createTimingSeries();
+const restoreShadowInstrumentation=instrumentShadowMap(renderer,shadowRenderTimer);
 let cinematicRendering=null;
 
 function applyRendererResolution(){
@@ -1714,7 +1718,11 @@ function render(now){
   gpuTimer.begin();
   try{
     const composed=cinematicRendering?.active?cinematicRendering.render(dt):false;
-    if(!composed)renderer.render(scene,camera);
+    if(!composed){
+      const directStarted=performance.now();
+      try{renderer.render(scene,camera);}
+      finally{directRenderTimer.record(performance.now()-directStarted);}
+    }
   }finally{
     gpuTimer.end();
   }
@@ -1776,6 +1784,8 @@ window.chimpionsSki=()=>{
       bloomThreshold:cinematicDiagnostics?.bloomThreshold??0,
       cinematic:cinematicDiagnostics,
       gpuFrameTiming:gpuTimer.getDiagnostics(),
+      directRenderCpuTiming:directRenderTimer.getDiagnostics(),
+      shadowCpuTiming:shadowRenderTimer.getDiagnostics(),
       contactShadow:riderContactShadow.getDiagnostics?.()||null,
       anisotropy:urbanEnvironment.materials?.getDiagnostics?.()?.anisotropy??0,
       materialQuality:urbanEnvironment.materials?.getDiagnostics?.()||null,
@@ -1892,6 +1902,7 @@ if(import.meta.hot){
     riderContactShadow.dispose?.();
     cinematicRendering?.dispose?.();
     gpuTimer.dispose?.();
+    restoreShadowInstrumentation?.();
     unsubscribeRendererQuality();
     unsubscribeRendererResolution();
     unsubscribeRuntimeQuality();

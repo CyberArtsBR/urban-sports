@@ -11,8 +11,8 @@ const required=[
   'roadTextureAnisotropy','facadeDetail','weatherDetail','maxExtras'
 ];
 
-assert.deepEqual([...QUALITY_PROFILE_NAMES],['auto','high','max','medium','low'],'quality values changed unexpectedly');
-for(const name of ['high','max','medium','low']){
+assert.deepEqual([...QUALITY_PROFILE_NAMES],['auto','high','max-cinematic','max','medium','low'],'quality values changed unexpectedly');
+for(const name of ['high','max-cinematic','max','medium','low']){
   const settings=QUALITY_PROFILES[name];
   for(const key of required)assert.notEqual(settings[key],undefined,name+' quality missing '+key);
   assert.equal(settings.profile,name);
@@ -24,6 +24,31 @@ for(const name of ['high','max','medium','low']){
 assert(QUALITY_PROFILES.low.dprCap<QUALITY_PROFILES.medium.dprCap);
 assert(QUALITY_PROFILES.medium.dprCap<QUALITY_PROFILES.high.dprCap);
 assert(QUALITY_PROFILES.high.dprCap<QUALITY_PROFILES.max.dprCap,'MAX must extend premium DPR headroom');
+const cinematic=QUALITY_PROFILES['max-cinematic'];
+assert.equal(cinematic.dprCap,1.6,'MAX CINEMATIC must cap DPR at 1.6');
+assert.equal(cinematic.renderTargetType,'half-float','MAX CINEMATIC must request HalfFloat HDR');
+assert.equal(cinematic.msaaSamples,0,'MAX CINEMATIC must disable MSAA');
+assert.equal(cinematic.postResolutionScale,1,'MAX CINEMATIC must keep post at full logical resolution');
+assert.equal(cinematic.bloomEnabled,true);
+assert.equal(cinematic.bloomStrength,.65);
+assert.equal(cinematic.bloomRadius,.48);
+assert.equal(cinematic.bloomThreshold,1.60);
+assert.equal(cinematic.roadTextureAnisotropy,8,'MAX CINEMATIC must target 8x anisotropy');
+assert.equal(cinematic.ambientOcclusion,true,'MAX CINEMATIC must enable AO');
+assert.equal(cinematic.aoResolutionScale,.5,'MAX CINEMATIC AO must be half resolution');
+assert.equal(cinematic.contactShadows,true,'MAX CINEMATIC must enable rider contact shadow');
+assert.equal(cinematic.colorGrading,true,'MAX CINEMATIC must enable LUT grading');
+assert.equal(cinematic.sharpenEnabled,true,'MAX CINEMATIC must enable sharpening');
+assert.equal(cinematic.volumetricFog,true,'MAX CINEMATIC must enable selective volumetrics');
+assert.equal(cinematic.volumetricResolutionScale,.5,'MAX CINEMATIC volumetrics must be reduced resolution');
+assert.equal(cinematic.lightShafts,true,'MAX CINEMATIC must enable selective light shafts');
+assert.equal(cinematic.depthOfField,'cinematic','MAX CINEMATIC DOF must be context-controlled');
+assert.equal(cinematic.riderVisualQuality,'maximum','MAX CINEMATIC must preserve maximum rider detail');
+assert.equal(cinematic.environmentDecorationDensity,1);
+assert.equal(cinematic.distantSceneryDetail,1);
+assert.equal(cinematic.particleDensity,1);
+assert.equal(QUALITY_PROFILES.max.dprCap,2,'legacy MAX must remain available at DPR 2.0');
+assert.equal(QUALITY_PROFILES.max.roadTextureAnisotropy,16,'legacy MAX must retain 16x anisotropy');
 assert(QUALITY_PROFILES.max.shadowMapSize>QUALITY_PROFILES.high.shadowMapSize,'MAX needs a higher-resolution shadow tier');
 assert(QUALITY_PROFILES.max.shadowDistance>QUALITY_PROFILES.high.shadowDistance,'MAX needs a longer high-detail shadow range');
 assert.equal(QUALITY_PROFILES.max.contactAO,true,'MAX must enable contact AO');
@@ -97,6 +122,7 @@ assert(selectorBenchmark.includes(':not(.is-upload-avatar):not([aria-disabled="t
 assert(gameplayBenchmark.includes('chimpionsUrbanSports'),'gameplay benchmark must prefer Urban Sports diagnostics');
 assert(gameplayBenchmark.includes('.session-tutorial:not([hidden])'),'gameplay benchmark must deterministically clear the tutorial handoff');
 assert(core.includes("'max'"),'benchmark quality parser must accept MAX');
+assert(core.includes("'max-cinematic'"),'benchmark quality parser must accept MAX CINEMATIC');
 assert(core.includes('chimpionsUrbanSports'),'benchmark must prefer the Urban Sports diagnostics alias');
 assert(core.includes('longTasks'),'benchmark must capture long main-thread tasks');
 assert(core.includes('p50FrameMs'),'benchmark must expose p50 frame time');
@@ -110,8 +136,10 @@ assert(!workflow.includes('$(run_preview'),'workflow must not start a long-lived
 assert(workflow.includes('continue-on-error: true'),'benchmark profiles should preserve partial results');
 assert(workflow.includes('if: always()'),'benchmark artifacts must survive partial profile failures');
 assert(workflow.includes('QUALITY_PROFILE=max'),'performance workflow must benchmark the MAX profile');
+assert(workflow.includes('QUALITY_PROFILE=max-cinematic'),'performance workflow must benchmark MAX CINEMATIC');
 assert(workflow.includes('MAX_OUTCOME'),'performance workflow must enforce the MAX benchmark result');
-assert(graphicsWorkflow.includes('quality: [low, medium, high, max]'),'graphics browser matrix must exercise the MAX profile');
+assert(workflow.includes('MAX_CINEMATIC_OUTCOME'),'performance workflow must enforce the MAX CINEMATIC benchmark result');
+assert(graphicsWorkflow.includes('quality: [low, medium, high, max-cinematic, max]'),'graphics browser matrix must exercise legacy MAX and MAX CINEMATIC');
 
 console.log(JSON.stringify({
   check:'performance-quality-invariants',

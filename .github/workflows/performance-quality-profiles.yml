@@ -19,7 +19,7 @@ concurrency:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       BENCH_ENV: "GAMEPLAY_SECONDS=30 LONG_RUN_SECONDS=60 MODE_RUN_SECONDS=15 TRICK_RUN_SECONDS=15 RESTART_ITERATIONS=2 SELECTOR_ITERATIONS=2 SAMPLE_INTERVAL_MS=500"
@@ -121,6 +121,35 @@ jobs:
           done
           env $BENCH_ENV QUALITY_PROFILE=max BASE_URL=http://127.0.0.1:4173 RESULTS_PATH="$GITHUB_WORKSPACE/benchmark-artifacts/benchmark-max.json" node scripts/benchmark-ski-runtime.mjs
 
+      - name: Benchmark MAX CINEMATIC
+        id: max_cinematic
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          (exec ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173) >/tmp/chimpions-max-cinematic-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true; wait "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$i" = 90 ]; then cat /tmp/chimpions-max-cinematic-preview.log || true; exit 1; fi
+            sleep 1
+          done
+          env $BENCH_ENV QUALITY_PROFILE=max-cinematic BASE_URL=http://127.0.0.1:4173 RESULTS_PATH="$GITHUB_WORKSPACE/benchmark-artifacts/benchmark-max-cinematic.json" node scripts/benchmark-ski-runtime.mjs
+
+      - name: Compare legacy MAX vs MAX CINEMATIC
+        id: cinematic_compare
+        continue-on-error: true
+        if: always()
+        run: |
+          set -euo pipefail
+          test -s benchmark-artifacts/benchmark-max.json
+          test -s benchmark-artifacts/benchmark-max-cinematic.json
+          node scripts/compare-cinematic-performance.mjs \
+            benchmark-artifacts/benchmark-max.json \
+            benchmark-artifacts/benchmark-max-cinematic.json \
+            benchmark-artifacts/benchmark-max-vs-cinematic.json
+
       - name: Compare benchmark results
         id: compare
         continue-on-error: true
@@ -150,11 +179,15 @@ jobs:
           HIGH_OUTCOME: ${{ steps.high.outcome }}
           LOW_OUTCOME: ${{ steps.low.outcome }}
           MAX_OUTCOME: ${{ steps.max.outcome }}
+          MAX_CINEMATIC_OUTCOME: ${{ steps.max_cinematic.outcome }}
+          CINEMATIC_COMPARE_OUTCOME: ${{ steps.cinematic_compare.outcome }}
           COMPARE_OUTCOME: ${{ steps.compare.outcome }}
         run: |
-          echo "baseline=$BASELINE_OUTCOME high=$HIGH_OUTCOME low=$LOW_OUTCOME max=$MAX_OUTCOME compare=$COMPARE_OUTCOME"
+          echo "baseline=$BASELINE_OUTCOME high=$HIGH_OUTCOME low=$LOW_OUTCOME max=$MAX_OUTCOME max_cinematic=$MAX_CINEMATIC_OUTCOME cinematic_compare=$CINEMATIC_COMPARE_OUTCOME compare=$COMPARE_OUTCOME"
           test "$BASELINE_OUTCOME" = success
           test "$HIGH_OUTCOME" = success
           test "$LOW_OUTCOME" = success
           test "$MAX_OUTCOME" = success
+          test "$MAX_CINEMATIC_OUTCOME" = success
+          test "$CINEMATIC_COMPARE_OUTCOME" = success
           test "$COMPARE_OUTCOME" = success

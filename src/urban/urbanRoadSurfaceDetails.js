@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 const _dummy=new THREE.Object3D();
 const _color=new THREE.Color();
-const PROFILE_DENSITY=Object.freeze({max:1,high:.72,medium:.40,low:.20});
+const PROFILE_DENSITY=Object.freeze({'max-cinematic':1,max:1,high:.72,medium:.40,low:.20});
 
 function clamp(value,min,max){return Math.max(min,Math.min(max,value));}
 function fract(value){return value-Math.floor(value);}
@@ -165,7 +165,7 @@ export function createUrbanRoadSurfaceDetails(options={}){
         }
       }
 
-      if(activeQuality!=='low'&&(i%2===0||activeQuality==='max')){
+      if(activeQuality!=='low'&&(i%2===0||activeQuality==='max'||activeQuality==='max-cinematic')){
         for(let track=0;track<2;track++){
           setTransform(skids,skidCount,{
             x:entry.skidX+(track?-.18:.18),
@@ -179,7 +179,7 @@ export function createUrbanRoadSurfaceDetails(options={}){
         }
       }
 
-      if(i%2===0||activeQuality==='max'){
+      if(i%2===0||activeQuality==='max'||activeQuality==='max-cinematic'){
         setTransform(damp,dampCount,{
           x:entry.wetX,
           y:.028,
@@ -192,7 +192,7 @@ export function createUrbanRoadSurfaceDetails(options={}){
       }
 
       const drainAccumulation=i%3===1;
-      if(i%3===0||drainAccumulation||activeQuality==='max'){
+      if(i%3===0||drainAccumulation||activeQuality==='max'||activeQuality==='max-cinematic'){
         const drainX=entry.drainSide*(roadWidth*.5-entry.drainOffset);
         setTransform(puddles,puddleCount,{
           x:drainAccumulation?drainX:entry.wetX+entry.wetWidth*.28,

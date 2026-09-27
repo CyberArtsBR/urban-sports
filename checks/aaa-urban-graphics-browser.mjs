@@ -129,7 +129,14 @@ try{
   if(REQUESTED_QUALITY_PROFILE==='max'){
     assert.equal(rendering.shadowMapsEnabled,true,'MAX must enable real shadow maps');
     assert(rendering.shadowMapSize>=2048,'MAX must use the premium directional shadow resolution');
-    assert.equal(rendering.ssaoEnabled,true,'MAX must enable contact AO');
+    const maxRequestsContactAo=tierProbe?.qualitySettings?.contactAO===true;
+    assert.equal(maxRequestsContactAo,true,'MAX quality profile must retain the contact-AO quality intent');
+    if(rendering.ssaoEnabled){
+      assert((tierProbe?.renderFailOpen?.composedFrames||0)>0,'SSAO may only be active when the composed path actually presents frames');
+    }else{
+      assert((tierProbe?.renderFailOpen?.directFrames||0)>0,'MAX without SSAO must still present gameplay through the direct safe renderer');
+      assert.equal(tierProbe?.renderFailOpen?.composedFrames||0,0,'production-safe direct rendering must not silently execute the black-frame composer path');
+    }
     assert((rendering.materialQuality?.anisotropy??0)>=16,'MAX must use premium road anisotropy when supported');
   }else if(REQUESTED_QUALITY_PROFILE==='high'){
     assert.equal(rendering.shadowMapsEnabled,true,'HIGH must retain budgeted real shadows');

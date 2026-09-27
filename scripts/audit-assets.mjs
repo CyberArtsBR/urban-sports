@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const publicDir=join(root,'public');
+const sourceAssetsDir=join(root,'src','assets');
 const writeReport=process.argv.includes('--write');
 const enforce=process.argv.includes('--check');
 
@@ -55,8 +56,33 @@ function jpegSize(bytes){
   }
   return null;
 }
+function webpSize(bytes){
+  if(bytes.length<30||bytes.toString('ascii',0,4)!=='RIFF'||bytes.toString('ascii',8,12)!=='WEBP')return null;
+  const type=bytes.toString('ascii',12,16);
+  if(type==='VP8X'){
+    return {
+      width:1+bytes[24]+(bytes[25]<<8)+(bytes[26]<<16),
+      height:1+bytes[27]+(bytes[28]<<8)+(bytes[29]<<16)
+    };
+  }
+  if(type==='VP8L'&&bytes.length>=25&&bytes[20]===0x2f){
+    const bits=bytes.readUInt32LE(21);
+    return {width:1+(bits&0x3fff),height:1+((bits>>14)&0x3fff)};
+  }
+  if(type==='VP8 '){
+    for(let i=20;i+7<bytes.length;i++){
+      if(bytes[i]===0x9d&&bytes[i+1]===0x01&&bytes[i+2]===0x2a){
+        return {width:bytes.readUInt16LE(i+3)&0x3fff,height:bytes.readUInt16LE(i+5)&0x3fff};
+      }
+    }
+  }
+  return null;
+}
 function imageSize(bytes,mime=''){
-  return mime.includes('png')?pngSize(bytes):mime.includes('jpeg')||mime.includes('jpg')?jpegSize(bytes):(pngSize(bytes)||jpegSize(bytes));
+  return mime.includes('png')?pngSize(bytes):
+    (mime.includes('jpeg')||mime.includes('jpg'))?jpegSize(bytes):
+    mime.includes('webp')?webpSize(bytes):
+    (pngSize(bytes)||jpegSize(bytes)||webpSize(bytes));
 }
 function hierarchyDepth(nodes=[]){
   const referenced=new Set();
@@ -102,12 +128,22 @@ function parseGlb(buffer){
   const animationTracks=animations.reduce((sum,a)=>sum+(a.channels||[]).length,0);
   let accessorDecodedBytes=0;
   for(const accessor of accessors)accessorDecodedBytes+=(Number(accessor.count)||0)*components(accessor.type)*componentBytes(accessor.componentType);
+  const materialSignatures=new Map();
+  for(const material of materials){
+    const signature=JSON.stringify(material);
+    materialSignatures.set(signature,(materialSignatures.get(signature)||0)+1);
+  }
+  const duplicateMaterialDefinitions=[...materialSignatures.values()].filter(count=>count>1).reduce((sum,count)=>sum+count-1,0);
+  const embeddedImageHashes=new Map();
   let textureDecodedBytes=0,maxTextureDimension=0,knownTextureDimensions=0;
   if(bin)for(const image of images){
     const view=views[image.bufferView];
     if(!view)continue;
     const start=Number(view.byteOffset)||0,length=Number(view.byteLength)||0;
-    const size=imageSize(bin.subarray(start,start+length),String(image.mimeType||''));
+    const imageBytes=bin.subarray(start,start+length);
+    const hash=createHash('sha256').update(imageBytes).digest('hex');
+    embeddedImageHashes.set(hash,(embeddedImageHashes.get(hash)||0)+1);
+    const size=imageSize(imageBytes,String(image.mimeType||''));
     if(!size)continue;
     knownTextureDimensions++;
     maxTextureDimension=Math.max(maxTextureDimension,size.width,size.height);
@@ -118,11 +154,13 @@ function parseGlb(buffer){
     materials:materials.length,textures:textures.length,images:images.length,morphTargets,
     skins:skins.length,bones:bones.size,animations:animations.length,animationTracks,
     hierarchyDepth:hierarchyDepth(nodes),maxTextureDimension,knownTextureDimensions,
+    duplicateMaterialDefinitions,
+    duplicateEmbeddedImages:[...embeddedImageHashes.values()].filter(count=>count>1).reduce((sum,count)=>sum+count-1,0),
     accessorDecodedBytes,textureDecodedBytes,estimatedDecodedBytes:accessorDecodedBytes+textureDecodedBytes
   };
 }
 
-const files=await walk(publicDir);
+const files=[...(await walk(publicDir)),...(await walk(sourceAssetsDir))];
 const assets=[];
 for(const path of files){
   const bytes=await readFile(path);
@@ -133,6 +171,14 @@ for(const path of files){
     transferBytesEstimate:bytes.length,
     sha256:createHash('sha256').update(bytes).digest('hex')
   };
+  if(['png','jpg','jpeg','webp'].includes(item.extension)){
+    const dimensions=imageSize(bytes,item.extension);
+    if(dimensions){
+      item.width=dimensions.width;
+      item.height=dimensions.height;
+      item.estimatedDecodedBytes=Math.ceil(dimensions.width*dimensions.height*4*4/3);
+    }
+  }
   if(item.extension==='glb'){
     try{Object.assign(item,parseGlb(bytes));}
     catch(error){item.glbError=String(error?.message||error);}

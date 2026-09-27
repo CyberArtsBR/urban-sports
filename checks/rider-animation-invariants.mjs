@@ -195,6 +195,20 @@ for(const stanceMode of ['regular','goofy']){
 }
 
 {
+  const model=new THREE.Group();
+  const board=createSkateboardEquipment();
+  assert.equal(
+    createSkateboardAnimator({model,rig:null,snowboard:board}),
+    null,
+    'unsupported local GLB rig must disable skeletal animator instead of throwing'
+  );
+  assert.doesNotThrow(()=>board.updateMotion({
+    dt:1/60,speed:9,air:true,trickType:'KICKFLIP',trickProgress:.5,externalPose:false
+  }),'unsupported local GLB keeps safe board-only animation fallback');
+  board.dispose();
+}
+
+{
   const partial=makeAnimator({arms:false,missingRightFoot:true});
   assert.equal(partial.animator.footPlacementMode,'board-space-ankle-fallback');
   assert.doesNotThrow(()=>partial.animator.update({

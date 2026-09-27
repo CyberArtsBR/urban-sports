@@ -18,7 +18,9 @@ export function createRuntimeDiagnostics({
   runSession,
   bananaPower,
   collisionRuntime,
-  riderController
+  riderController,
+  sportController=null,
+  stateOwnership=null
 }={}){
   if(!state)throw new Error('createRuntimeDiagnostics requires shared state');
 
@@ -29,6 +31,8 @@ export function createRuntimeDiagnostics({
       ...gameFlow?.snapshot?.(),
       ...bananaPower?.snapshot?.(),
       ...riderController?.snapshot?.(),
+      sport: sportController?.snapshot?.()||null,
+      stateOwnership:stateOwnership||null,
       runSession:runSession?.snapshot?.()||null
     });
   };

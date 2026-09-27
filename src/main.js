@@ -12,7 +12,7 @@ import {readPad} from './input.js';
 import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
 import {createSkiAudio} from './audio.js';
-import {createSkiEnvironment} from './environment.js';
+import {createUrbanRuntimeEnvironment} from './urban/urbanRuntimeEnvironment.js';
 import {createUrbanEnvironment,createUrbanObstacle} from './urban/index.js';
 import {createBananaVisual} from './collectibleVisuals.js';
 import {loadAvatarCatalog,createAvatarSelector,disposeAvatarObject} from './avatar-system.js';
@@ -178,7 +178,7 @@ bloomPass=null;
 composerPixelRatio=0;
 
 const world=new THREE.Group();scene.add(world);
-const environment=createSkiEnvironment({scene,world,renderer,camera,mode:GAME_IDENTITY.environment});
+const environment=createUrbanRuntimeEnvironment({scene,world,renderer,camera,quality:quality.getSettings(),mode:GAME_IDENTITY.environment});
 const urbanEnvironment=createUrbanEnvironment({
   parent:world,
   renderer,

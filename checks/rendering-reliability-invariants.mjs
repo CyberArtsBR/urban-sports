@@ -66,8 +66,10 @@ for(const needle of [
 ]){
   assert(cinematic.includes(needle),'cinematic reliability path missing '+needle);
 }
-assert(cinematic.includes("capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable&&capabilities.halfFloatLinear"),'GTAO must require verified depth + linear HalfFloat support');
-assert(cinematic.includes("capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&!forced('bloom')"),'Bloom must require verified linear HalfFloat support');
+assert(cinematic.includes("const hdrTarget=choice.type===THREE.HalfFloatType&&choice.linear"),'safe target selection must distinguish actual HDR composition from byte fallback');
+assert(cinematic.includes("currentSettings.ambientOcclusion!==false&&hdrTarget&&capabilities.depthTextureRenderable"),'GTAO must require the actually selected linear HalfFloat target + verified depth support');
+assert(cinematic.includes("currentSettings.bloomEnabled!==false&&hdrTarget&&!forced('bloom')"),'Bloom must require the actually selected linear HalfFloat target');
+assert(cinematic.includes("if(name==='ao'&&atmospherePass?.enabled)"),'runtime GTAO degradation must disable dependent volumetrics');
 assert(cinematic.includes("return degradeRuntime('critical WebGL error"),'critical framebuffer errors must degrade instead of blanking gameplay');
 assert(main.includes("if(!composed){")&&main.includes("renderer.render(scene,camera)"),'direct WebGLRenderer must remain the same-frame universal fallback');
 assert(main.includes("renderer.outputColorSpace=THREE.SRGBColorSpace"),'output color space must be explicit');

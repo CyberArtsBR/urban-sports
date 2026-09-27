@@ -1756,6 +1756,7 @@ window.chimpionsSki=()=>{
     ...performanceTelemetry.getFlatSnapshot(),
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
     renderFailOpen:renderFailOpen.getDiagnostics(),
+    weatherState:mountainWeather.getState?.()||null,
     renderingQuality:{
       profile:quality.active,
       shadowMapsEnabled:!!renderer.shadowMap.enabled,

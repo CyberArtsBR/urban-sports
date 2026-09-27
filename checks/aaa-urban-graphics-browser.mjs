@@ -49,25 +49,6 @@ async function completeStartFlow(page){
   });
   assert(avatarResult.ok,avatarResult.reason||'Failed to choose Chimpion');
 
-  await page.waitForFunction(()=>{
-    const step=document.querySelector('#ride-mode-step');
-    return !!step&&!step.hidden;
-  },null,{timeout:15000});
-
-  const rideResult=await page.evaluate(()=>{
-    const dialog=document.querySelector('#chimpion-selector');
-    const button=
-      dialog?.querySelector('[data-sport-mode="skateboard"]')||
-      dialog?.querySelector('.ride-mode-card[data-ride-mode="skateboard"]')||
-      dialog?.querySelector('.ride-mode-card[data-ride-mode="snowboard"]')||
-      Array.from(dialog?.querySelectorAll('.ride-mode-card')||[]).find(node=>/skateboard/i.test(node.textContent||''));
-    if(!button)return {ok:false,reason:'No Skateboard-compatible ride control'};
-    const mode=button.dataset.sportMode||button.dataset.rideMode||button.textContent?.trim()||'unknown';
-    button.click();
-    return {ok:true,mode};
-  });
-  assert(rideResult.ok,rideResult.reason||'Failed to choose Skateboard');
-
   await page.waitForFunction(()=>!document.querySelector('#chimpion-selector')?.open,null,{timeout:60000});
   // beginRun is scheduled after the async rider-selection close handler. Wait
   // for the tutorial/countdown/run hand-off rather than sampling the tutorial
@@ -92,7 +73,7 @@ async function completeStartFlow(page){
 
   const state=await diagnostics(page);
   assert.equal(state?.sportMode,'skateboard','Urban runtime must remain in Skateboard sport mode');
-  return {avatar:avatarResult.id,rideControl:rideResult.mode};
+  return {avatar:avatarResult.id,sport:'skateboard',selectionFlow:'direct-rider'};
 }
 
 const browser=await chromium.launch({

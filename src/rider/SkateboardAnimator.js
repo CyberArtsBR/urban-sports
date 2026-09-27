@@ -195,7 +195,8 @@ export function createSkateboardAnimator({
       if(Number.isFinite(bindingZ))targetLocal.z=bindingZ;
       targetLocal.y=Math.max(deckTop+.055,targetLocal.y);
       ikDirection.copy(ikFoot).sub(ikHip).normalize();
-      ikPole.copy(ikKnee).sub(ikHip).addScaledVector(ikDirection,-ikPole.copy(ikKnee).sub(ikHip).dot(ikDirection));
+      ikPole.copy(ikKnee).sub(ikHip);
+      ikPole.addScaledVector(ikDirection,-ikPole.dot(ikDirection));
       if(ikPole.lengthSq()<1e-6)ikPole.set(0,0,1).applyQuaternion(modelWorldQ);
       ikPole.normalize().applyQuaternion(inverseModelWorldQ);
       foot.getWorldQuaternion(targetWorldQ);
@@ -361,12 +362,14 @@ export function createSkateboardAnimator({
       alignBoneToDirection(metric.shin,ikCurrentDirection,ikDesiredDirection,response*.92);
       metric.shin.updateWorldMatrix(true,true);
     }
-    boardTargetRoot.getWorldQuaternion(boardWorldQ);
-    targetWorldQ.copy(boardWorldQ).multiply(metric.footRelativeQ);
-    metric.foot.parent?.getWorldQuaternion(parentWorldQ);
-    inverseParentQ.copy(parentWorldQ).invert();
-    goalQ.copy(inverseParentQ).multiply(targetWorldQ);
-    metric.foot.quaternion.slerp(goalQ,response*.78);
+    if(metric.foot.parent){
+      boardTargetRoot.getWorldQuaternion(boardWorldQ);
+      targetWorldQ.copy(boardWorldQ).multiply(metric.footRelativeQ);
+      metric.foot.parent.getWorldQuaternion(parentWorldQ);
+      inverseParentQ.copy(parentWorldQ).invert();
+      goalQ.copy(inverseParentQ).multiply(targetWorldQ);
+      metric.foot.quaternion.slerp(goalQ,response*.78);
+    }
     metric.foot.updateWorldMatrix(true,false);
     diagnostics.ikSolves++;
     return true;
@@ -417,8 +420,13 @@ export function createSkateboardAnimator({
     if(isPowerSlide(s.state))yaw+=s.steer*(.075+.035*clamp(frame.powerslideAmount??frame.slip??0,0,1));
     if(s.state===SKATE_ANIMATION_STATE.GRIND||s.state===SKATE_ANIMATION_STATE.SLIDE)roll+=s.grindBalance*.055;
     if(s.state===SKATE_ANIMATION_STATE.CRASH){
-      roll+=s.steer>=0?.22:-.22;
-      yaw+=.16*sideSign;
+      const lateral=s.crashKind.includes('LATERAL');
+      const failedLanding=s.crashKind.includes('LANDING');
+      const grindFailure=s.crashKind.includes('GRIND');
+      const highSpeed=s.crashKind.includes('HIGH_SPEED');
+      roll+=(lateral?.34:.22)*(s.steer>=0?1:-1);
+      yaw+=(grindFailure?.31:highSpeed?.23:.16)*sideSign;
+      pitch+=failedLanding?.20:highSpeed?.08:0;
       targetY=.018;
     }
 

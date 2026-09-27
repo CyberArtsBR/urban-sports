@@ -21,7 +21,7 @@
     "audit:graphics": "node checks/aaa-urban-graphics-browser.mjs",
     "check:fast": "node --check src/main.js && node --check src/renderFailOpen.js && node --check src/localAvatarUpload.js && node checks/render-fail-open-invariants.mjs && node checks/local-glb-hostile-invariants.mjs && node checks/input-invariants.mjs && node checks/menu-input-repeat-invariants.mjs",
     "check:standard": "npm run check",
-    "check:browser": "node checks/production-smoke.mjs",
+    "check:browser": "node checks/production-smoke.mjs && node checks/release-input-browser.mjs",
     "audit:graphics-fallback": "node checks/graphics-fallback-browser.mjs",
     "audit:visual": "node checks/visual-regression-browser.mjs",
     "audit:soak": "node checks/release-soak-browser.mjs"

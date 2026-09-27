@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import './style.css';
 import './floatingUI.css';
 import {createMountainWeather} from './mountainWeather.js';
-import {createFallbackSkier,loadRiderAsset} from './skier.js';
+import {createFallbackSkier,getRiderAssetPerformanceDiagnostics,loadRiderAsset} from './skier.js';
 import {readPad} from './input.js';
 import {createGameplayInput} from './gameplayInput.js';
 import {createTouchControls} from './touchControls.js';
@@ -1754,6 +1754,7 @@ window.chimpionsSki=()=>{
   return {
     ...runtimeDiagnostics,
     ...performanceTelemetry.getFlatSnapshot(),
+    ...getRiderAssetPerformanceDiagnostics(),
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
     renderingQuality:{
       profile:quality.active,

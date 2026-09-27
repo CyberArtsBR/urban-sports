@@ -93,3 +93,53 @@ function extensionSet(gl){
   }
   return result;
 }
+
+export const GPU_CAPABILITY_CLASSES=Object.freeze({
+  intel:Object.freeze({label:'Intel integrated',webgl2:true,halfFloatRenderable:true,halfFloatLinear:true,floatRenderable:true,depthTextureRenderable:true,maxTextureSize:8192,maxRenderbufferSize:8192,maxSamples:4,fragmentHighp:true,gpuTimerSupported:true}),
+  amd:Object.freeze({label:'AMD desktop',webgl2:true,halfFloatRenderable:true,halfFloatLinear:true,floatRenderable:true,depthTextureRenderable:true,maxTextureSize:16384,maxRenderbufferSize:16384,maxSamples:8,fragmentHighp:true,gpuTimerSupported:true}),
+  nvidia:Object.freeze({label:'NVIDIA desktop',webgl2:true,halfFloatRenderable:true,halfFloatLinear:true,floatRenderable:true,depthTextureRenderable:true,maxTextureSize:16384,maxRenderbufferSize:16384,maxSamples:8,fragmentHighp:true,gpuTimerSupported:true}),
+  apple:Object.freeze({label:'Apple Silicon',webgl2:true,halfFloatRenderable:true,halfFloatLinear:true,floatRenderable:true,depthTextureRenderable:true,maxTextureSize:16384,maxRenderbufferSize:16384,maxSamples:4,fragmentHighp:true,gpuTimerSupported:false}),
+  adreno:Object.freeze({label:'Adreno mobile envelope',webgl2:true,halfFloatRenderable:true,halfFloatLinear:true,floatRenderable:false,depthTextureRenderable:true,maxTextureSize:8192,maxRenderbufferSize:8192,maxSamples:4,fragmentHighp:true,gpuTimerSupported:false}),
+  mali:Object.freeze({label:'Mali mobile envelope',webgl2:true,halfFloatRenderable:true,halfFloatLinear:false,floatRenderable:false,depthTextureRenderable:true,maxTextureSize:8192,maxRenderbufferSize:8192,maxSamples:4,fragmentHighp:true,gpuTimerSupported:false})
+});
+
+export function getRenderFailureSimulation(locationLike=globalThis.location){
+  try{
+    const params=new URLSearchParams(locationLike?.search||'');
+    if(params.get('test')!=='1')return {failures:new Set(),gpuClass:null};
+    const failures=new Set(String(params.get('renderFail')||'').split(',').map(value=>value.trim().toLowerCase()).filter(Boolean));
+    const requestedClass=String(params.get('gpuClass')||'').trim().toLowerCase();
+    const gpuClass=Object.hasOwn(GPU_CAPABILITY_CLASSES,requestedClass)?requestedClass:null;
+    return {failures,gpuClass};
+  }catch{
+    return {failures:new Set(),gpuClass:null};
+  }
+}
+
+export function applyGpuClassSimulation(capabilities,gpuClass){
+  const profile=GPU_CAPABILITY_CLASSES[gpuClass];
+  if(!profile)return capabilities;
+  return {
+    ...capabilities,
+    simulatedGpuClass:gpuClass,
+    simulationLabel:profile.label,
+    simulationDisclaimer:'Capability envelope only; it cannot emulate driver shader compilers, tile memory behavior, thermals, browser GPU-process bugs, or vendor-specific framebuffer defects.',
+    ...profile
+  };
+}
+
+export function applyFailureSimulation(capabilities,failures=new Set()){
+  const next={...capabilities};
+  if(failures.has('half-float')){
+    next.halfFloatRenderable=false;
+    next.halfFloatLinear=false;
+  }
+  if(failures.has('depth-texture'))next.depthTextureRenderable=false;
+  if(failures.has('gpu-timer'))next.gpuTimerSupported=false;
+  if(failures.has('render-target')){
+    next.halfFloatRenderable=false;
+    next.halfFloatLinear=false;
+    next.unsignedByteRenderable=false;
+  }
+  return next;
+}

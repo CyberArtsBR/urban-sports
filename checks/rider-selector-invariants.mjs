@@ -1,9 +1,10 @@
 import {parseArgs,getRoot,read,result,finish,STATUS} from './integration-check-utils.mjs';
 
 const args=parseArgs(),root=getRoot(args);
-const avatar=read(root,'src/avatar-system.js'),model=read(root,'src/avatar-selector-model.js'),main=read(root,'src/main.js');
-const ride=read(root,'src/rideMode.js')+read(root,'src/riderPose.js')+main+avatar;
-const feature=/snowboard|ride.?mode|ride choice/i.test(ride);
+const avatar=read(root,'src/avatar-system.js');
+const model=read(root,'src/avatar-selector-model.js');
+const main=read(root,'src/main.js');
+const contract=read(root,'src/urbanUiContract.js');
 const results=[];
 const expectedRoster=[
  'The Archon','The Heretic','The Commodore','The Pioneer','The Punk',
@@ -18,6 +19,7 @@ const catalogCount=catalogNames?.length??null;
 const exactRoster=Array.isArray(catalogNames)&&
  catalogNames.length===expectedRoster.length&&
  catalogNames.every((name,index)=>name===expectedRoster[index]);
+
 results.push(result('exact 10 built-in Chimpions remain available',
  catalogNames==null?STATUS.PENDING:(exactRoster?STATUS.PASS:STATUS.FAIL),
  catalogNames==null?'avatars.json unavailable':JSON.stringify(catalogNames)));
@@ -26,23 +28,46 @@ results.push(result('initial selector lazy rendering remains optimized',
 results.push(result('search remains normalized/precomputed',
  /buildAvatarSearchIndex/.test(avatar)&&/filterAvatarSearchIndex/.test(avatar)&&/normaliz/i.test(model)?STATUS.PASS:STATUS.FAIL,'precomputed normalized search'));
 
-const future=[
- ['SKI / SNOWBOARD is a second selector step',/(second|step|stage|ride)[\s\S]{0,600}ski[\s\S]{0,400}snowboard|snowboard[\s\S]{0,400}ski/i],
- ['B from ride choice returns to avatar selection',/(cancel|button.?1|\bB\b)[\s\S]{0,600}(avatar|chimpion)/i],
- ['B again closes selector',/(cancel|button.?1|\bB\b)[\s\S]{0,500}(close|dialog\.close)/i],
- ['A selects',/(confirm|button.?0|\bA\b)[\s\S]{0,500}(select|choose|set)/i],
- ['keyboard works',/(keydown|ArrowUp|ArrowDown|Enter|Space)/i],
- ['gamepad works',/(updateGamepad|gamepad|buttons\[0\]|confirm)/i],
- ['selected Chimpion remains selected',/(currentSelectedId|selectedAvatar|setSelected)/i],
- ['selected ride mode remains selected',/(selectedRideMode|currentRideMode|rideMode|modeSelected)/i],
- ['changing only ride mode does NOT force unnecessary GLB refetch',/(setRide|rideMode|snowboard)/i],
- ['no duplicated event listeners accumulate after repeated open/close',/(delegated|addEventListener)/i]
-];
-if(!feature){
- for(const [n] of future)results.push(result(n,STATUS.PENDING,'ride-mode selector step not merged yet'));
-}else{
- for(const [n,re] of future)results.push(result(n,re.test(ride)?STATUS.PASS:STATUS.FAIL,'static selector integration contract'));
- const directLoad=/(rideMode|snowboard)[\s\S]{0,320}(loadSkier|fetch\([^)]*\.glb)/i.test(ride);
- results.push(result('ride-only switch avoids direct GLB reload',directLoad?STATUS.FAIL:STATUS.PASS,directLoad?'GLB load found in ride-switch context':'no direct GLB load in ride-switch context'));
-}
-finish('rider-selector-invariants',results,{json:!!args.json,extra:{root,featurePresent:feature,catalogCount}});
+const legacyPresentation=/Choose Ride|\bSKI\b|SNOWBOARD|speedToKmh|ride-mode-step|ride-mode-card/.test(avatar);
+results.push(result('legacy Ski/Snowboard selector presentation is removed',
+ legacyPresentation?STATUS.FAIL:STATUS.PASS,
+ legacyPresentation?'legacy selector marker remains':'selector is Urban-native'));
+
+const sportContract=/SKATEBOARD/.test(contract)&&/INLINE/.test(contract)&&/BMX/.test(contract)&&/available:false/.test(contract);
+results.push(result('sport selector contract exposes Skateboard now and future sports without fake availability',
+ sportContract?STATUS.PASS:STATUS.FAIL,'Urban sport availability contract'));
+
+const setupOwned=/createSkateboardSetupContract/.test(contract)&&/selectable:available\.length>1/.test(contract)&&
+ /hasSetupStep/.test(avatar)&&/completeSelection\(entry,null\)/.test(avatar);
+results.push(result('Skateboard setup step exists only when gameplay supplies real profiles',
+ setupOwned?STATUS.PASS:STATUS.FAIL,'no UI-authored physics profile'));
+
+results.push(result('B from a real setup step returns to rider selection',
+ /action===MENU_ACTION\.CANCEL[\s\S]{0,140}step==='setup'[\s\S]{0,100}showAvatarStep/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'semantic cancel handling'));
+results.push(result('B again closes selector',
+ /action===MENU_ACTION\.CANCEL[\s\S]{0,180}dialog\.close/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'semantic cancel closes top-level selector'));
+results.push(result('A/Enter selection is semantic',
+ /MENU_ACTION\.CONFIRM/.test(avatar)&&/active\.click\(\)/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'semantic confirm'));
+results.push(result('keyboard navigation remains enabled',
+ /dialog\.addEventListener\('keydown'/.test(avatar)&&/keyboardMove/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'selector keydown adapter'));
+results.push(result('gamepad navigation remains enabled without raw button indices',
+ /handleMenuAction/.test(avatar)&&!/buttons\[[01]\]/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'semantic controller adapter'));
+results.push(result('selected Chimpion remains selected',
+ /currentSelectedId/.test(avatar)&&/setSelected/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'selection state'));
+results.push(result('local GLB upload remains session-local and revokes object URLs',
+ /URL\.createObjectURL/.test(avatar)&&/URL\.revokeObjectURL/.test(avatar)&&/LOCAL ONLY/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'local upload lifecycle'));
+results.push(result('one-click rider selection launches current sport when no setup contract exists',
+ /onSelect:async entry=>/.test(main)&&/setTimeout\(\(\)=>beginRun\(\),0\)/.test(main)&&/completeSelection\(entry,null\)/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'direct Urban rider flow'));
+results.push(result('no duplicated event listeners accumulate after repeated open/close',
+ /delegated/.test(avatar)&&/grid\.addEventListener\('click'/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ 'delegated selector handlers'));
+
+finish('rider-selector-invariants',results,{json:!!args.json,extra:{root,catalogCount,urbanNative:true}});

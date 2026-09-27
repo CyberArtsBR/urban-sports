@@ -419,6 +419,9 @@ export function createSkiAudio(){
     return {
       ...m,
       persistentLoopCount:m.persistentLoopCount+w.persistentLoopCount+wa.persistentLoopCount,
+      bufferCountEstimate:(m.bufferCountEstimate??m.bufferCount)+w.bufferCount+wa.bufferCount,
+      activeNodeEstimate:m.activeNodeEstimate+w.activeNodeEstimate+wa.activeNodeEstimate,
+      activeEnvironmentalTransientCount:w.activeThunderCount,
       rideAudioMode:rideMode,
       sportMode,
       skateSurface:skate.surface,

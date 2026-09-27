@@ -118,6 +118,20 @@ try{
   await controllerPage.waitForTimeout(120);
   await pulse(controllerPage,9);
   await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='paused';},null,{timeout:5000});
+
+  // Return to gameplay, force the real crash path in test mode, surface the
+  // results UI, and prove controller confirm restarts from results.
+  await pulse(controllerPage,1);
+  await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:5000});
+  const crashTriggered=await controllerPage.evaluate(()=>window.__urbanReleaseTest?.forceCrash?.('test')!==undefined);
+  assert.equal(crashTriggered,true,'test-mode crash hook was unavailable');
+  await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='crashed';},null,{timeout:5000});
+  const resultsShown=await controllerPage.evaluate(()=>window.__urbanReleaseTest?.showCrashResults?.()===true);
+  assert.equal(resultsShown,true,'crash results could not be surfaced');
+  await controllerPage.locator('#results-overlay').waitFor({state:'visible',timeout:5000});
+  assert.equal(await controllerPage.evaluate(()=>document.activeElement?.id),'restart-result','results default focus changed');
+  await pulse(controllerPage,0);
+  await controllerPage.waitForFunction(()=>{const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();return d?.mode==='playing';},null,{timeout:30000});
 }finally{
   await controllerContext.close();
 }
@@ -189,6 +203,6 @@ try{
 
 console.log(JSON.stringify({
   check:'release-input-browser',
-  controller:['start A/Cross','analog navigation','D-pad navigation','no double navigation','B/Circle','Start','pause','settings','selector','disconnect/reconnect'],
+  controller:['start A/Cross','analog navigation','D-pad navigation','no double navigation','B/Circle','Start','pause','settings','selector','disconnect/reconnect','crash','results','results restart'],
   touch:['steering','jump','trick','Banana Power','pause','pointercancel','multi-touch','orientation layout']
 }));

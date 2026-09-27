@@ -520,6 +520,10 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     if(!choice.supported){fail(choice.reason);return false;}
     try{
       const filter=choice.linear?THREE.LinearFilter:THREE.NearestFilter;
+      // Byte fallback is intentionally conservative. Once HDR composition has
+      // proven unreliable, do not reconstruct HalfFloat-dependent internal
+      // passes merely because the capability probe originally succeeded.
+      const hdrTarget=choice.type===THREE.HalfFloatType&&choice.linear;
       const target=new THREE.WebGLRenderTarget(1,1,{
         type:choice.type,
         format:THREE.RGBAFormat,
@@ -536,7 +540,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       renderPass=instrumentPass(new RenderPass(scene,camera),'scene');
       composer.addPass(renderPass);
 
-      if(currentSettings.ambientOcclusion!==false&&capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&!forced('gtao')){
+      if(currentSettings.ambientOcclusion!==false&&hdrTarget&&capabilities.depthTextureRenderable&&!forced('gtao')){
         try{
           gtaoPass=new GTAOPass(scene,camera,1,1);
           gtaoPass.output=GTAOPass.OUTPUT.Default;
@@ -557,10 +561,10 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
           gtaoPass=null;
         }
       }else if(currentSettings.ambientOcclusion!==false){
-        noteFeatureFailure('ao',forced('gtao')?'forced GTAO failure':'GTAO requires verified linear HalfFloat + depth texture support');
+        noteFeatureFailure('ao',forced('gtao')?'forced GTAO failure':'GTAO disabled on safe byte fallback or without verified linear HalfFloat + depth texture support');
       }
 
-      if(currentSettings.bloomEnabled!==false&&capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&!forced('bloom')){
+      if(currentSettings.bloomEnabled!==false&&hdrTarget&&!forced('bloom')){
         try{
           bloomPass=new UnrealBloomPass(
             new THREE.Vector2(1,1),
@@ -576,7 +580,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
           bloomPass=null;
         }
       }else if(currentSettings.bloomEnabled!==false){
-        noteFeatureFailure('bloom',forced('bloom')?'forced bloom failure':'Bloom requires verified linear HalfFloat render targets');
+        noteFeatureFailure('bloom',forced('bloom')?'forced bloom failure':'Bloom disabled on safe byte fallback or without verified linear HalfFloat render targets');
       }
 
       if(gtaoPass?.depthTexture&&currentSettings.volumetricFog!==false&&!forced('volumetric')){
@@ -807,6 +811,10 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       if(pass?.enabled){
         pass.enabled=false;
         noteFeatureFailure(name,'runtime degradation: '+reason);
+        if(name==='ao'&&atmospherePass?.enabled){
+          atmospherePass.enabled=false;
+          noteFeatureFailure('volumetric','disabled with runtime GTAO degradation: '+reason);
+        }
         return false;
       }
     }

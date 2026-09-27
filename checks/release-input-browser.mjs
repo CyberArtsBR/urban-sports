@@ -44,6 +44,17 @@ async function axisPulse(page,index,value,ms=160){
   await page.evaluate(i=>window.__releasePad.axis(i,0),index);
   await page.waitForTimeout(100);
 }
+async function waitControllerPolls(page,frames=2){
+  await page.evaluate(frameCount=>new Promise(resolve=>{
+    let remaining=Math.max(1,Number(frameCount)||1);
+    const tick=()=>{
+      remaining--;
+      if(remaining<=0)resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }),frames);
+}
 
 const controllerContext=await browser.newContext({viewport:{width:1280,height:720}});
 await installVirtualPad(controllerContext);
@@ -67,33 +78,46 @@ try{
   // menuInputRepeat intentionally rearms only after a neutral frame. Give the
   // just-opened modal that neutral poll before asserting controller movement.
   await controllerPage.evaluate(()=>window.__releasePad.neutral());
-  await controllerPage.waitForTimeout(250);
+  await waitControllerPolls(controllerPage,3);
 
   await controllerPage.evaluate(()=>window.__releasePad.axis(1,.92));
   await controllerPage.waitForFunction(()=>document.activeElement?.dataset?.filterIndex==='0',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.axis(1,0));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
 
   await controllerPage.evaluate(()=>window.__releasePad.axis(0,.92));
   await controllerPage.waitForFunction(()=>document.activeElement?.dataset?.filterIndex==='1',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.axis(0,0));
-  await controllerPage.waitForTimeout(180);
+  await waitControllerPolls(controllerPage,2);
   assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),'1','single analog navigation double-moved after release');
 
   await controllerPage.evaluate(()=>window.__releasePad.press(15));
   await controllerPage.waitForFunction(()=>document.activeElement?.dataset?.filterIndex==='2',null,{timeout:5000});
   await controllerPage.evaluate(()=>window.__releasePad.release(15));
-  await controllerPage.waitForTimeout(120);
+  await waitControllerPolls(controllerPage,2);
   assert.equal(await controllerPage.evaluate(()=>document.activeElement?.dataset?.filterIndex??null),'2','single D-pad navigation double-moved after release');
 
-  await pulse(controllerPage,0);
+  await controllerPage.evaluate(()=>window.__releasePad.press(0));
   await controllerPage.waitForFunction(()=>!document.querySelector('#ride-mode-step')?.hidden,null,{timeout:10000});
-  await pulse(controllerPage,1);
-  await controllerPage.waitForFunction(()=>document.querySelector('#ride-mode-step')?.hidden===true,null,{timeout:10000});
+  await controllerPage.evaluate(()=>window.__releasePad.release(0));
+  await waitControllerPolls(controllerPage,2);
 
-  await pulse(controllerPage,0);
+  await controllerPage.evaluate(()=>window.__releasePad.press(1));
+  await controllerPage.waitForFunction(()=>document.querySelector('#ride-mode-step')?.hidden===true,null,{timeout:10000});
+  await controllerPage.evaluate(()=>window.__releasePad.release(1));
+  await waitControllerPolls(controllerPage,2);
+
+  await controllerPage.evaluate(()=>window.__releasePad.press(0));
   await controllerPage.waitForFunction(()=>!document.querySelector('#ride-mode-step')?.hidden,null,{timeout:10000});
-  await pulse(controllerPage,0);
+  await controllerPage.evaluate(()=>window.__releasePad.release(0));
+  await waitControllerPolls(controllerPage,2);
+
+  await controllerPage.evaluate(()=>window.__releasePad.press(0));
+  await controllerPage.waitForFunction(()=>{
+    const dialog=document.querySelector('#chimpion-selector');
+    return dialog?.getAttribute('aria-busy')==='true'||dialog?.open===false;
+  },null,{timeout:10000});
+  await controllerPage.evaluate(()=>window.__releasePad.release(0));
   await controllerPage.waitForFunction(()=>{
     const d=window.chimpionsUrbanSports?.()??window.chimpionsSki?.();
     return !!document.querySelector('.session-tutorial:not([hidden])')||d?.mode==='countdown'||d?.mode==='playing';

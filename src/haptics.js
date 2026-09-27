@@ -169,7 +169,7 @@ export function createHaptics({getActiveGamepad=null,enabled=true,intensity=HAPT
     const meaningful=carve>.16||terrain>.08||slip>.10||oilActive||grinding||speedProgress>.88;
     if(!meaningful)return false;
 
-    let weak=carve*.075+terrain*.035+speedProgress>.88?(speedProgress-.88)*.22:0;
+    let weak=carve*.075+terrain*.035+(speedProgress>.88?(speedProgress-.88)*.22:0);
     let strong=carve*.052+terrain*.052;
     weak+=slip*.15;strong+=slip*.06;
     if(grinding){weak+=.10;strong+=.08;}

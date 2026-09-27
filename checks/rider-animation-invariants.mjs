@@ -260,9 +260,14 @@ function modelFromGlbJson(json){
   const objects=nodes.map((node,index)=>{
     const object=joints.has(index)?new THREE.Bone():new THREE.Group();
     object.name=node.name||('node-'+index);
-    if(Array.isArray(node.translation))object.position.fromArray(node.translation);
-    if(Array.isArray(node.rotation))object.quaternion.fromArray(node.rotation);
-    if(Array.isArray(node.scale))object.scale.fromArray(node.scale);
+    if(Array.isArray(node.matrix)&&node.matrix.length===16){
+      object.matrix.fromArray(node.matrix);
+      object.matrix.decompose(object.position,object.quaternion,object.scale);
+    }else{
+      if(Array.isArray(node.translation))object.position.fromArray(node.translation);
+      if(Array.isArray(node.rotation))object.quaternion.fromArray(node.rotation);
+      if(Array.isArray(node.scale))object.scale.fromArray(node.scale);
+    }
     return object;
   });
   const childSet=new Set();
@@ -277,23 +282,100 @@ function modelFromGlbJson(json){
   const model=new THREE.Group();
   for(let index=0;index<objects.length;index++)if(!childSet.has(index))model.add(objects[index]);
   model.updateMatrixWorld(true);
-  return model;
+  return {model,objects};
+}
+
+function inspectAvatarGeometry(json,objects,resolution){
+  const poseProblems=[];
+  const scaleProblems=[];
+  const p0=new THREE.Vector3(),p1=new THREE.Vector3();
+  for(const side of ['left','right']){
+    const thigh=resolution.rig[side+'Thigh'];
+    const shin=resolution.rig[side+'Shin'];
+    const foot=resolution.rig[side+'Foot'];
+    if(!thigh||!shin||!foot)continue;
+    thigh.getWorldPosition(p0);shin.getWorldPosition(p1);
+    const upper=p0.distanceTo(p1);
+    shin.getWorldPosition(p0);foot.getWorldPosition(p1);
+    const lower=p0.distanceTo(p1);
+    if(!Number.isFinite(upper)||!Number.isFinite(lower)||upper<1e-5||lower<1e-5){
+      poseProblems.push(side+' leg has degenerate/non-finite segment length');
+    }
+  }
+
+  for(const bone of resolution.bones){
+    const s=bone.scale;
+    if(![s.x,s.y,s.z].every(Number.isFinite)||Math.abs(s.x*s.y*s.z)<1e-10){
+      scaleProblems.push((bone.name||'unnamed')+' has non-finite/degenerate scale');
+    }
+  }
+
+  const bounds=new THREE.Box3();
+  const corner=new THREE.Vector3();
+  let boundedPrimitiveCount=0;
+  const accessors=json.accessors||[];
+  const meshes=json.meshes||[];
+  (json.nodes||[]).forEach((node,nodeIndex)=>{
+    if(!Number.isInteger(node.mesh)||!objects[nodeIndex])return;
+    for(const primitive of meshes[node.mesh]?.primitives||[]){
+      const accessorIndex=primitive.attributes?.POSITION;
+      const accessor=Number.isInteger(accessorIndex)?accessors[accessorIndex]:null;
+      if(!accessor||!Array.isArray(accessor.min)||!Array.isArray(accessor.max))continue;
+      boundedPrimitiveCount++;
+      for(let mask=0;mask<8;mask++){
+        corner.set(
+          mask&1?accessor.max[0]:accessor.min[0],
+          mask&2?accessor.max[1]:accessor.min[1],
+          mask&4?accessor.max[2]:accessor.min[2]
+        ).applyMatrix4(objects[nodeIndex].matrixWorld);
+        bounds.expandByPoint(corner);
+      }
+    }
+  });
+  const size=new THREE.Vector3();
+  bounds.getSize(size);
+  const sourceHeight=size.y;
+  const normalizationScale=sourceHeight>1e-6?1.62/sourceHeight:null;
+  if(!boundedPrimitiveCount||!Number.isFinite(sourceHeight)||sourceHeight<=1e-6){
+    scaleProblems.push('mesh bounds unavailable or degenerate');
+  }else if(!Number.isFinite(normalizationScale)||normalizationScale<1e-4||normalizationScale>1e4){
+    scaleProblems.push('runtime normalization scale is extreme/non-finite');
+  }
+
+  return {
+    poseProblems,
+    scaleProblems,
+    sourceBounds:{
+      width:Number(size.x.toFixed(5)),
+      height:Number(size.y.toFixed(5)),
+      depth:Number(size.z.toFixed(5))
+    },
+    normalizationScale:normalizationScale==null?null:Number(normalizationScale.toFixed(6))
+  };
 }
 
 const avatarAudit=[];
 for(const name of BUILTIN_AVATAR_NAMES){
   const path=join(process.cwd(),'public','model','characters',name+'.glb');
   assert.ok(existsSync(path),'missing built-in avatar file: '+name);
-  const model=modelFromGlbJson(readGlbJson(path));
+  const json=readGlbJson(path);
+  const {model,objects}=modelFromGlbJson(json);
   const resolution=resolveAvatarRig(model,getAvatarCompatibility(name));
+  const geometryAudit=inspectAvatarGeometry(json,objects,resolution);
   avatarAudit.push({
     name,
     bones:resolution.bones.length,
     missing:resolution.missing,
     missingRequired:resolution.missingRequired,
-    ambiguous:resolution.ambiguous
+    ambiguous:resolution.ambiguous,
+    poseProblems:geometryAudit.poseProblems,
+    scaleProblems:geometryAudit.scaleProblems,
+    sourceBounds:geometryAudit.sourceBounds,
+    normalizationScale:geometryAudit.normalizationScale
   });
   assert.deepEqual(resolution.missingRequired,[],name+' must retain all required gameplay leg bones');
+  assert.deepEqual(geometryAudit.poseProblems,[],name+' must not have degenerate leg pose data');
+  assert.deepEqual(geometryAudit.scaleProblems,[],name+' must have finite normalizable source scale');
 }
 
 const benchmark=makeAnimator({stanceMode:'regular'});

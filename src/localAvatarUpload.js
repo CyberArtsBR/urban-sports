@@ -5,6 +5,8 @@ export const LOCAL_AVATAR_ID='local-user-glb';
 const GLB_MAGIC=0x46546c67;
 const GLB_VERSION=2;
 const GLB_JSON_CHUNK=0x4e4f534a;
+const ACCESSOR_COMPONENT_TYPES=new Set([5120,5121,5122,5123,5125,5126]);
+const ACCESSOR_TYPES=new Set(['SCALAR','VEC2','VEC3','VEC4','MAT2','MAT3','MAT4']);
 
 export const LOCAL_GLB_PREFLIGHT_LIMITS=Object.freeze({
   nodes:512,
@@ -23,6 +25,20 @@ export const LOCAL_GLB_PREFLIGHT_LIMITS=Object.freeze({
   hierarchyDepth:64,
   declaredBufferBytes:192*1024*1024,
   estimatedDecodedBytes:256*1024*1024
+});
+
+export const LOCAL_GLB_CONTAINER_LIMITS=Object.freeze({
+  nodes:800,
+  meshes:160,
+  materials:128,
+  textures:96,
+  images:96,
+  accessors:1600,
+  bufferViews:1600,
+  animations:32,
+  animationChannels:1200,
+  accessorElements:2000000,
+  declaredBufferBytes:MAX_LOCAL_GLB_BYTES
 });
 
 export const LOCAL_GLB_COMPLEXITY_LIMITS=Object.freeze({
@@ -93,6 +109,12 @@ function collectExternalUris(json){
   return uris;
 }
 
+function localContainerError(message,code='LOCAL_GLB_CONTAINER_TOO_COMPLEX'){
+  const error=new Error(message);
+  error.code=code;
+  return error;
+}
+
 export function inspectLocalGlbJson(json={}){
   const nodes=Array.isArray(json.nodes)?json.nodes:[];
   const meshes=Array.isArray(json.meshes)?json.meshes:[];
@@ -121,7 +143,43 @@ export function inspectLocalGlbJson(json={}){
   const boneIndexes=new Set();
   for(const skin of skins)for(const joint of skin?.joints||[])if(Number.isInteger(joint))boneIndexes.add(joint);
   const animationTracks=animations.reduce((sum,animation)=>sum+(Array.isArray(animation?.channels)?animation.channels.length:0),0);
+  const limits=LOCAL_GLB_CONTAINER_LIMITS;
+  const collectionCounts={
+    nodes:nodes.length,meshes:meshes.length,materials:materials.length,textures:textures.length,
+    images:images.length,accessors:accessors.length,bufferViews:bufferViews.length,animations:animations.length
+  };
+  for(const [key,count] of Object.entries(collectionCounts)){
+    if(count>limits[key])throw localContainerError('This local GLB declares too many '+key+' ('+count+', limit '+limits[key]+').');
+  }
+  let accessorElements=0;
+  for(const [index,accessor] of accessors.entries()){
+    if(!accessor||typeof accessor!=='object')throw localContainerError('Malformed accessor '+index+'.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(!ACCESSOR_COMPONENT_TYPES.has(accessor.componentType))throw localContainerError('Malformed accessor '+index+': unsupported componentType.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(!ACCESSOR_TYPES.has(accessor.type))throw localContainerError('Malformed accessor '+index+': unsupported type.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    if(!Number.isInteger(accessor.count)||accessor.count<0)throw localContainerError('Malformed accessor '+index+': invalid count.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    accessorElements+=accessor.count;
+    if(accessorElements>limits.accessorElements)throw localContainerError('This local GLB declares too many accessor elements.');
+    if(accessor.bufferView!=null&&(!Number.isInteger(accessor.bufferView)||accessor.bufferView<0||accessor.bufferView>=bufferViews.length)){
+      throw localContainerError('Malformed accessor '+index+': invalid bufferView.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    }
+    if(accessor.byteOffset!=null&&(!Number.isInteger(accessor.byteOffset)||accessor.byteOffset<0)){
+      throw localContainerError('Malformed accessor '+index+': invalid byteOffset.','LOCAL_GLB_MALFORMED_ACCESSOR');
+    }
+  }
+  let animationChannels=0;
+  for(const animation of animations){
+    const channels=Array.isArray(animation?.channels)?animation.channels:[];
+    const samplers=Array.isArray(animation?.samplers)?animation.samplers:[];
+    animationChannels+=channels.length;
+    if(animationChannels>limits.animationChannels)throw localContainerError('This local GLB declares too many animation channels.');
+    for(const channel of channels){
+      if(!Number.isInteger(channel?.sampler)||channel.sampler<0||channel.sampler>=samplers.length){
+        throw localContainerError('Malformed animation channel sampler.','LOCAL_GLB_MALFORMED_ANIMATION');
+      }
+    }
+  }
   const declaredBufferBytes=buffers.reduce((sum,buffer)=>sum+(Number(buffer?.byteLength)||0),0);
+  if(declaredBufferBytes>limits.declaredBufferBytes)throw localContainerError('This local GLB declares too much buffer data.');
 
   let accessorDecodedBytes=0;
   for(const accessor of accessors){
@@ -148,6 +206,8 @@ export function inspectLocalGlbJson(json={}){
     bones:boneIndexes.size,
     animations:animations.length,
     animationTracks,
+    animationChannels,
+    accessorElements,
     hierarchyDepth:countHierarchyDepth(nodes),
     declaredBufferBytes,
     accessorDecodedBytes,
@@ -194,7 +254,7 @@ export function inspectGlbContainerBytes(arrayBuffer,{maxJsonBytes=MAX_LOCAL_GLB
   const jsonBytes=view.getUint32(12,true);
   const chunkType=view.getUint32(16,true);
   if(chunkType!==GLB_JSON_CHUNK)throw new Error('GLB JSON chunk must be the first chunk.');
-  if(jsonBytes<=0||jsonBytes>maxJsonBytes)throw new Error('GLB JSON chunk is too large.');
+  if(jsonBytes<=0||jsonBytes>maxJsonBytes)throw localContainerError('GLB JSON chunk is too large.','LOCAL_GLB_JSON_TOO_LARGE');
   if(20+jsonBytes>arrayBuffer.byteLength)throw new Error('GLB JSON chunk exceeds the file length.');
   const json=decodeJsonChunk(new Uint8Array(arrayBuffer,20,jsonBytes));
   const stats=inspectLocalGlbJson(json);
@@ -227,7 +287,7 @@ export async function validateLocalGlbFile(file,{maxBytes=MAX_LOCAL_GLB_BYTES,ma
   const json=decodeJsonChunk(new Uint8Array(jsonBuffer));
   const stats=inspectLocalGlbJson(json);
   enforcePreflightLimits(stats,limits);
-  return {name,size,jsonBytes,preflight:stats};
+  return {name,size,jsonBytes,preflight:stats,containerStats:stats};
 }
 
 function textureSize(texture){

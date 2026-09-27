@@ -19,15 +19,21 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 22.23.2
       - run: |
-          npm install
+          npm ci
+          npm audit --audit-level=high
           npx playwright install --with-deps chromium
       - name: Audit deployed Urban Sports desktop build
         env:
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
           CHIMPIONS_URBAN_SPORTS_EXPECTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
         run: node checks/production-browser.mjs
+
+      - name: Verify deployed security headers
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: node checks/production-security-headers.mjs
 
       - name: Run deployed gameplay release smoke
         env:

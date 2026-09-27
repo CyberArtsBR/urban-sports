@@ -67,6 +67,8 @@ import {CONTROL_COPY} from './controlCopy.js';
 import {createLocalization} from './localization.js';
 import {applyAccessibilityPreferences} from './uiAccessibility.js';
 import {createProgressionReplayService} from './progression/index.js';
+import {recordLandingFeedbackStats,recordLandingOutcome} from './landingStats.js';
+import {createOneShotGraphicsFaultInjector} from './renderFailOpen.js';
 
 const userPreferences=loadUserPreferences();
 const localization=createLocalization({locale:userPreferences.locale});
@@ -77,11 +79,13 @@ configureControllerInput({deadzone:userPreferences.controllerDeadzone});
 let runtimeTestMode=false;
 let requestedRunSeed=null;
 let activeChallengeSeed=null;
+let requestedGraphicsFault='';
 try{
   const params=new URLSearchParams(globalThis.location?.search||'');
   runtimeTestMode=params.get('test')==='1';
   const seedParam=params.get('seed');
   requestedRunSeed=seedParam?String(seedParam):null;
+  requestedGraphicsFault=runtimeTestMode?String(params.get('graphicsFault')||'').trim().toLowerCase():'';
 }catch{}
 function createRunSeed(){
   if(requestedRunSeed)return requestedRunSeed;
@@ -181,6 +185,10 @@ app.prepend(renderer.domElement);
 // and fail-open: any capability, pass, framebuffer or output-health failure
 // immediately returns control to renderer.render(scene,camera).
 cinematicRendering=createCinematicRendering({renderer,scene,camera,settings:quality.getSettings()});
+const graphicsFaultInjector=createOneShotGraphicsFaultInjector(requestedGraphicsFault);
+const renderFailOpenState={
+  optionalDisabled:false,directFrames:0,composedFrames:0,fallbackFrames:0,faultCount:0,lastFault:'',lastPath:'unrendered'
+};
 
 const world=new THREE.Group();scene.add(world);
 const environmentSystem=createEnvironmentSystem({
@@ -1612,10 +1620,8 @@ function update(dt,frameMs=dt*1000){
     if(landing.landed){
       if(nativeSkateboard){
         recordSkateboardLandingStatistic(state,landing);
-      }else if(landing.quality==='clean'){
-        state.cleanLandings=(state.cleanLandings||0)+1;
       }else{
-        state.lastMistakeTime=state.time;
+        recordLandingOutcome(state,landing);
       }
       const trickLanding=tricks.land({jumpSource:landingSource});
       if(nativeSkateboard&&landing.failed&&state.mode==='playing'){
@@ -1627,7 +1633,7 @@ function update(dt,frameMs=dt*1000){
       }else if(state.mode==='playing'){
         const feedbackLanding=landing.quality==='sketchy'?{...landing,quality:'rough'}:landing;
         const landingFeedback=feedback.onLanding(feedbackLanding,{jumpSource:landingSource,verticalVelocity:landing.impact});
-        if(landingFeedback?.dramatic&&landingFeedback?.quality!=='hard')state.strongLandings=(state.strongLandings||0)+1;
+        recordLandingFeedbackStats(state,landingFeedback);
         haptics.land(landingFeedback?.hapticStrength??Math.min(1,(Number(landing.impact)||0)/18),landing.quality);
       }
     }
@@ -1998,11 +2004,32 @@ function render(now){
   renderer.info.reset();
   gpuTimer.begin();
   try{
-    const composed=cinematicRendering?.active?cinematicRendering.render(dt):false;
+    let composed=false;
+    if(cinematicRendering?.active&&!renderFailOpenState.optionalDisabled){
+      try{
+        const injected=graphicsFaultInjector.inject();
+        if(injected)throw injected;
+        composed=!!cinematicRendering.render(dt);
+        if(composed){
+          renderFailOpenState.composedFrames++;
+          renderFailOpenState.lastPath='optional';
+        }
+      }catch(error){
+        renderFailOpenState.optionalDisabled=true;
+        renderFailOpenState.fallbackFrames++;
+        renderFailOpenState.faultCount++;
+        renderFailOpenState.lastFault=String(error?.code||error?.message||error||'optional-render-failure');
+        cinematicRendering?.disable?.(renderFailOpenState.lastFault);
+        console.warn('Optional graphics path failed open to direct rendering:',renderFailOpenState.lastFault);
+      }
+    }
     if(!composed){
       const directStarted=performance.now();
-      try{renderer.render(scene,camera);}
-      finally{directRenderTimer.record(performance.now()-directStarted);}
+      try{
+        renderer.render(scene,camera);
+        renderFailOpenState.directFrames++;
+        renderFailOpenState.lastPath=renderFailOpenState.optionalDisabled?'direct-disabled':'direct';
+      }finally{directRenderTimer.record(performance.now()-directStarted);}
     }
   }finally{
     gpuTimer.end();
@@ -2045,6 +2072,11 @@ window.chimpionsSki=()=>{
     ...performanceTelemetry.getFlatSnapshot(),
     ...getRiderAssetPerformanceDiagnostics(),
     ...captureGraphicsDiagnostics({renderer,scene,urbanEnvironment}),
+    renderFailOpen:{...renderFailOpenState,graphicsFault:graphicsFaultInjector.fault,graphicsFaultConsumed:graphicsFaultInjector.consumed},
+    weatherState:mountainWeather.getState?.()||null,
+    audioDiagnostics:audio.getDiagnostics?.()||null,
+    hapticsDiagnostics:haptics.diagnostics?.()||null,
+    runtimeListenerCount:runtimeListeners.size,
     renderingQuality:{
       profile:quality.active,
       effectiveDpr:renderer.getPixelRatio(),
@@ -2201,7 +2233,21 @@ window.chimpionsUrbanSports.createShareCode=(metadata={})=>progression.encodeSha
   challengeVersion:metadata.challengeVersion||progression.getActiveChallenge()?.challengeVersion||'none'
 });
 window.chimpionsUrbanSports.decodeShareCode=code=>progression.decodeShareCode(code);
-
+if(runtimeTestMode){
+  window.__urbanReleaseTest=Object.freeze({
+    forceCrash:(kind='test')=>crash(kind),
+    showCrashResults:()=>showCrashResults('release-test'),
+    switchBuiltinAvatar:async index=>{
+      const builtins=catalog.filter(entry=>entry&&!entry.localOnly);
+      if(!builtins.length)return false;
+      const normalized=((Math.trunc(Number(index)||0)%builtins.length)+builtins.length)%builtins.length;
+      const entry=builtins[normalized];
+      await setAvatar(entry,selectorRideModeForSkateboardSetup(selectedSkateboardSetup));
+      return selectedAvatar?.id===entry.id;
+    },
+    builtinAvatarCount:()=>catalog.filter(entry=>entry&&!entry.localOnly).length
+  });
+}
 
 if(import.meta.hot){
   import.meta.hot.dispose(()=>{
@@ -2224,5 +2270,6 @@ if(import.meta.hot){
     selector?.dispose?.();
     delete window.chimpionsSki;
     delete window.chimpionsUrbanSports;
+    delete window.__urbanReleaseTest;
   });
 }

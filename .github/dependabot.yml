@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      runtime:
+        patterns:
+          - three
+          - vite
+      test-tooling:
+        patterns:
+          - "@playwright/test"
+    labels:
+      - dependencies
+      - release-hardening
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - release-hardening

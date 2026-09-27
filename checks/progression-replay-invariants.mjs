@@ -3,7 +3,7 @@ import {
   CURRENT_REPLAY_VERSIONS,GAMEPLAY_VERSION,GHOST_MODE,MAX_RUN_HISTORY,URBAN_PROGRESS_KEY,
   createGhostPlayback,createProgressionReplayService,createReplayRecorder,decodeReplay,decodeShareCode,
   encodeShareCode,evaluateChallenge,getDailyChallenge,iterateReplayInputs,loadProgressionState,
-  serializeReplay,utcDateKey,validateReplayCompatibility,verifyReplayDeterminism
+  serializeReplay,utcDateKey,validateReplay,validateReplayCompatibility,verifyReplayDeterminism
 } from '../src/progression/index.js';
 
 class MemoryStorage{
@@ -75,6 +75,24 @@ let replay;
   const result=validateReplayCompatibility(incompatible);
   assert.equal(result.compatible,false);
   assert.throws(()=>decodeReplay(serializeReplay(incompatible),{requireCompatibility:true}),/Incompatible replay/);
+}
+
+// Impossible input, duration, seed and checkpoint sequences are rejected before playback.
+{
+  const impossibleAxis=structuredClone(replay);
+  impossibleAxis.segments[0][1]=999;
+  assert.throws(()=>validateReplay(impossibleAxis),/steer axis/);
+  const impossibleDt=structuredClone(replay);
+  impossibleDt.segments[0][6]=301;
+  assert.throws(()=>validateReplay(impossibleDt),/delta time/);
+  const invalidSeed=structuredClone(replay);
+  invalidSeed.runSeed='<unsafe>';
+  assert.throws(()=>validateReplay(invalidSeed),/seed/);
+  const badSequence=structuredClone(replay);
+  badSequence.checkpoints=[badSequence.checkpoints[1],badSequence.checkpoints[0]];
+  assert.throws(()=>validateReplay(badSequence),/checkpoint sequence/);
+  const excessiveDuration={...structuredClone(replay),frameCount:1_000_000,segments:[[1_000_000,0,0,0,0,0,300]],checkpoints:[],terminal:{...replay.terminal,frame:1_000_000}};
+  assert.throws(()=>validateReplay(excessiveDuration),/duration exceeds/);
 }
 
 // Record -> replay -> checkpoint comparison using a deterministic authoritative-style harness.

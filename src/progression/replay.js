@@ -3,6 +3,8 @@ import {CURRENT_REPLAY_VERSIONS,REPLAY_FORMAT_VERSION,SHARE_CODE_VERSION} from '
 export const REPLAY_PREFIX='USR1.';
 export const SHARE_CODE_PREFIX='USC1.';
 export const MAX_REPLAY_FRAMES=1_000_000;
+export const MAX_REPLAY_DT_TICKS=300; // 50 ms at 1/6000 s resolution; render dt is capped at 50 ms.
+export const MAX_REPLAY_DURATION_SECONDS=4*60*60;
 export const DEFAULT_CHECKPOINT_INTERVAL=120;
 
 const TRICK_IDS=Object.freeze(['','180','360','BACKFLIP','KICKFLIP','HEELFLIP','POP SHOVE-IT','FRONTSIDE SHOVE-IT','INDY','MELON','NOSEGRAB','VARIAL FLIP','360 FLIP']);
@@ -11,7 +13,7 @@ const decoder=new TextDecoder();
 const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const quantizeAxis=value=>Math.max(-127,Math.min(127,Math.round((Number(value)||0)*127)));
 const dequantizeAxis=value=>Math.max(-1,Math.min(1,(Number(value)||0)/127));
-const quantizeDt=dt=>Math.max(1,Math.min(65535,Math.round((Number(dt)||0)*6000)));
+const quantizeDt=dt=>Math.max(1,Math.min(MAX_REPLAY_DT_TICKS,Math.round((Number(dt)||0)*6000)));
 const dequantizeDt=value=>(Number(value)||0)/6000;
 const finite=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
 const round=(value,digits=4)=>{const p=10**digits;return Math.round(finite(value)*p)/p;};
@@ -68,8 +70,20 @@ export function packReplayInput(input={},dt=1/60){
   return [quantizeAxis(input.steer),quantizeAxis(input.verticalIntent),flags,trickId(input.trickIntent),trickId(input.airborneTrickIntent),quantizeDt(dt)];
 }
 
+function validatePackedInput(packed){
+  if(!Array.isArray(packed)||packed.length!==6)throw new Error('Malformed replay input');
+  const [steer,vertical,flags,trick,airTrick,dtTicks]=packed.map(Number);
+  if(!Number.isInteger(steer)||steer<-127||steer>127)throw new Error('Invalid replay steer axis');
+  if(!Number.isInteger(vertical)||vertical<-127||vertical>127)throw new Error('Invalid replay vertical axis');
+  if(!Number.isInteger(flags)||flags<0||flags>63)throw new Error('Invalid replay input flags');
+  if(!Number.isInteger(trick)||trick<0||trick>=TRICK_IDS.length)throw new Error('Invalid replay trick intent');
+  if(!Number.isInteger(airTrick)||airTrick<0||airTrick>=TRICK_IDS.length)throw new Error('Invalid replay airborne trick intent');
+  if(!Number.isInteger(dtTicks)||dtTicks<1||dtTicks>MAX_REPLAY_DT_TICKS)throw new Error('Invalid replay delta time');
+  return true;
+}
+
 export function unpackReplayInput(packed){
-  if(!Array.isArray(packed)||packed.length<6)throw new Error('Malformed replay input');
+  validatePackedInput(packed);
   const flags=Number(packed[2])||0;
   return {
     steer:dequantizeAxis(packed[0]),
@@ -190,16 +204,28 @@ export function validateReplay(replay,{requireCompatibility=false,expectedVersio
   if(!/^[a-z0-9_.:-]{1,48}$/i.test(String(replay.setup||'')))throw new Error('Invalid replay setup');
   if(!Array.isArray(replay.segments)||!Array.isArray(replay.checkpoints))throw new Error('Malformed replay payload');
   let frames=0;
+  let durationTicks=0;
   for(const segment of replay.segments){
     if(!Array.isArray(segment)||segment.length!==7)throw new Error('Malformed replay segment');
     const count=Number(segment[0]);
     if(!Number.isInteger(count)||count<1||count>MAX_REPLAY_FRAMES)throw new Error('Invalid replay run length');
-    unpackReplayInput(segment.slice(1));
+    const packed=segment.slice(1);
+    validatePackedInput(packed);
     frames+=count;
+    durationTicks+=count*Number(packed[5]);
     if(frames>MAX_REPLAY_FRAMES)throw new Error('Replay too long');
+    if(durationTicks/6000>MAX_REPLAY_DURATION_SECONDS)throw new Error('Replay duration exceeds limit');
   }
   if(frames!==Number(replay.frameCount))throw new Error('Replay frame count mismatch');
   if(replay.checkpoints.length>Math.ceil(MAX_REPLAY_FRAMES/10)+2)throw new Error('Too many replay checkpoints');
+  let previousCheckpointFrame=-1;
+  for(const checkpoint of replay.checkpoints){
+    const checkpointFrame=Number(checkpoint?.frame);
+    if(!Number.isInteger(checkpointFrame)||checkpointFrame<0||checkpointFrame>frames||checkpointFrame<=previousCheckpointFrame)throw new Error('Invalid replay checkpoint sequence');
+    for(const key of ['distance','x','y','speed','score'])if(!Number.isFinite(Number(checkpoint?.[key])))throw new Error('Invalid replay checkpoint state');
+    previousCheckpointFrame=checkpointFrame;
+  }
+  if(replay.terminal&&Number(replay.terminal.frame)!==frames)throw new Error('Replay terminal frame mismatch');
   const compatibility=validateReplayCompatibility(replay,expectedVersions);
   if(requireCompatibility&&!compatibility.compatible)throw new Error(`Incompatible replay: ${compatibility.issues.join(',')}`);
   return {valid:true,frames,compatibility};

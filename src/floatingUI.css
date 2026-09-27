@@ -430,7 +430,7 @@ body{
 .selected-avatar-image{background:#111b2a;box-shadow:0 0 0 1px rgba(82,231,255,.25),0 6px 18px rgba(0,0,0,.30)}
 .selected-avatar small{color:#8298ad}
 .selected-avatar strong{color:var(--urban-text)}
-.selected-ride-mode{
+.selected-sport-mode{
   color:var(--urban-lime)!important;
   letter-spacing:.08em;
   font-weight:800;

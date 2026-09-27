@@ -65,8 +65,8 @@ for(const needle of [
 ]){
   assert(cinematic.includes(needle),'cinematic reliability path missing '+needle);
 }
-assert(cinematic.includes("capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable"),'GTAO must require verified depth + HalfFloat support');
-assert(cinematic.includes("capabilities.halfFloatRenderable&&!forced('bloom')"),'Bloom must require verified HalfFloat support');
+assert(cinematic.includes("capabilities.depthTextureRenderable&&capabilities.halfFloatRenderable&&capabilities.halfFloatLinear"),'GTAO must require verified depth + linear HalfFloat support');
+assert(cinematic.includes("capabilities.halfFloatRenderable&&capabilities.halfFloatLinear&&!forced('bloom')"),'Bloom must require verified linear HalfFloat support');
 assert(cinematic.includes("return degradeRuntime('critical WebGL error"),'critical framebuffer errors must degrade instead of blanking gameplay');
 assert(main.includes("if(!composed)renderer.render(scene,camera)"),'direct WebGLRenderer must remain the same-frame universal fallback');
 assert(main.includes("renderer.outputColorSpace=THREE.SRGBColorSpace"),'output color space must be explicit');

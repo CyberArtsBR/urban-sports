@@ -20,7 +20,12 @@ assert(source.includes('root.userData.updateRidePose=root.userData.updateSkiPose
 assert(source.includes("root.userData.animationState=snowboardMode?(skateAnimator?.state||'IDLE'):'SKI'"),'runtime exposes the current skateboard visual state');
 assert(controllerSource.includes('updateRidePose||rider?.userData?.updateSkiPose'),'rider controller prefers the sport-neutral pose hook');
 assert(animatorSource.includes("boardPoseRoot.name='skateboard-animation-root'"),'board trick animation is isolated under a visual-only equipment transform');
-assert(animatorSource.includes("footPlacementMode:'proportional-rest-pose-lock'"),'arbitrary GLBs use proportional rest-pose foot locking instead of unsafe iterative IK');
+assert(
+  animatorSource.includes("'board-space-two-bone-partial-ik'")&&
+  animatorSource.includes("'board-space-ankle-fallback'")&&
+  animatorSource.includes('const legMetrics=new Map()'),
+  'arbitrary GLBs use bounded cached board-space partial IK with graceful ankle fallback'
+);
 assert(!animatorSource.includes('player.position'),'skateboard animator never writes the authoritative player transform');
 assert(!animatorSource.includes('collision'),'skateboard animator does not own collision state');
 

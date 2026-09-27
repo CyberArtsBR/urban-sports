@@ -375,7 +375,34 @@ export function createSkateboardEquipment({
     return setWheelRotation(wheelPhase+(Number(deltaRadians)||0));
   }
 
-  function updateMotion({dt=1/60,speed=0,lean=0,steer=null,air=false,time=0,trickType='',trickProgress=0}={}){
+  function resetMotion(){
+    targetLean=0;
+    targetSteer=0;
+    wheelPhase=0;
+    motionRoot.position.set(0,0,0);
+    motionRoot.rotation.set(0,0,0);
+    motionRoot.scale.set(1,1,1);
+    frontTruck.pivot.rotation.y=0;
+    rearTruck.pivot.rotation.y=0;
+    for(const wheel of wheels)wheel.rotation.x=0;
+    return true;
+  }
+
+  function updateMotion({
+    dt=1/60,
+    speed=0,
+    lean=0,
+    steer=null,
+    air=false,
+    time=0,
+    trickType='',
+    trickProgress=0,
+    landing=0,
+    powerslide=0,
+    roadRoughness=.28,
+    reducedMotion=false,
+    externalPose=false
+  }={}){
     const frameDt=THREE.MathUtils.clamp(Number(dt)||0,0,.10);
     setLean(lean);
     setTruckSteer(steer==null?lean:steer);
@@ -385,19 +412,22 @@ export function createSkateboardEquipment({
     const turn=progress*Math.PI*2;
     const halfTurn=progress*Math.PI;
     const grabArc=Math.sin(progress*Math.PI);
+    const poseOwnedExternally=!!externalPose;
     let boardFlip=0;
     let boardShove=0;
     let boardPitch=0;
 
-    if(trickType==='KICKFLIP')boardFlip=turn;
-    else if(trickType==='HEELFLIP')boardFlip=-turn;
-    else if(trickType==='POP SHOVE-IT')boardShove=halfTurn;
-    else if(trickType==='FRONTSIDE SHOVE-IT')boardShove=-halfTurn;
-    else if(trickType==='VARIAL FLIP'){boardFlip=turn;boardShove=halfTurn;}
-    else if(trickType==='360 FLIP'){boardFlip=turn;boardShove=turn;}
-    else if(trickType==='INDY')boardPitch=.08*grabArc;
-    else if(trickType==='MELON')boardPitch=-.07*grabArc;
-    else if(trickType==='NOSEGRAB')boardPitch=-.12*grabArc;
+    if(!poseOwnedExternally){
+      if(trickType==='KICKFLIP')boardFlip=turn;
+      else if(trickType==='HEELFLIP')boardFlip=-turn;
+      else if(trickType==='POP SHOVE-IT')boardShove=halfTurn;
+      else if(trickType==='FRONTSIDE SHOVE-IT')boardShove=-halfTurn;
+      else if(trickType==='VARIAL FLIP'){boardFlip=turn;boardShove=halfTurn;}
+      else if(trickType==='360 FLIP'){boardFlip=turn;boardShove=turn;}
+      else if(trickType==='INDY')boardPitch=.08*grabArc;
+      else if(trickType==='MELON')boardPitch=-.07*grabArc;
+      else if(trickType==='NOSEGRAB')boardPitch=-.12*grabArc;
+    }
 
     const trickResponse=1-Math.pow(1-(air?.58:.24),frameDt*60);
     motionRoot.rotation.z=THREE.MathUtils.lerp(motionRoot.rotation.z,targetLean+boardFlip,trickResponse);
@@ -411,6 +441,16 @@ export function createSkateboardEquipment({
     const coastScale=air?.72:1;
     spinWheels(-spinRate*frameDt*coastScale);
 
+    const speed01=THREE.MathUtils.clamp(linearSpeed/24,0,1);
+    const roughness=THREE.MathUtils.clamp(Number(roadRoughness)||0,0,1);
+    const landing01=THREE.MathUtils.clamp(Number(landing)||0,0,1);
+    const slide01=THREE.MathUtils.clamp(Number(powerslide)||0,0,1);
+    const vibration=(reducedMotion||air)?0:Math.sin((Number(time)||0)*47.0)*.0018*speed01*roughness;
+    const flex=(landing01*.0055+slide01*.0015)*(reducedMotion?.55:1);
+    motionRoot.position.y=THREE.MathUtils.lerp(motionRoot.position.y,vibration-flex,response);
+    motionRoot.scale.y=THREE.MathUtils.lerp(motionRoot.scale.y,1-flex*.7,response);
+    motionRoot.scale.z=THREE.MathUtils.lerp(motionRoot.scale.z,1+flex*.16,response);
+
     if(powerLevel>0)setPowerGlow(powerLevel,time);
     return {
       wheelRotation:wheelPhase,
@@ -419,7 +459,10 @@ export function createSkateboardEquipment({
       rearTruckSteer:rearTruck.pivot.rotation.y,
       powerGlow:powerLevel,
       trickType,
-      trickProgress:progress
+      trickProgress:progress,
+      externalPose:poseOwnedExternally,
+      roadVibration:vibration,
+      deckFlex:flex
     };
   }
 
@@ -457,6 +500,7 @@ export function createSkateboardEquipment({
   root.userData.setWheelRotation=setWheelRotation;
   root.userData.spinWheels=spinWheels;
   root.userData.updateMotion=updateMotion;
+  root.userData.resetMotion=resetMotion;
   root.userData.dispose=dispose;
   setPowerGlow(0,0);
 
@@ -472,6 +516,7 @@ export function createSkateboardEquipment({
     setWheelRotation,
     spinWheels,
     updateMotion,
+    resetMotion,
     dispose
   };
 }

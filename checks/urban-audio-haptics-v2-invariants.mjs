@@ -33,6 +33,9 @@ assert(mixerSource.includes('activeTransientSources.delete(source)'),'Transient 
 assert(mixerSource.includes('stopTransientSources()'),'Restart/teardown source cleanup is missing');
 assert(mixerSource.includes('peakTransientCount'),'Transient peak diagnostics missing');
 assert(mixerSource.includes('activeNodeEstimate'),'Active node diagnostics missing');
+assert(mixerSource.includes('bufferCountEstimate'),'Mixer buffer estimate diagnostics missing');
+assert(facadeSource.includes('activeEnvironmentalTransientCount'),'Whole-runtime environmental transient diagnostics missing');
+assert(facadeSource.includes('bufferCountEstimate:(m.bufferCountEstimate??m.bufferCount)+w.bufferCount+wa.bufferCount'),'Whole-runtime buffer aggregation missing');
 assert(!mixerSource.includes('createPanner('),'Mixer should not create expensive PannerNodes for routine events');
 assert(mixerSource.includes('Math.min(.92'),'Transient peak gain clamp missing');
 

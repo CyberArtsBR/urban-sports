@@ -167,6 +167,16 @@ Pinned direct versions audited:
 - Vite 7.3.5
 - Playwright 1.55.1
 
+Registry snapshot on 2026-09-27:
+- Three.js latest: 0.186.1
+- Vite latest: 8.3.1; 7.3.6 is the newer 7.x patch line shown by the registry
+- @playwright/test latest: 1.63.0
+
+Do not upgrade these inside an unrelated release. Use dedicated compatibility PRs:
+1. Playwright first: refresh browser binaries, then run BROWSER, GRAPHICS and visual artifacts to separate harness/browser changes from game changes.
+2. Vite 7.3.5 -> 7.3.6 as a low-scope patch candidate, then evaluate Vite 8 in a separate major-upgrade PR with build/preview and deployment-config verification.
+3. Three.js 0.180.0 -> current release in a graphics-specific PR. Require the full LOW/MEDIUM/HIGH/MAX matrix, fail-open fault injection, visual artifacts and PERFORMANCE before merge.
+
 A pre-hardening CI `npm install` reported one LOW severity npm audit finding. The hardening blocks HIGH/CRITICAL via `npm audit --audit-level=high`, preserves visibility of lower findings, commits a deterministic lockfile and adds monthly Dependabot updates for npm and GitHub Actions.
 
 ## Existing deterministic course coverage preserved

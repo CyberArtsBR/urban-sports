@@ -17,13 +17,15 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
   const query=new URLSearchParams(location.search);
   const preferences={weather:weatherName(query.get('weather')||saved.weather||'auto'),reducedFlashes:saved.reducedFlashes??matchMedia('(prefers-reduced-motion: reduce)').matches};
   const controller=createWeatherState(preferences.weather,preferences.reducedFlashes);
-  const bindings=environment.weatherBindings,{sky,snowLayers,sun,ambient,rim,fill,snowMaterials,atmosphere,snowParticles,surfaceDetail}=bindings;
-  sky.visible=false;for(const layer of snowLayers){layer.points.visible=false;layer.points.userData.externalWeather=true;}
-  if(!sun.target.parent)scene.add(sun.target);
+  const bindings=environment.weatherBindings||{};
+  const {sky=null,snowLayers=[],sun=null,ambient=null,rim=null,fill=null,snowMaterials=null,atmosphere=null,snowParticles=null,surfaceDetail=null}=bindings;
+  if(sky)sky.visible=false;
+  for(const layer of snowLayers||[]){if(layer?.points){layer.points.visible=false;layer.points.userData.externalWeather=true;}}
+  if(sun?.target&&!sun.target.parent)scene.add(sun.target);
   scene.environment??=createStaticEnvironment(renderer);
   const rendererWeather=createAlpineWeather({scene,camera,renderer,sun,ambient,rim,settings:budgets[quality.active]||budgets.high});
   const urbanAtmosphere=createUrbanAtmosphere({scene,renderer,ambient,rim,fill,quality:quality.active});
-  const sceneMaterials=new Set();atmosphere.traverse(o=>{for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m?.color)sceneMaterials.add(m);});
+  const sceneMaterials=new Set();atmosphere?.traverse?.(o=>{for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m?.color)sceneMaterials.add(m);});
   app.insertAdjacentHTML('beforeend',`<details class="graphics-panel" id="mountain-atmosphere"><summary aria-label="City atmosphere settings"><span aria-hidden="true">🌆</span> City atmosphere</summary><div class="graphics-content"><div class="graphics-heading">MAKE IT YOUR CITY</div><label>Graphics<select id="atmosphere-quality"><option value="auto">Auto</option><option value="high">High</option><option value="max">Max</option><option value="medium">Balanced</option><option value="low">Low</option></select></label><label>Atmosphere<select id="atmosphere-mode"><option value="auto">Changing skies</option><option value="day">City daylight</option><option value="sunset">Golden hour</option><option value="night">City night</option><option value="snow">Cold haze</option><option value="rain">Night rain</option><option value="storm">Thunderstorm</option></select></label><label class="graphics-toggle"><input type="checkbox" id="atmosphere-flashes"> Gentle lightning</label><p>Skies change gradually. Audio follows your sound settings. Riding physics stay the same.</p></div></details>`);
   const panel=document.getElementById('mountain-atmosphere'),mode=document.getElementById('atmosphere-mode'),qualitySelect=document.getElementById('atmosphere-quality'),flashes=document.getElementById('atmosphere-flashes');
   const persist=()=>{try{localStorage.setItem('chimpions-ski-atmosphere',JSON.stringify(preferences));}catch{}};
@@ -38,7 +40,7 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
     qualitySelect.value=quality.current;
   },{immediate:true});
   const dryRoughness=new Map(),wetMaterials=new Set();
-  for(const [name,m] of Object.entries(environment.courseMaterials))if(['rock','trunk','log','logEnd'].includes(name)){wetMaterials.add(m);dryRoughness.set(m,m.roughness);}
+  for(const [name,m] of Object.entries(environment.courseMaterials||{}))if(['rock','trunk','log','logEnd'].includes(name)&&m){wetMaterials.add(m);dryRoughness.set(m,m.roughness);}
   const equipment=new Set();
   function setRider(root){
     equipment.clear();if(!root)return;
@@ -46,10 +48,14 @@ export function createMountainWeather({app,scene,camera,renderer,environment,aud
   }
   function update(dt,state){
     const w=controller.update(dt);rendererWeather.update(dt,state,w);
-    fill.color.copy(w.ambient);fill.intensity=.25+w.night*.14;
-    snowMaterials.terrain.color.copy(w.snow);snowMaterials.bank.color.copy(w.snow);snowMaterials.shadowBank.color.copy(w.snow).multiplyScalar(.77);
-    snowMaterials.terrain.roughness=.86-w.wet*.08;snowMaterials.terrain.envMapIntensity=.12+w.wet*.14;
-    snowParticles.setTint(w.snow);surfaceDetail.moundMaterial.color.copy(w.snow);surfaceDetail.ridgeMaterial.color.copy(w.snow).multiplyScalar(.77);
+    if(fill){fill.color.copy(w.ambient);fill.intensity=.25+w.night*.14;}
+    if(snowMaterials?.terrain&&snowMaterials?.bank&&snowMaterials?.shadowBank){
+      snowMaterials.terrain.color.copy(w.snow);snowMaterials.bank.color.copy(w.snow);snowMaterials.shadowBank.color.copy(w.snow).multiplyScalar(.77);
+      snowMaterials.terrain.roughness=.86-w.wet*.08;snowMaterials.terrain.envMapIntensity=.12+w.wet*.14;
+    }
+    snowParticles?.setTint?.(w.snow);
+    if(surfaceDetail?.moundMaterial?.color)surfaceDetail.moundMaterial.color.copy(w.snow);
+    if(surfaceDetail?.ridgeMaterial?.color)surfaceDetail.ridgeMaterial.color.copy(w.snow).multiplyScalar(.77);
     for(const m of sceneMaterials)m.color.copy(w.snow).lerp(w.fog,.25);
     for(const m of wetMaterials){m.roughness=Math.max(.35,dryRoughness.get(m)-w.wet*.25);m.envMapIntensity=.35+w.wet*.25;}
     for(const m of equipment){m.roughness=Math.max(.16,m.userData.atmosphereDryRoughness-w.wet*.13);m.envMapIntensity=.65+w.wet*.2;}

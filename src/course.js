@@ -52,7 +52,7 @@ function placementCenterLimit(kind){
   return Math.min(base,tuned);
 }
 
-export const COURSE_TYPES=[
+export const LEGACY_COURSE_GEOMETRY_TYPES=[
   'OPEN CARVE',
   'GATE',
   'BANANA LINE',
@@ -62,6 +62,10 @@ export const COURSE_TYPES=[
   'ROCK SLALOM',
   'LOG JUMP'
 ];
+
+// Backward-compatible export for collision/streaming contracts. Authored course
+// semantics now come from the Urban director; these names are geometry adapters.
+export const COURSE_TYPES=LEGACY_COURSE_GEOMETRY_TYPES;
 
 // Urban-native gameplay semantics sit on top of the proven legacy safety families.
 // Keep COURSE_TYPES stable for collision/streaming compatibility while exposing the
@@ -107,11 +111,6 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
   // Bands guide macro route choices only. Physical hazards themselves are
   // placed continuously so the player cannot memorize a seven-column grid.
   const bands=[-1,-.68,-.34,0,.34,.68,1];
-  const opening=[
-    'OPEN CARVE','BANANA LINE','GATE','FOREST',
-    'LOG JUMP','RECOVERY','ROCK SLALOM','OPEN CARVE','GATE','RAMP','RECOVERY'
-  ];
-
   const rand=(min,max)=>min+(max-min)*random();
   const weightedIndex=weights=>{
     let total=weights.reduce((sum,value)=>sum+value,0);
@@ -827,63 +826,6 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
     return added;
   }
 
-  function chooseType(difficulty,runPlan=null){
-    if(sectionIndex<opening.length)return opening[sectionIndex];
-    if(lastType==='RAMP'||lastType==='LOG JUMP')return 'RECOVERY';
-    if(runPlan?.phase==='RECOVERY')return 'RECOVERY';
-
-    const transitions={
-      'RECOVERY':['OPEN CARVE','GATE','FOREST','BANANA LINE','LOG JUMP'],
-      'OPEN CARVE':['GATE','FOREST','ROCK SLALOM','BANANA LINE','RAMP','LOG JUMP'],
-      'GATE':['OPEN CARVE','FOREST','ROCK SLALOM','BANANA LINE','RAMP','LOG JUMP'],
-      'BANANA LINE':['OPEN CARVE','GATE','FOREST','RAMP','LOG JUMP'],
-      'FOREST':['OPEN CARVE','GATE','ROCK SLALOM','RAMP','LOG JUMP'],
-      'ROCK SLALOM':['OPEN CARVE','GATE','FOREST','RAMP','LOG JUMP']
-    };
-    const options=[...(transitions[lastType]||['OPEN CARVE'])];
-
-    if(difficulty>.16&&lastType!=='RECOVERY'&&random()<(.52+difficulty*.18))options.push('LOG JUMP');
-    if(lastType!=='RECOVERY'&&random()<(.14+difficulty*.10))options.push('RAMP');
-
-    if(runPlan?.preferredSections?.length){
-      const repeats=1+Math.floor((runPlan.intensity||0)*2);
-      const postPressure=clamp(Number(runPlan.postMaxPressure)||0,0,1);
-      const preferred=postPressure>.45
-        ?runPlan.preferredSections.filter(type=>type!=='RAMP'&&type!=='LOG JUMP')
-        :runPlan.preferredSections;
-      for(let repeat=0;repeat<repeats;repeat++)options.push(...(preferred.length?preferred:runPlan.preferredSections));
-    }
-
-    if(difficulty>.45)options.push('FOREST','ROCK SLALOM');
-    if(difficulty>.62)options.push('FOREST','ROCK SLALOM','RAMP');
-    if(difficulty>.78)options.push('LOG JUMP','RAMP','FOREST','ROCK SLALOM');
-
-    if(lastType==='RECOVERY'&&difficulty>.58&&random()<(.46+difficulty*.24)){
-      options.push('RAMP','LOG JUMP','RAMP');
-    }
-    if(runPlan?.phase==='TRICK'&&lastType!=='RAMP'&&lastType!=='LOG JUMP'){
-      options.push('RAMP','LOG JUMP');
-    }
-    if(runPlan?.phase==='EXPERT'){
-      const expertPost=clamp(Number(runPlan.postMaxPressure)||0,0,1);
-      options.push('ROCK SLALOM','FOREST','GATE');
-      if(expertPost<=.45)options.push('LOG JUMP');
-    }
-
-    // Sustained top-speed pressure must increase actual playable density, not
-    // merely swap the phase label. Bias toward dense non-jump families so the
-    // post-300 sparse-gap pass has room to add fair, route-safe hazards.
-    const postMaxPressure=clamp(Number(runPlan?.postMaxPressure)||0,0,1);
-    if(postMaxPressure>0){
-      const repeats=1+Math.floor(postMaxPressure*3);
-      for(let i=0;i<repeats;i++){
-        options.push('FOREST','ROCK SLALOM','GATE','OPEN CARVE');
-      }
-    }
-
-    return options[Math.floor(random()*options.length)]||'OPEN CARVE';
-  }
-
   function estimateThreatCost(placement,currentSpeed,plan){
     if(!PHYSICAL_HAZARDS.has(placement.kind))return 0;
     const kindCost={tree:1,rock:1.08,log:1.22,wideLog:1.40,oil:1.30}[placement.kind]??1;
@@ -1289,7 +1231,8 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       runTime,
       postMaxTime,
       pendingLanding:!!pendingLanding,
-      lastLegacyType:lastType
+      lastLegacyType:lastType,
+      district
     });
     activeUrbanPlan=urbanPlan;
     const authoredIntensity=clamp(
@@ -1751,6 +1694,12 @@ export function createCourseDirector({routeCenter,random:externalRandom=Math.ran
       courseHalfWidth:T.COURSE_OBJECT_HALF_WIDTH,
       safeRouteHalfWidth:T.SAFE_ROUTE_HALF_WIDTH,
       landing:pendingLanding
+    });
+
+    urbanDirector.noteGenerated({
+      obstacleSignature:physicalKinds.join('+'),
+      hasRail:urbanSection.grindTargets.length>0,
+      hasRamp:placements.some(item=>item.kind==='ramp')
     });
 
     runDirector.noteSection({

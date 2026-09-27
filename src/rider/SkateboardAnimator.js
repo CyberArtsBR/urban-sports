@@ -174,6 +174,7 @@ export function createSkateboardAnimator({
   let slideRecoil=0;
 
   const boardTargetRoot=motionRoot||boardRoot;
+  const skeletonRoot=rig.hips||model;
   const legMetrics=new Map();
   const deckTop=Number(boardRoot?.userData?.deckTopOffset)||.045;
   if(boardTargetRoot){
@@ -344,7 +345,6 @@ export function createSkateboardAnimator({
     if(distance<1e-5)return false;
     ikDirection.multiplyScalar(1/distance);
     distance=clamp(distance,Math.abs(metric.upperLength-metric.lowerLength)+.006,metric.upperLength+metric.lowerLength-.008);
-    model.getWorldQuaternion(modelWorldQ);
     ikPole.copy(metric.poleLocal).applyQuaternion(modelWorldQ);
     ikPerp.copy(ikPole).addScaledVector(ikDirection,-ikPole.dot(ikDirection));
     if(ikPerp.lengthSq()<1e-6)ikPerp.set(0,0,1).applyQuaternion(modelWorldQ).addScaledVector(ikDirection,-ikDirection.z);
@@ -740,14 +740,14 @@ export function createSkateboardAnimator({
     updateBoard(frame,s,dt,reduced);
     if(boardCompression>0&&boardPoseRoot)boardPoseRoot.scale.y=Math.min(boardPoseRoot.scale.y,1-boardCompression*.008);
 
-    model.updateWorldMatrix(true,true);
+    model.updateWorldMatrix(true,false);
+    skeletonRoot.updateWorldMatrix(true,true);
     boardTargetRoot?.updateWorldMatrix(true,true);
+    model.getWorldQuaternion(modelWorldQ);
     let footLocks=0;
     if(applyFootLock('left',s,dt,reduced))footLocks++;
     if(applyFootLock('right',s,dt,reduced))footLocks++;
     pose.footLock=footLocks*.5;
-    model.updateWorldMatrix(true,true);
-    model.getWorldQuaternion(modelWorldQ);
     riderRight.set(1,0,0).applyQuaternion(modelWorldQ).normalize();
     riderUp.set(0,1,0).applyQuaternion(modelWorldQ).normalize();
     riderForward.set(0,0,1).applyQuaternion(modelWorldQ).normalize();

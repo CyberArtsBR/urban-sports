@@ -129,6 +129,12 @@ assert.equal(normalizeSkateTrick('360 FLIP'),SKATE_ANIMATION_STATE.THREE_SIXTY_F
   const reduced=board.updateMotion({dt:1/60,speed:18,time:.75,roadRoughness:.8,reducedMotion:true});
   assert.equal(reduced.roadVibration,0,'reduced motion must disable road vibration');
   board.resetMotion();
+  board.updateMotion({
+    dt:1/60,speed:10,lean:0,steer:0,air:true,time:1,
+    trickType:'KICKFLIP',trickProgress:.5,externalPose:true
+  });
+  close(board.motionRoot.rotation.z,0,1e-9,'external rider pose prevents duplicate trick roll');
+  board.resetMotion();
   close(board.motionRoot.position.length(),0,1e-9,'board position reset');
   close(board.motionRoot.rotation.x,0,1e-9,'board pitch reset');
   close(board.motionRoot.rotation.y,0,1e-9,'board yaw reset');

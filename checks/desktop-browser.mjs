@@ -326,7 +326,10 @@ try{
   // been exercised for modal cancellation above, and direct activation avoids
   // a headless focus race when the leave action still owns keyboard focus.
   await page.locator('#resume-game').evaluate(button=>button.click());
-  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:10000});
+  // SwiftShader can spend multiple seconds presenting a HIGH-quality frame on CI.
+  // Resume is still required to reach playing; give the software renderer the
+  // same conservative envelope used by the other real-flow browser smokes.
+  await page.waitForFunction(()=>window.chimpionsSki?.().mode==='playing',null,{timeout:60000});
 
   // Release the active desktop WebGL page before creating a second mobile
   // renderer. Running both Three.js scenes concurrently under SwiftShader can

@@ -10,6 +10,7 @@ import {chooseCinematicTarget,estimateRenderTargetBytes,getRenderFailureSimulati
 
 const CINEMATIC_PROFILE='max-cinematic';
 const LUT_SIZE=16;
+const MAX_CINEMATIC_TARGET_MEMORY_BYTES=128*1024*1024;
 const _sunNdc=new THREE.Vector3();
 
 function clamp01(value){return THREE.MathUtils.clamp(Number(value)||0,0,1);}
@@ -429,6 +430,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   let height=1;
   let pixelRatio=1;
   let postResolutionScale=1;
+  let postResolutionReason='native';
   let currentGrade='day';
   let currentMode='menu';
   let currentSettings=settings||{};
@@ -700,25 +702,52 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
     return true;
   }
 
+  function estimateMemoryAtScale(scale=postResolutionScale){
+    const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio*scale));
+    const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio*scale));
+    const hdrBytes=renderTargetType==='half-float'?8:4;
+    let bytes=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:2});
+    bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:4,count:2});
+    if(gtaoPass)bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:3,scale:finite(currentSettings.aoResolutionScale,.5)});
+    if(atmospherePass)bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:1,scale:atmospherePass.scale});
+    if(bloomPass){
+      bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:8,count:1,scale:.5});
+      for(const bloomScale of [.5,.25,.125,.0625,.03125]){
+        bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:8,count:2,scale:bloomScale});
+      }
+    }
+    return bytes;
+  }
+
   function resize(nextWidth,nextHeight,nextPixelRatio=renderer.getPixelRatio()){
     width=Math.max(1,Math.floor(finite(nextWidth,width)));
     height=Math.max(1,Math.floor(finite(nextHeight,height)));
     pixelRatio=Math.max(.5,finite(nextPixelRatio,1));
 
-    // Respect the actual texture/renderbuffer ceiling independently from the
-    // selected quality profile. This is an internal post-resolution clamp, not
-    // a gameplay/profile switch, and prevents oversized offscreen allocations.
+    // Respect both hard framebuffer dimensions and a bounded offscreen-memory
+    // budget independently from the selected quality profile. Only post
+    // resolution is reduced; gameplay, simulation and quality identity stay put.
     const targetLimit=Math.max(1,Math.min(
       finite(capabilities.maxTextureSize,1),
       finite(capabilities.maxRenderbufferSize,1)
     ));
     const requestedWidth=Math.max(1,width*pixelRatio);
     const requestedHeight=Math.max(1,height*pixelRatio);
-    postResolutionScale=THREE.MathUtils.clamp(
+    const dimensionScale=THREE.MathUtils.clamp(
       Math.min(1,targetLimit/requestedWidth,targetLimit/requestedHeight),
       .25,
       1
     );
+    const dimensionBytes=estimateMemoryAtScale(dimensionScale);
+    const memoryScale=dimensionBytes>MAX_CINEMATIC_TARGET_MEMORY_BYTES
+      ?Math.sqrt(MAX_CINEMATIC_TARGET_MEMORY_BYTES/Math.max(1,dimensionBytes))
+      :1;
+    postResolutionScale=THREE.MathUtils.clamp(dimensionScale*memoryScale,.25,1);
+    postResolutionReason=postResolutionScale>=.999
+      ?'native'
+      :memoryScale<.999
+        ?'render-target-memory-budget'
+        :'gpu-target-dimension-limit';
 
     if(!composer)return;
     const postPixelRatio=pixelRatio*postResolutionScale;
@@ -884,18 +913,7 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
   }
 
   function estimateMemory(){
-    const effectiveWidth=Math.max(1,Math.floor(width*pixelRatio*postResolutionScale));
-    const effectiveHeight=Math.max(1,Math.floor(height*pixelRatio*postResolutionScale));
-    const hdrBytes=renderTargetType==='half-float'?8:4;
-    let bytes=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:2});
-    bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:4,count:2});
-    if(gtaoPass)bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:3,scale:finite(currentSettings.aoResolutionScale,.5)});
-    if(atmospherePass)bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:hdrBytes,count:1,scale:atmospherePass.scale});
-    if(bloomPass){
-      bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:8,count:1,scale:.5});
-      for(const scale of [.5,.25,.125,.0625,.03125])bytes+=estimateRenderTargetBytes(effectiveWidth,effectiveHeight,{bytesPerPixel:8,count:2,scale});
-    }
-    return bytes;
+    return estimateMemoryAtScale(postResolutionScale);
   }
 
   function getDiagnostics(){
@@ -911,6 +929,8 @@ export function createCinematicRendering({renderer,scene,camera,settings=null}={
       renderTargetMemoryBytes:composer?estimateMemory():0,
       msaaSamples:0,
       postResolutionScale,
+      postResolutionReason,
+      renderTargetMemoryBudgetBytes:MAX_CINEMATIC_TARGET_MEMORY_BYTES,
       bloomEnabled:!!bloomPass?.enabled,
       bloomStrength:bloomPass?.strength??0,
       bloomRadius:bloomPass?.radius??0,

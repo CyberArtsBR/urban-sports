@@ -38,12 +38,12 @@ export function createAudioEventRouter({historyLimit=48}={}){
     const key=String(type||'').trim().toUpperCase();
     if(!key)return null;
     const event=Object.freeze({
+      ...payload,
       type:key,
       caption:CAPTIONS[key]||String(payload.caption||key.replace(/_/g,' ')),
       intensity:Math.max(0,Math.min(1,Number(payload.intensity??1)||0)),
       time:Number(payload.time)||0,
-      source:String(payload.source||'audio'),
-      ...payload
+      source:String(payload.source||'audio')
     });
     history.push(event);
     while(history.length>historyLimit)history.shift();

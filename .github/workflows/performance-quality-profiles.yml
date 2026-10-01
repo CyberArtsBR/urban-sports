@@ -100,7 +100,7 @@ jobs:
             env $BENCH_ENV QUALITY_PROFILE="$PROFILE" BASE_URL=http://127.0.0.1:4173 RESULTS_PATH="$RESULTS_PATH" node scripts/benchmark-ski-runtime.mjs
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: performance-quality-${{ matrix.profile }}
@@ -154,7 +154,7 @@ jobs:
             benchmark-artifacts/benchmark-low.json \
             benchmark-artifacts/benchmark-comparison.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: performance-quality-benchmarks

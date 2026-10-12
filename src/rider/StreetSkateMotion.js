@@ -1,0 +1,77 @@
+// Synchronized procedural rider motion from StreetSkate @ 737c0f33.\nimport { MathUtils } from 'three';
+
+// Original procedural timings, shared by the deck and the rider. These are not
+// imported animation clips or timings extracted from a commercial game's data.
+const safe01 = value => MathUtils.clamp(Number.isFinite(value) ? value : 0, 0, 1);
+
+export const FLIP_TIMING = Object.freeze({ pop: 0.14, flick: 0.34, rotationEnd: 0.82, catchEnd: 0.94 });
+
+export function flipMotion(progress = 0) {
+  const p = safe01(progress);
+  const rotation = MathUtils.smoothstep(p, 0.12, FLIP_TIMING.rotationEnd);
+  const lift = MathUtils.smoothstep(p, 0, FLIP_TIMING.flick);
+  const catchWeight = MathUtils.smoothstep(p, FLIP_TIMING.rotationEnd, FLIP_TIMING.catchEnd);
+  const clearance = lift * (1 - catchWeight);
+  const flick = MathUtils.smoothstep(p, FLIP_TIMING.pop, FLIP_TIMING.flick)
+    * (1 - MathUtils.smoothstep(p, 0.56, FLIP_TIMING.rotationEnd));
+  // Tail foot snaps up first; front foot drags then flicks. Both tuck clear of
+  // the spinning deck and return only after its rotation is complete.
+  const rearLift = MathUtils.smoothstep(p, .04, .25) * (1 - catchWeight) * .23;
+  const frontLift = lift * (1 - catchWeight) * .27;
+  return { rotation, clearance, footLift: clearance * 0.22, frontLift, rearLift, flick, catchWeight };
+}
+
+export function flipTurns(flipState) {
+  const progress = safe01(flipState?.progress);
+  const rotation = flipMotion(progress).rotation;
+  const start = flipState?.rotationStartProgress;
+  const upgrading = Number.isFinite(start) && flipState?.rotationFrom;
+  const blend = upgrading
+    ? MathUtils.smoothstep(progress, start, Math.max(start + 0.01, FLIP_TIMING.rotationEnd))
+    : rotation;
+  const turns = {};
+  for (const axis of ['pitch', 'yaw', 'roll']) {
+    const startTurn = upgrading && Number.isFinite(flipState.rotationFrom[axis]) ? flipState.rotationFrom[axis] : 0;
+    const finalTurn = Number.isFinite(flipState?.[axis]) ? flipState[axis] : 0;
+    turns[axis] = MathUtils.lerp(startTurn, finalTurn, blend);
+  }
+  return turns;
+}
+
+// The foot sweeps backwards while planted, then returns above the deck. Keeping
+// one continuous phase prevents starting each push half way through a stroke.
+export function pushMotion(phase = 0) {
+  const finitePhase = Number.isFinite(phase) ? phase : 0;
+  const p = ((finitePhase % 1) + 1) % 1;
+  const leave = MathUtils.smoothstep(p, 0, 0.16);
+  const recover = MathUtils.smoothstep(p, 0.58, 0.92);
+  const contact = leave * (1 - MathUtils.smoothstep(p, 0.54, 0.68));
+  const sweep = MathUtils.smoothstep(p, 0.18, 0.6);
+  return {
+    side: 0.11 * leave * (1 - recover),
+    height: -0.13 * contact + 0.08 * Math.sin(Math.PI * recover),
+    foreAft: MathUtils.lerp(-0.15, 0.27, sweep) * leave * (1 - recover),
+    contact,
+  };
+}
+
+export function popMotion(progress = 1) {
+  const p = safe01(progress);
+  return -0.26 * Math.sin(Math.PI * p) * (1 - MathUtils.smoothstep(p, 0.6, 1));
+}
+
+export function landingMotion(progress = 1) {
+  const p = safe01(progress);
+  return MathUtils.smoothstep(p, 0, 0.2) * (1 - MathUtils.smoothstep(p, 0.2, 1));
+}
+
+export const GRAB_POSES = Object.freeze({
+  Indy: [-0.12, 0, 0.12], Melon: [-0.16, 0, -0.14],
+  Nosegrab: [0.23, 0, 0], Tailgrab: [-0.23, 0, 0],
+  Japan: [-0.18, 0.12, -0.28], Madonna: [0.18, -0.08, 0.12],
+  Benihana: [-0.22, 0.1, 0.1], Airwalk: [0.08, 0, 0],
+  Method: [-0.32, 0.18, -0.42], Stalefish: [-0.18, -0.18, -0.20],
+  'Rocket Air': [0.48, 0, 0], Seatbelt: [-0.28, 0.24, 0.16],
+  Mute: [-0.18, 0.12, 0.22], Judo: [0.20, -0.12, -0.16],
+  Crail: [0.26, -0.24, 0.12], 'Christ Air': [0.12, 0, 0.15],
+});

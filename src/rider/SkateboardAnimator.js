@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {SKATE_ANIMATION_STATE,createSkateAnimationStateMachine} from './SkateAnimationState.js';
+import {flipMotion,pushMotion} from './StreetSkateMotion.js';
 
 const TAU=Math.PI*2;
 const RIG_KEYS=Object.freeze([
@@ -318,6 +319,7 @@ export function createSkateboardAnimator({
 
   function footLockStrength(s,side,reduced){
     if(s.state===SKATE_ANIMATION_STATE.CRASH||s.state===SKATE_ANIMATION_STATE.FAILED_LAND)return 0;
+    if(s.state===SKATE_ANIMATION_STATE.FLATLAND)return .66;
     if(s.state===SKATE_ANIMATION_STATE.PUSH){
       if(side===frontSide)return .98;
       return .08+(1-Math.sin(s.pushPhase*Math.PI))*.72;
@@ -406,6 +408,13 @@ export function createSkateboardAnimator({
       else if(s.state===SKATE_ANIMATION_STATE.SPIN_360)yaw=TAU*progress;
     }
 
+    if(s.state===SKATE_ANIMATION_STATE.FLATLAND){
+      const amplitude=Math.sin(Math.PI*clamp(frame.flatlandProgress??0,0,1));
+      const name=String(frame.flatlandTrick||'');
+      pitch=(name==='Pogo'||name==='Truck Stand'||name==='One Foot Manual'?-.24:name==='Casper'||name==='Anti Casper'?.20:-.10)*amplitude;
+      roll=(name==='Wrap Around'?.48:name==='To Rail'?.30:name==='Handstand'?.12:.06)*amplitude;
+      yaw=(name==='Wrap Around'?Math.PI*.46:name==='Switch Foot Pogo'?.28:0)*amplitude;
+    }
     if(s.state===SKATE_ANIMATION_STATE.MANUAL)pitch=-.115-s.manualBalance*.025;
     else if(s.state===SKATE_ANIMATION_STATE.NOSE_MANUAL)pitch=.115+s.manualBalance*.025;
 
@@ -509,7 +518,8 @@ export function createSkateboardAnimator({
       armSpread=.60;
       armDown=.72;
     }else if(s.state===SKATE_ANIMATION_STATE.PUSH){
-      const swing=Math.sin(s.pushPhase*Math.PI);
+      const stroke=pushMotion(s.pushPhase);
+      const swing=stroke.contact;
       const returnPhase=Math.sin(s.pushPhase*TAU);
       crouch=.14+speed*.06;
       frontThigh=-.43-speed*.05;
@@ -604,6 +614,31 @@ export function createSkateboardAnimator({
         frontShin=1.02;
         rearShin=.98;
         spinePitch=-.16;
+      }
+    }else if(s.state===SKATE_ANIMATION_STATE.FLATLAND){
+      // StreetSkate ground-combo pose variation without injecting airborne motion.
+      const name=String(frame.flatlandTrick||'');
+      const w=Math.sin(Math.PI*clamp(frame.flatlandProgress??0,0,1));
+      crouch=.20+w*.11;
+      frontThigh=-.46-w*.16;
+      rearThigh=-.42+w*.10;
+      frontShin=.82+w*.18;
+      rearShin=.76;
+      armSpread=.78+w*.16;
+      armDown=.55-w*.15;
+      spinePitch=-.10-w*.13;
+      hipRoll+=sideSign*.07*w;
+      if(name==='Pogo'||name==='Switch Foot Pogo'){
+        frontThigh-=w*.24;frontShin+=w*.22;armSpread+=w*.08;
+      }else if(name==='Handstand'){
+        spinePitch-=w*.28;armDown=.30;armSpread=.66;
+        frontShin+=w*.26;rearShin+=w*.24;
+      }else if(name==='Casper'||name==='Anti Casper'){
+        rearThigh-=w*.20;rearShin+=w*.28;hipRoll-=sideSign*w*.10;
+      }else if(name==='Truck Stand'||name==='One Foot Manual'){
+        rearThigh-=w*.22;frontShin+=w*.18;
+      }else if(name==='Wrap Around'||name==='To Rail'){
+        hipYaw+=sideSign*w*.24;chestYaw-=sideSign*w*.18;
       }
     }else if(s.state===SKATE_ANIMATION_STATE.MANUAL){
       crouch=.19;
@@ -702,7 +737,8 @@ export function createSkateboardAnimator({
       }else if(s.state===SKATE_ANIMATION_STATE.KICKFLIP||s.state===SKATE_ANIMATION_STATE.HEELFLIP){
         hipYaw+=sideSign*arc*.10;
         chestYaw-=sideSign*arc*.14;
-        armLiftBias+=arc*.06;
+        // Original StreetSkate flick / catch timing, shared with board rotation.
+        armLiftBias+=flipMotion(p).flick*.07;
       }else if(s.state===SKATE_ANIMATION_STATE.SHOVE_IT||s.state===SKATE_ANIMATION_STATE.FRONTSIDE_SHOVE){
         const shoveSign=s.state===SKATE_ANIMATION_STATE.FRONTSIDE_SHOVE?1:-1;
         hipYaw+=shoveSign*sideSign*arc*.18;

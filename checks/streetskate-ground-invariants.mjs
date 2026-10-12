@@ -27,7 +27,7 @@ for(const [pair,trick] of combos){
 {
   const g=createStreetSkateGroundTricks(),context={grounded:true,speed:8};
   g.step(.02,{...context,inputs:['flip']});
-  g.step(.60,context);
+  for(let i=0;i<6;i++)g.step(.10,context);
   assert.equal(g.step(.01,{...context,inputs:['grind']}).snapshot.active,false,'expired input must not start combo');
   g.step(.01,{...context,inputs:['grind']});
   assert.equal(g.snapshot().name,'Pogo','consecutive grind inputs must produce Pogo');

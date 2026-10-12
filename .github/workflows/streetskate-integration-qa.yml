@@ -40,6 +40,13 @@ jobs:
           npm run check:fast
       - name: Production bundle
         run: npm run build
+      - name: Install browser runtime
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke with four built-in rigs and local GLB
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/urban-vite.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:4173/ > /dev/null && break || sleep 1; done
+          BASE_URL=http://127.0.0.1:4173 node checks/production-smoke.mjs
       - name: Four original assets present in built bundle
         run: |
           test -s dist/assets/rider/The_Heretic.glb

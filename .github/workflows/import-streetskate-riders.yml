@@ -1,0 +1,106 @@
+name: Import StreetSkate rider GLBs and validate game integration
+# Revalidate four imported rigs and the StreetSkate procedural math import.
+
+on:
+  push:
+    branches:
+      - feat/streetskate-riders-flatland
+    paths:
+      - .github/workflows/import-streetskate-riders.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-streetskate-riders
+  cancel-in-progress: false
+
+jobs:
+  import-rigged-riders:
+    if: github.repository == 'CyberArtsBR/urban-sports' && github.ref_name == 'feat/streetskate-riders-flatland'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Copy 4 original StreetSkate GLBs and menu portraits
+        env:
+          SOURCE_SHA: 737c0f33a9aee61f1633df1b6e00c35e1c6e0705
+        run: |
+          set -euo pipefail
+          mkdir -p public/assets/rider public/assets/menu/riders
+          SOURCE_URL="https://raw.githubusercontent.com/CyberArtsBR/StreetSkate/${SOURCE_SHA}/public/assets"
+          for model in The_Heretic.glb The_AdolescentUR.glb The_Anchor.glb TuxR.glb; do
+            curl --fail --location --retry 4 --retry-all-errors --silent --show-error \
+              "${SOURCE_URL}/rider/${model}" -o "public/assets/rider/${model}"
+          done
+          for portrait in The_Heretic.png The_AdolescentUR.png The_Anchor.png TuxR.png; do
+            curl --fail --location --retry 4 --retry-all-errors --silent --show-error \
+              "${SOURCE_URL}/menu/riders/${portrait}" -o "public/assets/menu/riders/${portrait}"
+          done
+
+      - name: Verify exact original payload sizes and GLB integrity
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const files = {
+            'The_Heretic.glb':6370204,
+            'The_AdolescentUR.glb':3125416,
+            'The_Anchor.glb':2700460,
+            'TuxR.glb':2111960
+          };
+          const portraits = {
+            'The_Heretic.png':61870,
+            'The_AdolescentUR.png':77127,
+            'The_Anchor.png':59034,
+            'TuxR.png':55427
+          };
+          for(const [filename,expected] of Object.entries(files)){
+            const bytes=fs.readFileSync('public/assets/rider/'+filename);
+            assert.equal(bytes.length,expected,filename+' diverges from pinned StreetSkate source');
+            assert.equal(bytes.readUInt32LE(0),0x46546c67,filename+' invalid GLB magic');
+            assert.equal(bytes.readUInt32LE(4),2,filename+' invalid glTF version');
+            assert.equal(bytes.readUInt32LE(8),bytes.length,filename+' invalid GLB length');
+          }
+          for(const [filename,expected] of Object.entries(portraits)){
+            const bytes=fs.readFileSync('public/assets/menu/riders/'+filename);
+            assert.equal(bytes.length,expected,filename+' diverges from pinned StreetSkate source');
+            assert.equal(bytes.readUInt32BE(0),0x89504e47,filename+' invalid PNG magic');
+          }
+          console.log('Exact four rigged models and portraits verified.');
+          NODE
+
+      - name: Remove legacy ten-rider download payload
+        run: |
+          git rm -r --ignore-unmatch public/model/characters || true
+
+      - name: Commit original StreetSkate assets to feature branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/assets/rider public/assets/menu/riders
+          if ! git diff --cached --quiet; then
+            git commit -m "assets: import original StreetSkate four rider rigs and portraits [skip ci]"
+            git push origin HEAD:feat/streetskate-riders-flatland
+          fi
+
+      - name: Install project dependencies
+        run: npm ci
+      - name: Validate gameplay, GLB rigs, assets and build
+        run: |
+          npm run check:ground-tricks
+          npm run check:roster
+          npm run check:rider-animation
+          npm run check:urban
+          npm run build
+      - name: Run complete repository regression suite
+        run: npm run check

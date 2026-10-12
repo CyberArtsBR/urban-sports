@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
-import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME} from '../src/avatarRoster.js';
+import {BUILTIN_AVATAR_NAMES,DEFAULT_AVATAR_NAME,STREETSKATE_RIDER_ASSETS,builtinAvatarUrl} from '../src/avatarRoster.js';
 import {MAX_LOCAL_GLB_BYTES,LOCAL_GLB_COMPLEXITY_LIMITS,validateLocalGlbFile,validateParsedLocalGlb} from '../src/localAvatarUpload.js';
 
-const expectedFiles=BUILTIN_AVATAR_NAMES.map(name=>name+'.glb').sort((a,b)=>a.localeCompare(b));
-const dir=new URL('../public/model/characters/',import.meta.url);
+const expectedFiles=BUILTIN_AVATAR_NAMES.map(name=>STREETSKATE_RIDER_ASSETS[name]).sort((a,b)=>a.localeCompare(b));
+const dir=new URL('../public/assets/rider/',import.meta.url);
 const diskFiles=(await readdir(dir)).filter(name=>name.toLowerCase().endsWith('.glb')).sort((a,b)=>a.localeCompare(b));
-assert.deepEqual(diskFiles,expectedFiles,'deployable character directory must contain only the canonical 10 GLBs');
+assert.deepEqual(diskFiles,expectedFiles,'deployable character directory must contain only the four imported StreetSkate GLBs');
 
 for(const manifestName of ['avatars.json','characters.json']){
   const manifest=JSON.parse(await readFile(new URL('../public/'+manifestName,import.meta.url),'utf8'));
-  assert.equal(manifest.length,10,manifestName+' must contain exactly 10 entries');
+  assert.equal(manifest.length,4,manifestName+' must contain exactly 10 entries');
   assert.deepEqual(manifest.map(e=>e.name),[...BUILTIN_AVATAR_NAMES],manifestName+' must use canonical roster order');
   for(const entry of manifest){
-    assert.equal(entry.url,'model/characters/'+encodeURIComponent(entry.name)+'.glb','dead/unexpected GLB reference in '+manifestName);
+    assert.equal(entry.url,builtinAvatarUrl(entry.name),'dead/unexpected GLB reference in '+manifestName);
   }
 }
 
@@ -77,4 +77,4 @@ const pathological={
 };
 assert.throws(()=>validateParsedLocalGlb(pathological),/too complex/i);
 
-console.log(JSON.stringify({check:'roster-bandwidth-invariants',builtIns:10,crowdGlbRequests:0,bootGlbRequestsExpected:0,customUpload:'local-only'}));
+console.log(JSON.stringify({check:'roster-bandwidth-invariants',builtIns:4,crowdGlbRequests:0,bootGlbRequestsExpected:0,customUpload:'local-only'}));

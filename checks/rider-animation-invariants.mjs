@@ -14,7 +14,7 @@ import {createSkateboardEquipment} from '../src/skateboardEquipment.js';
 import {createRiderController} from '../src/riderController.js';
 import {createImpactVfx} from '../src/impactVfx.js';
 import {getAvatarCompatibility,resolveAvatarRig} from '../src/avatarCompatibility.js';
-import {BUILTIN_AVATAR_NAMES} from '../src/avatarRoster.js';
+import {BUILTIN_AVATAR_NAMES,builtinAvatarUrl} from '../src/avatarRoster.js';
 
 function close(a,b,epsilon=1e-7,message='values must match'){
   assert.ok(Math.abs(a-b)<=epsilon,`${message}: ${a} vs ${b}`);
@@ -356,7 +356,7 @@ function inspectAvatarGeometry(json,objects,resolution){
 
 const avatarAudit=[];
 for(const name of BUILTIN_AVATAR_NAMES){
-  const path=join(process.cwd(),'public','model','characters',name+'.glb');
+  const path=join(process.cwd(),'public',builtinAvatarUrl(name));
   assert.ok(existsSync(path),'missing built-in avatar file: '+name);
   const json=readGlbJson(path);
   const {model,objects}=modelFromGlbJson(json);

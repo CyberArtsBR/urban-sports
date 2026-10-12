@@ -10,7 +10,17 @@ export const TRICK_POINTS=Object.freeze({
   MELON:190,
   NOSEGRAB:220,
   'VARIAL FLIP':450,
-  '360 FLIP':600
+  '360 FLIP':600,
+  // StreetSkate flatground / freestyle combination scoring.
+  'Pogo':200,
+  'Wrap Around':225,
+  'Handstand':300,
+  'Casper':250,
+  'Truck Stand':300,
+  'Anti Casper':275,
+  'To Rail':250,
+  'Switch Foot Pogo':325,
+  'One Foot Manual':325
 });
 
 function publish(state,{phase,type='',points=0,success=null,label='',source=''}={}){

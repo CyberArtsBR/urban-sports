@@ -67,18 +67,15 @@ async function chooseBuiltInAvatar(selector){
 
 async function chooseSkateboardCompatibleRide(page,selector){
   await page.waitForFunction(()=>{
-    const step=document.querySelector('#ride-mode-step');
+    const step=document.querySelector('#skateboard-setup-step');
     return !!step&&!step.hidden;
   },null,{timeout:20000});
 
   const choice=await selector.evaluate(dialog=>{
-    const button=
-      dialog.querySelector('[data-sport-mode="skateboard"]:not([aria-disabled="true"])')||
-      dialog.querySelector('.ride-mode-card[data-ride-mode="skateboard"]:not([aria-disabled="true"])')||
-      dialog.querySelector('.ride-mode-card[data-ride-mode="snowboard"]:not([aria-disabled="true"])')||
-      Array.from(dialog.querySelectorAll('.ride-mode-card:not([aria-disabled="true"])')).find(node=>/skateboard/i.test(node.textContent||''));
+    const button=dialog.querySelector('.skateboard-setup-card[data-setup-id="street"]:not([disabled])')||
+      dialog.querySelector('.skateboard-setup-card:not([disabled])');
     if(!button)return null;
-    const mode=button.dataset.sportMode||button.dataset.rideMode||button.textContent?.trim()||'unknown';
+    const mode=button.dataset.setupId||'unknown';
     button.click();
     return mode;
   });
@@ -106,13 +103,13 @@ try{
   const {page}=built;
   const fresh=await runtime(page);
   assert(fresh,'Runtime diagnostics unavailable after boot');
-  assert.equal(fresh.catalogSize,10,'Fresh runtime must expose exactly 10 built-in avatars');
+  assert.equal(fresh.catalogSize,4,'Fresh runtime must expose exactly 4 built-in avatars');
   assert.equal(fresh.startCrowdCount,0,'Real Chimpion crowd must be disabled');
   assert.equal(fresh.startCrowdModelSources,0,'Crowd must own zero character GLB sources');
   assert.equal(built.glbs.length,0,'Fresh initial load must not request any character GLB');
 
   const selector=await openReadySelector(page);
-  assert.equal(await selector.locator('.chimpion-card:not(.is-upload-avatar)').count(),10,'Selector must render exactly 10 built-in cards');
+  assert.equal(await selector.locator('.chimpion-card:not(.is-upload-avatar)').count(),4,'Selector must render exactly 4 built-in cards');
   assert.equal(await selector.locator('.chimpion-card.is-upload-avatar').count(),1,'Selector must expose exactly one local GLB upload action');
 
   await chooseBuiltInAvatar(selector);
@@ -168,8 +165,8 @@ try{
   assert.match(await customSelector.locator('.selector-status').textContent(),/GLB|incomplete|invalid/i,'Invalid local GLB should fail understandably');
   assert.equal(local.glbs.length,0,'Invalid local GLB must create zero remote GLB requests');
 
-  await input.setInputFiles(path.resolve('public/model/characters/The Heretic.glb'));
-  await customSelector.locator('#ride-mode-step:not([hidden])').waitFor({state:'visible',timeout:20000});
+  await input.setInputFiles(path.resolve('public/assets/rider/The_Heretic.glb'));
+  await customSelector.locator('#skateboard-setup-step:not([hidden])').waitFor({state:'visible',timeout:20000});
   assert.equal(local.glbs.length,0,'Valid local GLB parsing must stay local-only');
   const customRideControl=await chooseSkateboardCompatibleRide(custom,customSelector);
   await waitForGameplay(custom);
@@ -189,7 +186,7 @@ try{
 
   console.log(JSON.stringify({
     check:'production-smoke',
-    builtInRoster:10,
+    builtInRoster:4,
     freshBootGlbRequests:0,
     crowdGlbRequests:0,
     builtInGameplayUniqueGlbs:1,

@@ -6,10 +6,7 @@ const model=read(root,'src/avatar-selector-model.js');
 const main=read(root,'src/main.js');
 const contract=read(root,'src/urbanUiContract.js');
 const results=[];
-const expectedRoster=[
- 'The Archon','The Heretic','The Commodore','The Pioneer','The Punk',
- 'The Street Fighter','The Bosun','The Adolescent','The Angsty','The Apologetic'
-];
+const expectedRoster=['The Heretic','The Adolescent','The Anchor','Tuxr'];
 let catalogNames=null;
 try{
  const v=JSON.parse(read(root,'public/avatars.json'));
@@ -20,7 +17,7 @@ const exactRoster=Array.isArray(catalogNames)&&
  catalogNames.length===expectedRoster.length&&
  catalogNames.every((name,index)=>name===expectedRoster[index]);
 
-results.push(result('exact 10 built-in Chimpions remain available',
+results.push(result('exact 4 StreetSkate riders remain available',
  catalogNames==null?STATUS.PENDING:(exactRoster?STATUS.PASS:STATUS.FAIL),
  catalogNames==null?'avatars.json unavailable':JSON.stringify(catalogNames)));
 results.push(result('initial selector lazy rendering remains optimized',
@@ -64,7 +61,7 @@ results.push(result('local GLB upload remains session-local and revokes object U
  /URL\.createObjectURL/.test(avatar)&&/URL\.revokeObjectURL/.test(avatar)&&/LOCAL ONLY/.test(avatar)?STATUS.PASS:STATUS.FAIL,
  'local upload lifecycle'));
 results.push(result('one-click rider selection launches current sport when no setup contract exists',
- /onSelect:async entry=>/.test(main)&&/setTimeout\(\(\)=>beginRun\(\),0\)/.test(main)&&/completeSelection\(entry,null\)/.test(avatar)?STATUS.PASS:STATUS.FAIL,
+ /onSelect:async\(entry,setupId\)=>/.test(main)&&/setTimeout\(\(\)=>beginRun\(\),0\)/.test(main)&&/completeSelection\(entry,null\)/.test(avatar)?STATUS.PASS:STATUS.FAIL,
  'direct Urban rider flow'));
 results.push(result('no duplicated event listeners accumulate after repeated open/close',
  /delegated/.test(avatar)&&/grid\.addEventListener\('click'/.test(avatar)?STATUS.PASS:STATUS.FAIL,

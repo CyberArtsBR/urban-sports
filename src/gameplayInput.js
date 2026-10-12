@@ -16,6 +16,9 @@ export function createGameplayInput({
   const map=actionMap===DEFAULT_ACTION_MAP?createActionMap():createActionMap(actionMap);
   const keys=new Set();
   const touchTricks=new Set();
+  const flatlandKeyboard=[];
+  let previousFlatlandButtons=new Set();
+  let previousFlatlandPadKey=null;
   let touchSteer=0;
   let touchJump=false;
   let jumpQueued=false;
@@ -32,6 +35,10 @@ export function createGameplayInput({
   function onKeyDown(event){
     if(editableTarget(event.target))return;
     keys.add(event.code);
+    if(!event.repeat&&['KeyZ','KeyX','KeyC'].includes(event.code)){
+      flatlandKeyboard.push({KeyZ:'flip',KeyX:'grind',KeyC:'grab'}[event.code]);
+      event.preventDefault?.();
+    }
     if(matches(INPUT_ACTION.JUMP,event.code)&&!event.repeat){jumpQueued=true;event.preventDefault?.();}
     if(matches(INPUT_ACTION.SPECIAL,event.code)&&!event.repeat)specialQueued=true;
     if(matches(INPUT_ACTION.CAMERA,event.code)&&!event.repeat)cameraQueued=true;
@@ -61,6 +68,7 @@ export function createGameplayInput({
   function resetTransient(){
     touchSteer=0;touchJump=false;touchTricks.clear();touchTrickIntent=null;
     jumpQueued=false;specialQueued=false;cameraQueued=false;cameraMotionQueued=false;pauseQueued=false;keys.clear();
+    flatlandKeyboard.length=0;previousFlatlandButtons.clear();previousFlatlandPadKey=null;
   }
   function read(pad={}){
     const keyboardSteer=Number(anyHeld(INPUT_ACTION.STEER_RIGHT))-Number(anyHeld(INPUT_ACTION.STEER_LEFT));
@@ -75,15 +83,27 @@ export function createGameplayInput({
     const authoredTrick=touchTrickIntent;
     const trickIntent=authoredTrick||(jumpPressed?readSkateboardTrickIntent(keys,pad,{airborne:false}):null);
     const airborneTrickIntent=authoredTrick||(jumpPressed?readSkateboardTrickIntent(keys,pad,{airborne:true}):null);
-    const specialPressed=specialQueued||!!pad?.edges?.pressed?.special;
-    const cameraPressed=cameraQueued||!!pad?.edges?.pressed?.camera;
-    const cameraMotionPressed=cameraMotionQueued||!!pad?.edges?.pressed?.cameraMotion;
+    // LB/RB + X/Y/B is a flatland chord, not banana-power / camera input.
+    const flatlandModifier=!!pad?.buttons?.[4]||!!pad?.buttons?.[5];
+    if(pad?.activeKey!==previousFlatlandPadKey){previousFlatlandButtons.clear();previousFlatlandPadKey=pad?.activeKey??null;}
+    const nowFlatlandButtons=new Set();
+    if(flatlandModifier){
+      for(const [token,index] of [['flip',2],['grind',3],['grab',1]]){
+        if(pad?.buttons?.[index])nowFlatlandButtons.add(token);
+      }
+    }
+    const flatlandInputs=flatlandKeyboard.splice(0);
+    for(const token of nowFlatlandButtons)if(!previousFlatlandButtons.has(token))flatlandInputs.push(token);
+    previousFlatlandButtons=nowFlatlandButtons;
+    const specialPressed=specialQueued||(!flatlandModifier&&!!pad?.edges?.pressed?.special);
+    const cameraPressed=cameraQueued||(!flatlandModifier&&!!pad?.edges?.pressed?.camera);
+    const cameraMotionPressed=cameraMotionQueued||(!flatlandModifier&&!!pad?.edges?.pressed?.cameraMotion);
     const pausePressed=pauseQueued||!!pad?.edges?.pressed?.menu;
 
     jumpQueued=false;specialQueued=false;cameraQueued=false;cameraMotionQueued=false;pauseQueued=false;touchTrickIntent=null;
 
     return {
-      steer,verticalIntent,trickModifier,jumpPressed,jumpHeld,trickIntent,airborneTrickIntent,
+      steer,verticalIntent,trickModifier,jumpPressed,jumpHeld,trickIntent,airborneTrickIntent,flatlandInputs,
       specialPressed,cameraPressed,cameraMotionPressed,pausePressed,
       keyboardActive:keyboardSteer!==0||keyboardVertical!==0||anyHeld(INPUT_ACTION.JUMP)||keys.has('ShiftLeft')||keys.has('ShiftRight')||anyHeld(INPUT_ACTION.SPECIAL)||anyHeld(INPUT_ACTION.CAMERA)||anyHeld(INPUT_ACTION.CAMERA_MOTION),
       touchActive:Math.abs(touchSteer)>.01||touchJump||touchTricks.size>0,

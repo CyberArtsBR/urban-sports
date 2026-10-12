@@ -124,9 +124,13 @@ assert.equal(memory.get('chimpions-urban-sfx'),'0.62');
 assert.equal(memory.get('chimpions-ski-sfx'),'0.62','Backwards-compatible dual write missing');
 if(originalStorage===undefined)delete globalThis.localStorage;else globalThis.localStorage=originalStorage;
 
-assert(prefsSource.includes("'chimpions-urban-haptics-enabled'"));
-assert(prefsSource.includes("'chimpions-ski-haptics-enabled'"));
-assert(prefsSource.includes("'chimpions-urban-haptics-intensity'"));
+// Persistence migrated to a namespaced key, with legacy haptic key mirrored.
+const urbanPersistenceSource=fs.readFileSync(new URL('../src/urbanPersistence.js',import.meta.url),'utf8');
+assert(urbanPersistenceSource.includes("URBAN_STORAGE_NAMESPACE='chimpions-urban-sports:v1:'"));
+assert(urbanPersistenceSource.includes("'chimpions-ski-haptics-enabled'"));
+assert(urbanPersistenceSource.includes('mirrorLegacy=true'),'Haptic migration must preserve legacy writes');
+assert(prefsSource.includes("writeUrbanSetting('haptics'"));
+assert(prefsSource.includes("writeUrbanSetting('hapticsIntensity'"));
 assert(prefsSource.includes('saveHapticIntensityPreference'));
 
 const facade=createSkiAudio();

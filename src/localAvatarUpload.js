@@ -279,7 +279,7 @@ export async function validateLocalGlbFile(file,{maxBytes=MAX_LOCAL_GLB_BYTES,ma
   const jsonBytes=view.getUint32(12,true);
   const chunkType=view.getUint32(16,true);
   if(chunkType!==GLB_JSON_CHUNK)throw new Error('GLB JSON chunk must be the first chunk.');
-  if(jsonBytes<=0||jsonBytes>maxJsonBytes)throw new Error('GLB JSON chunk is too large.');
+  if(jsonBytes<=0||jsonBytes>maxJsonBytes)throw localContainerError('GLB JSON chunk is too large.','LOCAL_GLB_JSON_TOO_LARGE');
   if(20+jsonBytes>size)throw new Error('GLB JSON chunk exceeds the file length.');
 
   const jsonBuffer=await file.slice(20,20+jsonBytes).arrayBuffer();

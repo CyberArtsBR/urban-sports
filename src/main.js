@@ -32,6 +32,7 @@ import {createScorePresentation} from './scorePresentation.js';
 import {createCourseRenderBatches} from './courseRenderBatches.js';
 import {createCollisionBroadphase} from './collisionBroadphase.js';
 import {createTrickSystem} from './trickSystem.js';
+import {createStreetSkateGroundTricks} from './streetSkateGroundTricks.js';
 import {announceTrickStart,resetTrickScoring,scoreTrickCompletion,scoreTrickFailure} from './trickScoring.js';
 import {createHaptics} from './haptics.js';
 import {RIDE_MODE,getRideProfile,normalizeRideMode,speedToKmh} from './rideMode.js';
@@ -465,6 +466,7 @@ player.add(trickVisualPivot);
 const riderController=createRiderController({visualRoot:trickVisualPivot,disposeRider:disposeAvatarObject});
 const tricks=createTrickSystem({visualTarget:trickVisualPivot});
 const grindSystem=createGrindSystem();
+const groundTricks=createStreetSkateGroundTricks();
 const startCamera=createStartCameraSequence({camera,skiCamera:cameraSystem,player});
 const startCrowd=createStartCrowd({world,terrainHeight});
 const startGate=createStartGateScene({world,terrainHeight,theme:'urban'});
@@ -1180,6 +1182,7 @@ function resetRunState(){
   resetAirborneScoring(state);
   resetTrickScoring(state);
   tricks.reset();
+  groundTricks.reset();
   grindSystem.reset();
   state.skateSetup=selectedSkateboardSetup;
   resetSkateboardState(state);
@@ -1297,6 +1300,7 @@ function crash(kind='tree',item=null){
     resolveTrickAudio(scoreTrickFailure(state,interruptedTrick));
   }
   tricks.reset();
+  groundTricks.reset();
   const runDistance=Math.floor(state.distance);
   const previousBest=state.best;
   const newBest=runDistance>previousBest;
@@ -1609,6 +1613,20 @@ function update(dt,frameMs=dt*1000){
       resolveTrickAudio(scoreTrickCompletion(state,completedTrick));
     }
 
+    // Ported StreetSkate flatground combos: never change run velocity or jump Y.
+    // Inputs are consumed only on the first fixed substep of the render frame.
+    const groundStep=nativeSkateboard?groundTricks.step(dt,{
+      inputs:step===0?actions.flatlandInputs:[],
+      grounded:!state.air&&!state.grinding&&!ridingRamp&&!state.crashActive,
+      speed:skateboardGameplaySpeed(state),
+      busy:activeTrick.state!=='NONE'||!!state.skate?.manualMode
+    }):null;
+    const groundTrickSnapshot=groundStep?.snapshot||null;
+    if(groundStep?.completed){
+      state.successfulTricks=(state.successfulTricks||0)+1;
+      resolveTrickAudio(scoreTrickCompletion(state,groundStep.completed));
+    }
+
     let landing={landed:false,quality:'none',impact:0};
     if(nativeSkateboard&&state.grinding){
       grindSystem.step(state,dt,{steer,powered:bananaPower.active});
@@ -1668,6 +1686,8 @@ function update(dt,frameMs=dt*1000){
       grindTrick:grindSystem.snapshot().trick,
       grindBalance:state.skate?.grindBalance||0,
       landingQuality:state.skate?.lastLanding||state.landingQuality||'',
+      flatlandTrick:groundTrickSnapshot?.name||'',
+      flatlandProgress:groundTrickSnapshot?.progress||0,
       trickType:activeTrick.type||'',
       trickProgress:activeTrick.progress||0,
       crashed:!!state.crashActive,

@@ -1,4 +1,5 @@
 name: Import StreetSkate rider GLBs and validate game integration
+# Revalidate the original rig assets against the updated flatland regression suite.
 
 on:
   push:

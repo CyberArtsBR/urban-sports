@@ -106,13 +106,13 @@ try{
   const {page}=built;
   const fresh=await runtime(page);
   assert(fresh,'Runtime diagnostics unavailable after boot');
-  assert.equal(fresh.catalogSize,10,'Fresh runtime must expose exactly 10 built-in avatars');
+  assert.equal(fresh.catalogSize,4,'Fresh runtime must expose exactly 4 built-in avatars');
   assert.equal(fresh.startCrowdCount,0,'Real Chimpion crowd must be disabled');
   assert.equal(fresh.startCrowdModelSources,0,'Crowd must own zero character GLB sources');
   assert.equal(built.glbs.length,0,'Fresh initial load must not request any character GLB');
 
   const selector=await openReadySelector(page);
-  assert.equal(await selector.locator('.chimpion-card:not(.is-upload-avatar)').count(),10,'Selector must render exactly 10 built-in cards');
+  assert.equal(await selector.locator('.chimpion-card:not(.is-upload-avatar)').count(),4,'Selector must render exactly 10 built-in cards');
   assert.equal(await selector.locator('.chimpion-card.is-upload-avatar').count(),1,'Selector must expose exactly one local GLB upload action');
 
   await chooseBuiltInAvatar(selector);
@@ -168,7 +168,7 @@ try{
   assert.match(await customSelector.locator('.selector-status').textContent(),/GLB|incomplete|invalid/i,'Invalid local GLB should fail understandably');
   assert.equal(local.glbs.length,0,'Invalid local GLB must create zero remote GLB requests');
 
-  await input.setInputFiles(path.resolve('public/model/characters/The Heretic.glb'));
+  await input.setInputFiles(path.resolve('public/assets/rider/The_Heretic.glb'));
   await customSelector.locator('#ride-mode-step:not([hidden])').waitFor({state:'visible',timeout:20000});
   assert.equal(local.glbs.length,0,'Valid local GLB parsing must stay local-only');
   const customRideControl=await chooseSkateboardCompatibleRide(custom,customSelector);
@@ -189,7 +189,7 @@ try{
 
   console.log(JSON.stringify({
     check:'production-smoke',
-    builtInRoster:10,
+    builtInRoster:4,
     freshBootGlbRequests:0,
     crowdGlbRequests:0,
     builtInGameplayUniqueGlbs:1,

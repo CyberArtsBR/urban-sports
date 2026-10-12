@@ -1,18 +1,20 @@
+// Canonical StreetSkate rider roster. The four GLBs are imported intact with
+// their original skins, humanoid skeletons and authored skin weights.
 export const BUILTIN_AVATAR_NAMES=Object.freeze([
-  'The Archon',
   'The Heretic',
-  'The Commodore',
-  'The Pioneer',
-  'The Punk',
-  'The Street Fighter',
-  'The Bosun',
   'The Adolescent',
-  'The Angsty',
-  'The Apologetic'
+  'The Anchor',
+  'Tuxr'
 ]);
 
 export const DEFAULT_AVATAR_NAME='The Heretic';
 
+export const STREETSKATE_RIDER_ASSETS=Object.freeze({
+  'The Heretic':'The_Heretic.glb',
+  'The Adolescent':'The_AdolescentUR.glb',
+  'The Anchor':'The_Anchor.glb',
+  'Tuxr':'TuxR.glb'
+});
 const BUILTIN_AVATAR_SET=new Set(BUILTIN_AVATAR_NAMES);
 
 export function isBuiltinAvatarName(name=''){
@@ -21,7 +23,7 @@ export function isBuiltinAvatarName(name=''){
 
 export function builtinAvatarUrl(name){
   if(!isBuiltinAvatarName(name))throw new Error('Avatar is not in the built-in roster: '+String(name));
-  return 'model/characters/'+encodeURIComponent(String(name))+'.glb';
+  return 'assets/rider/'+STREETSKATE_RIDER_ASSETS[name];
 }
 
 export function createBuiltinAvatarEntry(name=DEFAULT_AVATAR_NAME,metadata={}){

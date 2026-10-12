@@ -1,0 +1,49 @@
+name: StreetSkate integration focused QA
+on:
+  push:
+    branches: [feat/streetskate-riders-flatland]
+    paths:
+      - '.github/workflows/streetskate-integration-qa.yml'
+      - 'src/**'
+      - 'checks/**'
+      - 'public/avatars.json'
+      - 'public/characters.json'
+      - 'public/assets/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  focused-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Static syntax and original four rider manifest
+        run: |
+          node --check src/main.js
+          node --check src/skier.js
+          node --check src/rider/SkateboardAnimator.js
+          node --check src/rider/StreetSkateMotion.js
+          node --check src/streetSkateGroundTricks.js
+          node --check src/gameplayInput.js
+          npm run check:roster
+      - name: Rig and animation baseline
+        run: npm run check:rider-animation
+      - name: Gameplay, combos and security fast tests
+        run: |
+          npm run check:ground-tricks
+          npm run check:fast
+      - name: Production bundle
+        run: npm run build
+      - name: Four original assets present in built bundle
+        run: |
+          test -s dist/assets/rider/The_Heretic.glb
+          test -s dist/assets/rider/The_AdolescentUR.glb
+          test -s dist/assets/rider/The_Anchor.glb
+          test -s dist/assets/rider/TuxR.glb
+          test -s dist/avatars.json

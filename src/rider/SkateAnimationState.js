@@ -24,6 +24,7 @@ export const SKATE_ANIMATION_STATE=Object.freeze({
   VARIAL_FLIP:'VARIAL_FLIP',
   THREE_SIXTY_FLIP:'THREE_SIXTY_FLIP',
   GRAB:'GRAB',
+  FLATLAND:'FLATLAND',
   MANUAL:'MANUAL',
   NOSE_MANUAL:'NOSE_MANUAL',
   GRIND:'GRIND',
@@ -288,6 +289,7 @@ export function createSkateAnimationStateMachine(){
 
     if(!next&&grindType)next=isSlide(grindType)?SKATE_ANIMATION_STATE.SLIDE:SKATE_ANIMATION_STATE.GRIND;
     if(!next&&manualType)next=manualType==='NOSE_MANUAL'?SKATE_ANIMATION_STATE.NOSE_MANUAL:SKATE_ANIMATION_STATE.MANUAL;
+    if(!next&&!air&&frame.flatlandTrick)next=SKATE_ANIMATION_STATE.FLATLAND;
 
     if(!next&&air&&trickState)next=trickState;
     if(!next&&air&&isGrab(trickRaw))next=SKATE_ANIMATION_STATE.GRAB;
@@ -365,6 +367,8 @@ export function createSkateAnimationStateMachine(){
     snapshot.air=air;
     snapshot.landing=landing;
     snapshot.verticalVelocity=verticalVelocity;
+    snapshot.flatlandTrick=String(frame.flatlandTrick||'');
+    snapshot.flatlandProgress=clamp(frame.flatlandProgress??0);
     snapshot.trickType=token(trickRaw);
     snapshot.trickProgress=trickProgress;
     snapshot.grabType=isGrab(trickRaw)?token(trickRaw):token(frame.grabType);

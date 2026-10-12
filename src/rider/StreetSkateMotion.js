@@ -1,4 +1,5 @@
-// Synchronized procedural rider motion from StreetSkate @ 737c0f33.\nimport { MathUtils } from 'three';
+// Synchronized procedural rider motion from StreetSkate @ 737c0f33.
+import { MathUtils } from 'three';
 
 // Original procedural timings, shared by the deck and the rider. These are not
 // imported animation clips or timings extracted from a commercial game's data.

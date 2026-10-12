@@ -191,5 +191,5 @@ export function resolveAvatarRig(model,compatibility=getAvatarCompatibility(''))
 }
 
 export function isCatalogAvatarUrl(url=''){
-  return /\/model\/characters\/[^/]+\.glb(?:[?#].*)?$/i.test(String(url));
+  return /\/(?:model\/characters\/[^/]+|assets\/rider\/(?:The_Heretic|The_AdolescentUR|The_Anchor|TuxR))\.glb(?:[?#].*)?$/i.test(String(url));
 }
